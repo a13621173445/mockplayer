@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 
 import com.mockplayer.Constants;
 import com.mockplayer.session.FakePlayerCommands;
+import com.mockplayer.session.FakeConnectionRegistry;
 import com.mockplayer.session.SessionManager;
 
 import net.minecraft.commands.Commands;
@@ -65,7 +66,12 @@ public class MockplayerNeoForgeClient {
     }
 
     private static void onPlayerLogout(ClientPlayerNetworkEvent.LoggingOut event) {
-        // 主玩家退出服务器 → 全部假人下线
+        // 主玩家退出服务器 → 全部假人下线。
+        // 防御：若断开的连接属于假人（FakeConnectionRegistry 标记），忽略——假人各自独立清理，
+        // 避免误清其他假人。
+        if (FakeConnectionRegistry.isFake(event.getConnection())) {
+            return;
+        }
         SessionManager.getInstance().clearAll();
     }
 }

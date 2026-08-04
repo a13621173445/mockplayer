@@ -189,12 +189,9 @@ public class FakeSession {
         if (connection != null) {
             FakeConnectionRegistry.unmarkFake(connection);
             connection.disconnect(net.minecraft.network.chat.Component.literal("Fake player removed"));
-            // 收尾：触发 listener 的 onDisconnect（清理/记录断开），即使连接已关闭
-            try {
-                connection.handleDisconnection();
-            } catch (Exception e) {
-                LOG.warn("[{}] 假人断开收尾出错", name, e);
-            }
+            // 注意：不再手动调 connection.handleDisconnection()。
+            // Connection.tick() 会在 channel 关闭后自动触发一次（disconnectionHandled 幂等），
+            // 手动再调会造成 "handleDisconnection() called twice" 噪音警告。
             connection = null;
         }
         connected = false;

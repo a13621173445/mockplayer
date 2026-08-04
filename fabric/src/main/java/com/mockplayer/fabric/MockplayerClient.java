@@ -4,6 +4,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 
 import com.mockplayer.session.FakePlayerCommands;
+import com.mockplayer.session.FakePlayListener;
 import com.mockplayer.session.SessionManager;
 
 import net.fabricmc.api.ClientModInitializer;
@@ -67,8 +68,13 @@ public class MockplayerClient implements ClientModInitializer {
     }
 
     private void registerDisconnect() {
-        // 主玩家断开服务器 → 全部假人下线
+        // 主玩家断开服务器 → 全部假人下线。
+        // 注意：FakePlayListener extends ClientPacketListener，假人连接断开也会触发本事件，
+        // 必须过滤掉假人自己的 listener——否则踢一个假人会误清所有假人（假人各自独立清理）。
         ClientPlayConnectionEvents.DISCONNECT.register((handler, minecraft) -> {
+            if (handler instanceof FakePlayListener) {
+                return;
+            }
             SessionManager.getInstance().clearAll();
         });
     }
