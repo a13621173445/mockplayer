@@ -39,6 +39,12 @@ public class FakePlayListener extends ClientPacketListener {
     private MultiPlayerGameMode fakeGameMode;
     /** 假人自己的 LocalPlayer（物理） */
     private LocalPlayer fakePlayer;
+    /**
+     * 登录后首包血量检查标志：覆盖「假人死亡后掉线、重连服务端仍判死」的竞态。
+     * handleLogin 重置为 true；收到登录后第一个 handleSetHealth 包即检查一次（无论血量多少都清标志），
+     * 若血量 <= 0 说明服务端认为假人已死，触发 respawn 重生。
+     */
+    private boolean checkDeathOnLogin;
 
     public FakePlayListener(FakeSession session, Minecraft minecraft, Connection connection, CommonListenerCookie cookie) {
         super(minecraft, connection, cookie);
@@ -135,6 +141,8 @@ public class FakePlayListener extends ClientPacketListener {
         // 4. 存进 session（供 tick 驱动物理）
         this.session.setFakePlayer(this.fakePlayer);
         this.session.setPlayListener(this);
+        // 重置登录后首包血量检查标志（服务端若认为假人已死，登录后第一个 setHealth 包血量 <= 0）
+        this.checkDeathOnLogin = true;
         FakeSession.LOG.info("[{}] 假人进入 play 阶段，已创建独立 world/player", this.session.getName());
     }
 
@@ -176,6 +184,19 @@ public class FakePlayListener extends ClientPacketListener {
         }
         this.session.getState().setHealth(packet.getHealth());
         this.session.getState().setFoodLevel(packet.getFood());
+
+        // 登录后首包血量检查（只检查一次）：覆盖「死亡后掉线、重连服务端仍判死」的竞态。
+        // 登录包不含血量，服务端会随登录后第一批包下发 setHealth(当前血量)——血量 <= 0 即服务端认为假人已死。
+        // 无论血量多少都清标志（首包血量 > 0 = 服务端认为假人活着，无需再查），
+        // 否则正常死亡时 setHealth(0) 会与 handlePlayerCombatKill 双 respawn。
+        if (this.checkDeathOnLogin) {
+            this.checkDeathOnLogin = false;
+            if (packet.getHealth() <= 0.0F && this.fakePlayer != null) {
+                // 发 PERFORM_RESPAWN，服务端回 respawn 包走已有 handleRespawn 链路（等价原版死亡重生）
+                this.fakePlayer.respawn();
+                FakeSession.LOG.warn("[{}] 登录后首包血量 <= 0，服务端认为假人已死，触发重生", this.session.getName());
+            }
+        }
     }
 
     /**
