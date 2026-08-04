@@ -4,11 +4,12 @@
   "package": "com.mockplayer.session.accessor",
   "compatibilityLevel": "JAVA_25",
   "refmap": "mockplayer.accessor.refmap.json",
-  "mixins": [
+  "mixins": [],
+  "client": [
     "MockplayerClientPacketListenerAccessor",
-    "MockplayerClientLevelAccessor"
+    "MockplayerClientLevelAccessor",
+    "MockplayerMultiPlayerGameModeAccessor"
   ],
-  "client": [],
   "server": [],
   "injectors": {
     "defaultRequire": 1

@@ -132,8 +132,59 @@ public class FakePlayerState {
         this.onlinePlayers.put(uuid, name);
     }
 
+    public void removePlayerOnline(java.util.UUID uuid) {
+        this.onlinePlayers.remove(uuid);
+    }
+
+    /** 最后一条停音效请求（假人不播主玩家音效，记录供 AI 感知环境声音变化） */
+    private volatile net.minecraft.network.protocol.game.ClientboundStopSoundPacket lastStopSound;
+
+    public void recordStopSound(net.minecraft.network.protocol.game.ClientboundStopSoundPacket packet) {
+        this.lastStopSound = packet;
+    }
+
+    public net.minecraft.network.protocol.game.ClientboundStopSoundPacket getLastStopSound() {
+        return this.lastStopSound;
+    }
+
+    /** 最近一次打开的容器（假人不弹主玩家 UI，记录类型/标题供 AI 感知） */
+    private volatile Object lastOpenScreen;
+
+    public void recordOpenScreen(Object menuType, int containerId, net.minecraft.network.chat.Component title) {
+        this.lastOpenScreen = new Object() {
+            @Override
+            public String toString() {
+                return "OpenScreen{" + menuType + ", id=" + containerId + ", title=" + title.getString() + "}";
+            }
+        };
+    }
+
+    public Object getLastOpenScreen() {
+        return this.lastOpenScreen;
+    }
+
     public java.util.Map<java.util.UUID, String> getOnlinePlayers() {
         return this.onlinePlayers;
+    }
+
+    /**
+     * 通用「最近收到的包」记录（铁律零丢弃兜底）。
+     * 假人无头不渲染 UI 的数据包，完整保存原始 packet，供程序化 AI / /control 读取。
+     * key 用 handler 名（如 "handlePlayerCombatKill"）。
+     */
+    private final java.util.Map<String, Object> lastPackets = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public void recordPacket(String key, Object packet) {
+        this.lastPackets.put(key, packet);
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T> T getLastPacket(String key) {
+        return (T) this.lastPackets.get(key);
+    }
+
+    public java.util.Map<String, Object> getAllLastPackets() {
+        return java.util.Collections.unmodifiableMap(this.lastPackets);
     }
 
     /** 最近一次 Boss 事件包（假人不显示 Boss 栏，但数据保留供 AI 读取） */
@@ -145,5 +196,40 @@ public class FakePlayerState {
 
     public net.minecraft.network.protocol.game.ClientboundBossEventPacket getLastBossEvent() {
         return this.lastBossEvent;
+    }
+
+    /**
+     * 记录假人应感知的音效事件（假人不播放到主玩家音箱，严格零污染）。
+     * 存最近 20 条，供 AI / /control 读取环境声音变化。
+     */
+    private final java.util.List<net.minecraft.network.chat.Component> soundLog = new CopyOnWriteArrayList<>();
+
+    public void recordSound(String description, double x, double y, double z) {
+        this.soundLog.add(net.minecraft.network.chat.Component.literal(
+                String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f %s", x, y, z, description)));
+        while (this.soundLog.size() > 20) {
+            this.soundLog.remove(0);
+        }
+    }
+
+    public java.util.List<net.minecraft.network.chat.Component> getSoundLog() {
+        return this.soundLog;
+    }
+
+    /**
+     * 记录假人应感知的粒子事件（假人不渲染到主玩家屏幕，严格零污染）。
+     */
+    private final java.util.List<net.minecraft.network.chat.Component> particleLog = new CopyOnWriteArrayList<>();
+
+    public void recordParticle(String description, double x, double y, double z) {
+        this.particleLog.add(net.minecraft.network.chat.Component.literal(
+                String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f %s", x, y, z, description)));
+        while (this.particleLog.size() > 20) {
+            this.particleLog.remove(0);
+        }
+    }
+
+    public java.util.List<net.minecraft.network.chat.Component> getParticleLog() {
+        return this.particleLog;
     }
 }

@@ -10,6 +10,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.minecraft.commands.CommandBuildContext;
 
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument;
@@ -24,6 +25,7 @@ public class MockplayerClient implements ClientModInitializer {
     public void onInitializeClient() {
         registerCommands();
         registerTick();
+        registerDisconnect();
     }
 
     private void registerCommands() {
@@ -61,6 +63,13 @@ public class MockplayerClient implements ClientModInitializer {
         // 每 tick 驱动假人连接，保持在线
         ClientTickEvents.END_CLIENT_TICK.register(minecraft -> {
             SessionManager.getInstance().tick();
+        });
+    }
+
+    private void registerDisconnect() {
+        // 主玩家断开服务器 → 全部假人下线
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, minecraft) -> {
+            SessionManager.getInstance().clearAll();
         });
     }
 }

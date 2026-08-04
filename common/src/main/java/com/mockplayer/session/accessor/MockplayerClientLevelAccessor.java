@@ -17,4 +17,11 @@ public interface MockplayerClientLevelAccessor {
 
     @Invoker("addMapData")
     void mockplayer$addMapData(java.util.Map<net.minecraft.world.level.saveddata.maps.MapId, net.minecraft.world.level.saveddata.maps.MapItemSavedData> mapData);
+
+    /**
+     * 方块状态预测处理器（包内私有方法）：handleMovePlayer 传送后清理方块预测，
+     * 与原版父类 this.minecraft.level.getBlockStatePredictionHandler().onTeleport() 一致。
+     */
+    @Invoker("getBlockStatePredictionHandler")
+    net.minecraft.client.multiplayer.prediction.BlockStatePredictionHandler mockplayer$getBlockStatePredictionHandler();
 }

@@ -9,7 +9,8 @@
   },
   "mixins": [],
   "client": [
-    "MixinClientConfigurationPacketListenerImpl"
+    "MixinClientConfigurationPacketListenerImpl",
+    "MixinLocalPlayer"
   ],
   "server": [],
   "injectors": {

@@ -11,6 +11,7 @@ import net.minecraft.commands.Commands;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 
@@ -24,6 +25,7 @@ public class MockplayerNeoForgeClient {
     public MockplayerNeoForgeClient(IEventBus eventBus) {
         eventBus.addListener(MockplayerNeoForgeClient::registerCommands);
         eventBus.addListener(MockplayerNeoForgeClient::onClientTick);
+        eventBus.addListener(MockplayerNeoForgeClient::onPlayerLogout);
     }
 
     private static void registerCommands(RegisterClientCommandsEvent event) {
@@ -60,5 +62,10 @@ public class MockplayerNeoForgeClient {
     private static void onClientTick(ClientTickEvent.Post event) {
         // 每 tick 驱动假人连接，保持在线
         SessionManager.getInstance().tick();
+    }
+
+    private static void onPlayerLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        // 主玩家退出服务器 → 全部假人下线
+        SessionManager.getInstance().clearAll();
     }
 }

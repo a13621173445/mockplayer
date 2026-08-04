@@ -162,6 +162,16 @@ public class FakeSession {
             connection = null;
         }
 
+        // 驱动 play listener 的 tick（父类 ClientPacketListener.tick 的收尾逻辑；
+        // 假人不用 LevelLoadTracker，chunk 就绪恢复物理由 handleLevelChunkWithLight 处理）
+        if (this.playListener != null) {
+            try {
+                this.playListener.tick();
+            } catch (Exception e) {
+                LOG.error("[{}] 假人 listener tick 出错", name, e);
+            }
+        }
+
         // 驱动假人物理（独立 LocalPlayer，完整物理）
         if (this.fakePlayer != null) {
             try {
@@ -179,6 +189,12 @@ public class FakeSession {
         if (connection != null) {
             FakeConnectionRegistry.unmarkFake(connection);
             connection.disconnect(net.minecraft.network.chat.Component.literal("Fake player removed"));
+            // 收尾：触发 listener 的 onDisconnect（清理/记录断开），即使连接已关闭
+            try {
+                connection.handleDisconnection();
+            } catch (Exception e) {
+                LOG.warn("[{}] 假人断开收尾出错", name, e);
+            }
             connection = null;
         }
         connected = false;

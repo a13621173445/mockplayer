@@ -122,7 +122,15 @@ public class FakePlayListener extends ClientPacketListener {
         this.fakePlayer.setDoLimitedCrafting(packet.doLimitedCrafting());
         this.fakePlayer.setLastDeathLocation(spawnInfo.lastDeathLocation());
         this.fakePlayer.setPortalCooldown(spawnInfo.portalCooldown());
-        this.fakeGameMode.setLocalMode(spawnInfo.gameType(), spawnInfo.previousGameType());
+        // 假人自己的 gameType：只改假人 abilities + 记录字段，
+        // 绝不用 setLocalMode——它内部硬编码 this.minecraft.player（会污染主玩家！）
+        spawnInfo.gameType().updatePlayerAbilities(this.fakePlayer.getAbilities());
+        ((com.mockplayer.session.accessor.MockplayerMultiPlayerGameModeAccessor) this.fakeGameMode)
+                .mockplayer$setLocalPlayerMode(spawnInfo.gameType());
+        ((com.mockplayer.session.accessor.MockplayerMultiPlayerGameModeAccessor) this.fakeGameMode)
+                .mockplayer$setPreviousLocalPlayerMode(spawnInfo.previousGameType());
+        // 同步假人自己的 gameType 到 FakeLocalPlayer（aiStep 判断 spectator 用，不读主玩家）
+        ((com.mockplayer.session.FakeLocalPlayer) this.fakePlayer).setFakeGameType(spawnInfo.gameType());
 
         // 4. 存进 session（供 tick 驱动物理）
         this.session.setFakePlayer(this.fakePlayer);
@@ -137,8 +145,13 @@ public class FakePlayListener extends ClientPacketListener {
      */
     @Override
     public void handlePlayerChat(net.minecraft.network.protocol.game.ClientboundPlayerChatPacket packet) {
-        // 签名聊天：取未签名内容（unsignedContent）作为假人记录的聊天文本
-        this.session.getState().addChat(packet.unsignedContent());
+        // 签名聊天：完整记录原始包（签名/时间戳/聊天气泡类型）供 AI 读取；
+        // 聊天文本优先取 unsignedContent（未签名展示文本），缺失时取签名 body 的 content。
+        this.session.getState().recordPacket("handlePlayerChat", packet);
+        net.minecraft.network.chat.Component text = packet.unsignedContent() != null
+                ? packet.unsignedContent()
+                : net.minecraft.network.chat.Component.literal(packet.body().content());
+        this.session.getState().addChat(text);
     }
 
     @Override
@@ -182,9 +195,13 @@ public class FakePlayListener extends ClientPacketListener {
     @Override
     public void handlePlayerAbilities(net.minecraft.network.protocol.game.ClientboundPlayerAbilitiesPacket packet) {
         if (this.fakePlayer != null) {
+            // 与原版完全一致（this.minecraft.player → this.fakePlayer）
             this.fakePlayer.getAbilities().flying = packet.isFlying();
             this.fakePlayer.getAbilities().instabuild = packet.canInstabuild();
+            this.fakePlayer.getAbilities().invulnerable = packet.isInvulnerable();
             this.fakePlayer.getAbilities().mayfly = packet.canFly();
+            this.fakePlayer.getAbilities().setFlyingSpeed(packet.getFlyingSpeed());
+            this.fakePlayer.getAbilities().setWalkingSpeed(packet.getWalkingSpeed());
         }
     }
 
@@ -213,7 +230,13 @@ public class FakePlayListener extends ClientPacketListener {
         } else if (event == net.minecraft.network.protocol.game.ClientboundGameEventPacket.STOP_RAINING) {
             self.mockplayer$getLevel().setRainLevel(1.0F);
         } else if (event == net.minecraft.network.protocol.game.ClientboundGameEventPacket.CHANGE_GAME_MODE) {
-            this.fakeGameMode.setLocalMode(net.minecraft.world.level.GameType.byId(param));
+            // 假人自己的 gameType：只改假人 abilities + 记录字段，不用 setLocalMode（会污染主玩家！）
+            net.minecraft.world.level.GameType mode = net.minecraft.world.level.GameType.byId(param);
+            mode.updatePlayerAbilities(this.fakePlayer.getAbilities());
+            ((com.mockplayer.session.accessor.MockplayerMultiPlayerGameModeAccessor) this.fakeGameMode)
+                    .mockplayer$setLocalPlayerMode(mode);
+            // 同步假人自己的 gameType 到 FakeLocalPlayer
+            ((com.mockplayer.session.FakeLocalPlayer) this.fakePlayer).setFakeGameType(mode);
         } else if (event == net.minecraft.network.protocol.game.ClientboundGameEventPacket.WIN_GAME) {
             // 假人无头不弹 WinScreen，记录到 state
             this.session.getState().recordWinGame();
@@ -221,28 +244,26 @@ public class FakePlayListener extends ClientPacketListener {
             // 假人无头不弹演示 UI，记录到 state
             this.session.getState().recordDemoEvent(paramFloat);
         } else if (event == net.minecraft.network.protocol.game.ClientboundGameEventPacket.PLAY_ARROW_HIT_SOUND) {
-            self.mockplayer$getLevel().playSound(player, player.getX(), player.getEyeY(), player.getZ(),
-                    net.minecraft.sounds.SoundEvents.ARROW_HIT_PLAYER, net.minecraft.sounds.SoundSource.PLAYERS, 0.18F, 0.45F);
+            // 音效记录到假人 state（不播放到主玩家音箱，零污染）
+            this.session.getState().recordSound("arrow_hit", player.getX(), player.getEyeY(), player.getZ());
         } else if (event == net.minecraft.network.protocol.game.ClientboundGameEventPacket.RAIN_LEVEL_CHANGE) {
             self.mockplayer$getLevel().setRainLevel(paramFloat);
         } else if (event == net.minecraft.network.protocol.game.ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE) {
             self.mockplayer$getLevel().setThunderLevel(paramFloat);
         } else if (event == net.minecraft.network.protocol.game.ClientboundGameEventPacket.PUFFER_FISH_STING) {
-            self.mockplayer$getLevel().playSound(player, player.getX(), player.getY(), player.getZ(),
-                    net.minecraft.sounds.SoundEvents.PUFFER_FISH_STING, net.minecraft.sounds.SoundSource.NEUTRAL, 1.0F, 1.0F);
+            this.session.getState().recordSound("puffer_sting", player.getX(), player.getY(), player.getZ());
         } else if (event == net.minecraft.network.protocol.game.ClientboundGameEventPacket.GUARDIAN_ELDER_EFFECT) {
-            self.mockplayer$getLevel().addParticle(net.minecraft.core.particles.ParticleTypes.ELDER_GUARDIAN,
-                    player.getX(), player.getY(), player.getZ(), 0.0, 0.0, 0.0);
+            // 粒子记录到假人 state（不渲染到主玩家屏幕，零污染）
+            this.session.getState().recordParticle("elder_guardian", player.getX(), player.getY(), player.getZ());
             if (param == 1) {
-                self.mockplayer$getLevel().playSound(player, player.getX(), player.getY(), player.getZ(),
-                        net.minecraft.sounds.SoundEvents.ELDER_GUARDIAN_CURSE, net.minecraft.sounds.SoundSource.HOSTILE, 1.0F, 1.0F);
+                this.session.getState().recordSound("elder_guardian_curse", player.getX(), player.getY(), player.getZ());
             }
         } else if (event == net.minecraft.network.protocol.game.ClientboundGameEventPacket.IMMEDIATE_RESPAWN) {
             player.setShowDeathScreen(paramFloat == 0.0F);
         } else if (event == net.minecraft.network.protocol.game.ClientboundGameEventPacket.LIMITED_CRAFTING) {
             player.setDoLimitedCrafting(paramFloat == 1.0F);
         } else if (event == net.minecraft.network.protocol.game.ClientboundGameEventPacket.LEVEL_CHUNKS_LOAD_START) {
-            // 假人 level 加载跟踪（此 listener 无 levelLoadTracker，跳过无影响）
+            // chunk 开始加载：恢复物理已由 handleLevelChunkWithLight override 处理（收到 chunk 即就绪）
         }
     }
 
@@ -264,6 +285,14 @@ public class FakePlayListener extends ClientPacketListener {
         }
     }
 
+    @Override
+    public void handlePlayerInfoRemove(net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket packet) {
+        // 玩家下线：从假人 state 的在线名单移除（不碰主玩家社交管理器）
+        for (java.util.UUID profileId : packet.profileIds()) {
+            this.session.getState().removePlayerOnline(profileId);
+        }
+    }
+
     // ===== 位置/旋转：换假人引用，假人位置由服务端同步（解决下坠/横跳） =====
 
     /**
@@ -281,8 +310,9 @@ public class FakePlayListener extends ClientPacketListener {
         this.connection.send(new net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket(packet.id()));
         this.connection.send(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.PosRot(
                 player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot(), false, false));
-        // 注：父类会调 level.getBlockStatePredictionHandler().onTeleport()（方块预测清理）。
-        // 假人无渲染方块预测，此调用无实际影响，且 getBlockStatePredictionHandler 是包内私有，跳过。
+        // 与原版父类一致：传送后清理假人 level 的方块状态预测（等价替代 minecraft.level → 假人 level）
+        ((com.mockplayer.session.accessor.MockplayerClientLevelAccessor) self.mockplayer$getLevel())
+                .mockplayer$getBlockStatePredictionHandler().onTeleport();
     }
 
     /**
@@ -333,11 +363,21 @@ public class FakePlayListener extends ClientPacketListener {
      */
     @Override
     public void handleContainerSetSlot(net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
         if (this.fakePlayer != null) {
+            net.minecraft.world.item.ItemStack itemStack = packet.getItem();
+            int slot = packet.getSlot();
             if (packet.getContainerId() == 0) {
-                this.fakePlayer.getInventory().setItem(packet.getSlot(), packet.getItem());
-            } else {
-                this.fakePlayer.containerMenu.setItem(packet.getSlot(), packet.getStateId(), packet.getItem());
+                // 与原版一致：快捷栏新物品动画（假人无渲染动画，仅维护计数逻辑等价）
+                if (net.minecraft.world.inventory.InventoryMenu.isHotbarSlot(slot) && !itemStack.isEmpty()) {
+                    net.minecraft.world.item.ItemStack lastItemStack = this.fakePlayer.inventoryMenu.getSlot(slot).getItem();
+                    if (lastItemStack.isEmpty() || lastItemStack.getCount() < itemStack.getCount()) {
+                        itemStack.setPopTime(5);
+                    }
+                }
+                this.fakePlayer.inventoryMenu.setItem(slot, packet.getStateId(), itemStack);
+            } else if (packet.getContainerId() == this.fakePlayer.containerMenu.containerId) {
+                this.fakePlayer.containerMenu.setItem(slot, packet.getStateId(), itemStack);
             }
         }
     }
@@ -347,10 +387,24 @@ public class FakePlayListener extends ClientPacketListener {
      */
     @Override
     public void handleContainerClose(net.minecraft.network.protocol.game.ClientboundContainerClosePacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
         if (this.fakePlayer != null) {
-            this.fakePlayer.containerMenu.removed(this.fakePlayer);
+            // 与原版 Player.closeContainer() 一致：菜单设回背包菜单
+            // （父类 clientSideCloseContainer 还会 gui.setScreen(null)，假人无头跳过）
             this.fakePlayer.containerMenu = this.fakePlayer.inventoryMenu;
         }
+    }
+
+    // ===== 粒子（假人无头不渲染到主玩家屏幕，完整记录原始包供 AI 读取） =====
+
+    @Override
+    public void handleParticleEvent(net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket packet) {
+        // 完整记录原始包（粒子类型/位置/数量/速度）供 AI 读取。
+        // 不调父类——父类 this.level.addParticle → doAddParticle → 经主玩家 Minecraft.particleEngine 渲染。
+        this.session.getState().recordPacket("handleParticleEvent", packet);
+        this.session.getState().recordParticle(
+                packet.getParticle().getType().toString(),
+                packet.getX(), packet.getY(), packet.getZ());
     }
 
     // ===== 成就/进度/统计（假人自己记录，不弹主玩家） =====
@@ -367,7 +421,8 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleSelectAdvancementsTab(net.minecraft.network.protocol.game.ClientboundSelectAdvancementsTabPacket packet) {
-        // 假人无 UI，不处理进度 tab 选择
+        // 进度 tab 选择：完整记录原始包（tab 位置）供 AI 读取
+        this.session.getState().recordPacket("handleSelectAdvancementsTab", packet);
     }
 
     /**
@@ -385,31 +440,61 @@ public class FakePlayListener extends ClientPacketListener {
     // ===== 音效（假人 level 播放，假人也感知） =====
 
     @Override
+    public void handleDebugSample(net.minecraft.network.protocol.game.ClientboundDebugSamplePacket packet) {
+        // 调试采样数据（服务端性能采样）：完整记录原始包供 AI 读取（假人无头不显示 F3 浮层）
+        this.session.getState().recordPacket("handleDebugSample", packet);
+    }
+
+    @Override
     public void handleSoundEvent(net.minecraft.network.protocol.game.ClientboundSoundPacket packet) {
-        if (this.fakePlayer != null) {
-            this.fakePlayer.level().playSeededSound(
-                    this.fakePlayer,
-                    packet.getX(), packet.getY(), packet.getZ(),
-                    packet.getSound(), packet.getSource(), packet.getVolume(), packet.getPitch(),
-                    packet.getSeed()
-            );
-        }
+        // 音效记录到假人 state（不播放到主玩家音箱，零污染）
+        this.session.getState().recordSound(
+                packet.getSound().value().location().toString(),
+                packet.getX(), packet.getY(), packet.getZ());
+    }
+
+    @Override
+    public void handleStopSoundEvent(net.minecraft.network.protocol.game.ClientboundStopSoundPacket packet) {
+        // 停音效：假人无头不播主玩家音效，记录停止请求到 state（供 AI 感知环境声音变化）
+        this.session.getState().recordStopSound(packet);
+    }
+
+    @Override
+    public void handleOpenScreen(net.minecraft.network.protocol.game.ClientboundOpenScreenPacket packet) {
+        // 打开容器界面：假人无头不弹主玩家 UI。容器类型/标题记录到 state，
+        // 后续容器内容包（handleContainerContent 等）正常写入假人背包。
+        this.session.getState().recordOpenScreen(packet.getType(), packet.getContainerId(), packet.getTitle());
     }
 
     // ===== 骑乘（假人自己） =====
 
     @Override
     public void handleSetEntityPassengersPacket(net.minecraft.network.protocol.game.ClientboundSetPassengersPacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
         if (this.fakePlayer != null) {
-            // 假人无头，骑乘状态记录到会话（简化：调用父类会碰 minecraft.player，故手动处理）
             MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
             net.minecraft.world.entity.Entity vehicle = self.mockplayer$getLevel().getEntity(packet.getVehicle());
-            if (vehicle != null) {
+            if (vehicle == null) {
+                org.slf4j.LoggerFactory.getLogger("mockplayer").warn("Received passengers for unknown entity");
+            } else {
+                boolean wasPlayerMounted = vehicle.hasIndirectPassenger(this.fakePlayer);
                 vehicle.ejectPassengers();
                 for (int id : packet.getPassengers()) {
                     net.minecraft.world.entity.Entity passenger = self.mockplayer$getLevel().getEntity(id);
                     if (passenger != null) {
                         passenger.startRiding(vehicle, true, false);
+                        if (passenger == this.fakePlayer) {
+                            self.mockplayer$setRemovedPlayerVehicleId(java.util.OptionalInt.empty());
+                            if (!wasPlayerMounted) {
+                                if (vehicle instanceof net.minecraft.world.entity.vehicle.boat.Boat) {
+                                    this.fakePlayer.yRotO = vehicle.getYRot();
+                                    this.fakePlayer.setYRot(vehicle.getYRot());
+                                    this.fakePlayer.setYHeadRot(vehicle.getYRot());
+                                }
+                                // 骑乘提示：假人无头不弹主玩家 UI，记录到 state
+                                this.session.getState().recordPacket("mountOnboard", packet);
+                            }
+                        }
                     }
                 }
             }
@@ -429,11 +514,12 @@ public class FakePlayListener extends ClientPacketListener {
         }
     }
 
-    // ===== 标题/UI（假人无头，忽略但记录） =====
+    // ===== 标题/UI（假人无头，完整记录原始包供 AI 读取） =====
 
     @Override
     public void handleTitlesClear(net.minecraft.network.protocol.game.ClientboundClearTitlesPacket packet) {
-        // 假人无 UI，忽略
+        // 标题清除：完整记录原始包（是否重置时间）供 AI 读取
+        this.session.getState().recordPacket("handleTitlesClear", packet);
     }
 
     // ===== 实体事件/音效实体（假人 level） =====
@@ -443,23 +529,35 @@ public class FakePlayListener extends ClientPacketListener {
         MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
         net.minecraft.world.entity.Entity entity = self.mockplayer$getLevel().getEntity(packet.getId());
         if (entity != null) {
-            // 用假人 listener 的 connection/level 播放，不碰主玩家
-            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-            self.mockplayer$getLevel().playSeededSound(
-                    this.fakePlayer != null ? this.fakePlayer : null,
-                    entity,
-                    packet.getSound(),
-                    packet.getSource(),
-                    packet.getVolume(),
-                    packet.getPitch(),
-                    packet.getSeed());
+            // 音效记录到假人 state（不播放到主玩家音箱，零污染）
+            this.session.getState().recordSound(
+                    packet.getSound().value().location().toString(),
+                    entity.getX(), entity.getY(), entity.getZ());
         }
     }
 
     @Override
     public void handleEntityEvent(net.minecraft.network.protocol.game.ClientboundEntityEventPacket packet) {
-        // this.level 处理实体状态，保持继承即可（父类用 this.level，不碰 minecraft.player 主要部分）
-        super.handleEntityEvent(packet);
+        // 完整处理实体事件到假人 level（不调 super——父类碰主玩家音效/粒子/不死图腾 UI）
+        MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
+        net.minecraft.world.entity.Entity entity = packet.getEntity(self.mockplayer$getLevel());
+        if (entity != null) {
+            switch (packet.getEventId()) {
+                case 21 -> {
+                    // 守卫者音效：记录到假人 state（不播放到主玩家音箱，零污染）
+                    this.session.getState().recordSound("guardian_attack", entity.getX(), entity.getY(), entity.getZ());
+                }
+                case 35 -> {
+                    // 不死图腾：记录到假人 state（不渲染粒子/不弹 UI，零污染）
+                    this.session.getState().recordSound("totem_use", entity.getX(), entity.getY(), entity.getZ());
+                }
+                case 63 -> {
+                    // 嗅探兽音效：记录到假人 state
+                    this.session.getState().recordSound("sniffer_digging_stop", entity.getX(), entity.getY(), entity.getZ());
+                }
+                default -> entity.handleEntityEvent(packet.getEventId());
+            }
+        }
     }
 
     @Override
@@ -475,7 +573,8 @@ public class FakePlayListener extends ClientPacketListener {
             } else if (packet.getAction() == 2) {
                 ((net.minecraft.world.entity.player.Player) entity).stopSleepInBed(false, false);
             } else if (packet.getAction() == 4 || packet.getAction() == 5) {
-                // 暴击/附魔粒子：假人无头不渲染粒子，跳过（动画状态已由 swing 反映）
+                // 暴击/附魔粒子：假人无头不渲染，但完整记录原始包供 AI 感知攻击动画
+                this.session.getState().recordPacket("handleAnimate", packet);
             }
         }
     }
@@ -498,7 +597,8 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleContainerSetData(net.minecraft.network.protocol.game.ClientboundContainerSetDataPacket packet) {
-        if (this.fakePlayer != null) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
+        if (this.fakePlayer != null && this.fakePlayer.containerMenu.containerId == packet.getContainerId()) {
             this.fakePlayer.containerMenu.setData(packet.getId(), packet.getValue());
         }
     }
@@ -507,6 +607,7 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleRespawn(net.minecraft.network.protocol.game.ClientboundRespawnPacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
         MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
         net.minecraft.network.protocol.game.CommonPlayerSpawnInfo spawnInfo = packet.commonPlayerSpawnInfo();
         net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimensionKey = spawnInfo.dimension();
@@ -548,24 +649,34 @@ public class FakePlayListener extends ClientPacketListener {
         if (oldPlayer.hasContainerOpen()) {
             oldPlayer.closeContainer();
         }
-        net.minecraft.client.player.LocalPlayer newPlayer;
+        com.mockplayer.session.FakeLocalPlayer newPlayer;
         if (packet.shouldKeep((byte) 2)) {
-            newPlayer = this.fakeGameMode.createPlayer(
+            newPlayer = new com.mockplayer.session.FakeLocalPlayer(
+                    Minecraft.getInstance(),
                     self.mockplayer$getLevel(),
+                    this,
                     oldPlayer.getStats(),
                     oldPlayer.getRecipeBook(),
                     oldPlayer.getLastSentInput(),
-                    oldPlayer.isSprinting());
+                    oldPlayer.isSprinting(),
+                    Minecraft.getInstance().computeChatAbilities());
         } else {
-            newPlayer = this.fakeGameMode.createPlayer(
+            newPlayer = new com.mockplayer.session.FakeLocalPlayer(
+                    Minecraft.getInstance(),
                     self.mockplayer$getLevel(),
+                    this,
                     oldPlayer.getStats(),
-                    oldPlayer.getRecipeBook());
+                    oldPlayer.getRecipeBook(),
+                    new net.minecraft.world.entity.player.Input(false, false, false, false, false, false, false),
+                    false,
+                    Minecraft.getInstance().computeChatAbilities());
         }
         // 标记未加载，等待新 level 加载完成再恢复物理（与父类 startWaitingForNewLevel 对应）
         self.mockplayer$setClientLoaded(false);
         newPlayer.setId(oldPlayer.getId());
         this.fakePlayer = newPlayer;
+        // 关键：同步到 session，否则 FakeSession.tick() 仍驱动旧 player（旧 level）→ 传送后失去物理/位置错乱
+        this.session.setFakePlayer(newPlayer);
         if (packet.shouldKeep((byte) 2)) {
             java.util.List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> data =
                     oldPlayer.getEntityData().getNonDefaultValues();
@@ -595,19 +706,83 @@ public class FakePlayListener extends ClientPacketListener {
         newPlayer.setPortalCooldown(spawnInfo.portalCooldown());
         newPlayer.portalEffectIntensity = oldPlayer.portalEffectIntensity;
         newPlayer.oPortalEffectIntensity = oldPlayer.oPortalEffectIntensity;
-        this.fakeGameMode.setLocalMode(spawnInfo.gameType(), spawnInfo.previousGameType());
-        // 新 level 已就绪，恢复物理驱动
-        self.mockplayer$setClientLoaded(true);
+        // 假人自己的 gameType：只改假人 abilities + 记录字段，不用 setLocalMode（会污染主玩家！）
+        spawnInfo.gameType().updatePlayerAbilities(newPlayer.getAbilities());
+        ((com.mockplayer.session.accessor.MockplayerMultiPlayerGameModeAccessor) this.fakeGameMode)
+                .mockplayer$setLocalPlayerMode(spawnInfo.gameType());
+        ((com.mockplayer.session.accessor.MockplayerMultiPlayerGameModeAccessor) this.fakeGameMode)
+                .mockplayer$setPreviousLocalPlayerMode(spawnInfo.previousGameType());
+        // 同步假人自己的 gameType 到 FakeLocalPlayer（重生后新 player）
+        newPlayer.setFakeGameType(spawnInfo.gameType());
+        // 等新 level chunk 加载完成再恢复物理。
+        // 不用 LevelLoadTracker——它依赖渲染线程编译回调（假人无渲染会等 30-40s 超时）。
+        // 改为：setClientLoaded(false) 保持物理暂停，收到第一个 chunk 包（handleLevelChunkWithLight）
+        // 时调用 notifyPlayerLoaded() 恢复物理 + 告知服务端已加载（见 handleLevelChunkWithLight override）。
+    }
+
+    /**
+     * 假人收到区块包：先执行父类逻辑（写假人 level），再恢复物理。
+     * 假人无渲染线程，不用原版 LevelLoadTracker（会等渲染编译回调超时），
+     * 收到 chunk 包即认为新 level 已就绪 → 恢复物理 + 告知服务端已加载。
+     */
+    @Override
+    public void handleLevelChunkWithLight(net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket packet) {
+        super.handleLevelChunkWithLight(packet);
+        MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
+        if (!this.hasClientLoaded()) {
+            self.mockplayer$notifyPlayerLoaded();
+        }
+    }
+
+    @Override
+    public void handleAddEntity(net.minecraft.network.protocol.game.ClientboundAddEntityPacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
+        MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
+        net.minecraft.world.entity.Entity entity = createEntityFromPacketFake(packet);
+        if (entity != null) {
+            entity.recreateFromPacket(packet);
+            self.mockplayer$getLevel().addEntity(entity);
+            // 矿车/蜜蜂音效：假人无头不播主玩家音效，记录到 state
+            if (entity instanceof net.minecraft.world.entity.vehicle.minecart.AbstractMinecart) {
+                this.session.getState().recordSound("minecart_ambient", entity.getX(), entity.getY(), entity.getZ());
+            } else if (entity instanceof net.minecraft.world.entity.animal.bee.Bee) {
+                this.session.getState().recordSound("bee_flying", entity.getX(), entity.getY(), entity.getZ());
+            }
+        } else {
+            org.slf4j.LoggerFactory.getLogger("mockplayer").warn("Skipping Entity with id {}", packet.getType());
+        }
+        if (entity instanceof net.minecraft.world.entity.player.Player player) {
+            this.session.getState().recordPacket("handleAddEntity", packet);
+        }
+    }
+
+    /**
+     * 等价于父类 createEntityFromPacket（父类是 private），用假人 level 创建实体。
+     * 玩家实体：用 UUID + 名字（从假人 state 的在线名单查）建 RemotePlayer，仅需实体存在。
+     */
+    private net.minecraft.world.entity.Entity createEntityFromPacketFake(net.minecraft.network.protocol.game.ClientboundAddEntityPacket packet) {
+        MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
+        net.minecraft.world.entity.EntityType<?> type = packet.getType();
+        if (type == net.minecraft.world.entity.EntityTypes.PLAYER) {
+            String name = this.session.getState().getOnlinePlayers().get(packet.getUUID());
+            return new net.minecraft.client.player.RemotePlayer(
+                    self.mockplayer$getLevel(),
+                    new com.mojang.authlib.GameProfile(packet.getUUID(), name != null ? name : ""));
+        }
+        return type.create(self.mockplayer$getLevel(), net.minecraft.world.entity.EntitySpawnReason.LOAD);
     }
 
     // ===== 实体传送/同步（假人 level 操作，minecraft.player 部分换假人） =====
 
     @Override
     public void handleTeleportEntity(net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
         MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
         net.minecraft.world.entity.Entity entity = self.mockplayer$getLevel().getEntity(packet.id());
         if (entity == null) {
-            if (this.fakePlayer != null) {
+            // 与原版一致：假人坐骑被移除后，传送应用到假人（this.minecraft.player → this.fakePlayer）
+            java.util.OptionalInt removedVehicle = self.mockplayer$getRemovedPlayerVehicleId();
+            if (removedVehicle.isPresent() && removedVehicle.getAsInt() == packet.id()) {
                 MockplayerClientPacketListenerAccessor.mockplayer$setValuesFromPositionPacket(packet.change(), packet.relatives(), this.fakePlayer, false);
                 this.connection.send(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.PosRot(
                         this.fakePlayer.getX(), this.fakePlayer.getY(), this.fakePlayer.getZ(),
@@ -624,12 +799,16 @@ public class FakePlayListener extends ClientPacketListener {
             if (!wasInterpolated && this.fakePlayer != null && entity.hasIndirectPassenger(this.fakePlayer)) {
                 entity.positionRider(this.fakePlayer);
                 this.fakePlayer.setOldPosAndRot();
+                if (entity.isLocalInstanceAuthoritative()) {
+                    this.connection.send(net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket.fromEntity(entity));
+                }
             }
         }
     }
 
     @Override
     public void handleEntityPositionSync(net.minecraft.network.protocol.game.ClientboundEntityPositionSyncPacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
         MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
         net.minecraft.world.entity.Entity entity = self.mockplayer$getLevel().getEntity(packet.id());
         if (entity != null) {
@@ -644,16 +823,27 @@ public class FakePlayListener extends ClientPacketListener {
                 } else {
                     entity.snapTo(pos, yRot, xRot);
                 }
+                // 与原版一致：若假人骑乘此实体，同步假人位置（this.minecraft.player → this.fakePlayer）
+                if (!entity.isInterpolating() && entity.hasIndirectPassenger(this.fakePlayer)) {
+                    entity.positionRider(this.fakePlayer);
+                    this.fakePlayer.setOldPosAndRot();
+                }
+                entity.setOnGround(packet.onGround());
             }
         }
     }
 
     @Override
     public void handleRemoveEntities(net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
         MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
         packet.getEntityIds().forEach(entityId -> {
             net.minecraft.world.entity.Entity entity = self.mockplayer$getLevel().getEntity(entityId);
             if (entity != null) {
+                // 与原版一致：假人骑乘的坐骑被移除时记录 ID（供 handleTeleportEntity 兜底）
+                if (this.fakePlayer != null && entity.hasIndirectPassenger(this.fakePlayer)) {
+                    self.mockplayer$setRemovedPlayerVehicleId(java.util.OptionalInt.of(entityId));
+                }
                 self.mockplayer$getLevel().removeEntity(entityId, net.minecraft.world.entity.Entity.RemovalReason.DISCARDED);
             }
         });
@@ -661,6 +851,7 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleTakeItemEntity(net.minecraft.network.protocol.game.ClientboundTakeItemEntityPacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
         MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
         net.minecraft.world.entity.Entity from = self.mockplayer$getLevel().getEntity(packet.getItemId());
         net.minecraft.world.entity.LivingEntity to = (net.minecraft.world.entity.LivingEntity) self.mockplayer$getLevel().getEntity(packet.getPlayerId());
@@ -668,16 +859,14 @@ public class FakePlayListener extends ClientPacketListener {
             to = this.fakePlayer;
         }
         if (from != null) {
-            net.minecraft.util.RandomSource random = net.minecraft.util.RandomSource.create();
+            // 拾取音效记录到假人 state（不播放到主玩家音箱，零污染）
             if (from instanceof net.minecraft.world.entity.ExperienceOrb) {
-                self.mockplayer$getLevel().playLocalSound(from.getX(), from.getY(), from.getZ(),
-                        net.minecraft.sounds.SoundEvents.EXPERIENCE_ORB_PICKUP, net.minecraft.sounds.SoundSource.PLAYERS,
-                        0.1F, (random.nextFloat() - random.nextFloat()) * 0.35F + 0.9F, false);
+                this.session.getState().recordSound("experience_orb_pickup", from.getX(), from.getY(), from.getZ());
             } else {
-                self.mockplayer$getLevel().playLocalSound(from.getX(), from.getY(), from.getZ(),
-                        net.minecraft.sounds.SoundEvents.ITEM_PICKUP, net.minecraft.sounds.SoundSource.PLAYERS,
-                        0.2F, (random.nextFloat() - random.nextFloat()) * 1.4F + 2.0F, false);
+                this.session.getState().recordSound("item_pickup", from.getX(), from.getY(), from.getZ());
             }
+            // 拾取粒子：记录到 state（父类经主玩家 particleEngine 渲染，假人不渲染）
+            this.session.getState().recordParticle("item_pickup", from.getX(), from.getY(), from.getZ());
             // 实体被拾取移除（数据保留到假人 level）
             self.mockplayer$getLevel().removeEntity(from.getId(), net.minecraft.world.entity.Entity.RemovalReason.DISCARDED);
         }
@@ -697,11 +886,24 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleMoveVehicle(net.minecraft.network.protocol.game.ClientboundMoveVehiclePacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
         if (this.fakePlayer != null) {
             net.minecraft.world.entity.Entity vehicle = this.fakePlayer.getRootVehicle();
             if (vehicle != this.fakePlayer && vehicle.isLocalInstanceAuthoritative()) {
                 net.minecraft.world.phys.Vec3 target = packet.position();
-                vehicle.setPos(target.x, target.y, target.z);
+                net.minecraft.world.phys.Vec3 currentTarget;
+                if (vehicle.isInterpolating()) {
+                    currentTarget = vehicle.getInterpolation().position();
+                } else {
+                    currentTarget = vehicle.position();
+                }
+                if (target.distanceTo(currentTarget) > 1.0E-5F) {
+                    if (vehicle.isInterpolating()) {
+                        vehicle.getInterpolation().cancel();
+                    }
+                    vehicle.absSnapTo(target.x(), target.y(), target.z(), packet.yRot(), packet.xRot());
+                }
+                this.connection.send(net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket.fromEntity(vehicle));
             }
         }
     }
@@ -719,11 +921,19 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleExplosion(net.minecraft.network.protocol.game.ClientboundExplodePacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
         MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
-        // 爆炸音效/粒子到假人 level（假人也感知）
         net.minecraft.world.phys.Vec3 center = packet.center();
-        self.mockplayer$getLevel().playLocalSound(center.x(), center.y(), center.z(),
-                packet.explosionSound().value(), net.minecraft.sounds.SoundSource.BLOCKS, 1.0F, 1.0F, false);
+        // 音效：记录到假人 state（不播放到主玩家音箱，零污染）
+        this.session.getState().recordSound(
+                packet.explosionSound().value().location().toString(),
+                center.x(), center.y(), center.z());
+        // 粒子：记录到 state（不渲染到主玩家屏幕）
+        this.session.getState().recordParticle("explosion", center.x(), center.y(), center.z());
+        // 与原版一致：假人 level 追踪爆炸效果（方块破碎粒子等）
+        self.mockplayer$getLevel().trackExplosionEffects(center, packet.radius(), packet.blockCount(), packet.blockParticles());
+        // 与原版一致：假人被爆炸击退（this.minecraft.player → this.fakePlayer）
+        packet.playerKnockback().ifPresent(this.fakePlayer::addDeltaMovement);
     }
 
     // ===== 配方书（假人自己的配方） =====
@@ -736,7 +946,15 @@ public class FakePlayListener extends ClientPacketListener {
                 recipeBook.clear();
             }
             for (var entry : packet.entries()) {
+                // 与原版一致（this.minecraft.player → this.fakePlayer）
                 recipeBook.add(entry.contents());
+                if (entry.highlight()) {
+                    recipeBook.addHighlight(entry.contents().id());
+                }
+                if (entry.notification()) {
+                    // 配方 toast 是主玩家 UI，假人记录到 state
+                    this.session.getState().recordPacket("recipeToast", entry.contents());
+                }
             }
         }
     }
@@ -748,26 +966,33 @@ public class FakePlayListener extends ClientPacketListener {
             for (net.minecraft.world.item.crafting.display.RecipeDisplayId id : packet.recipes()) {
                 recipeBook.remove(id);
             }
+            // 与原版 refreshRecipeBook 一致（searchTrees 是假人 listener 自己的字段；UI 部分跳过）
+            recipeBook.rebuildCollections();
         }
     }
 
     @Override
     public void handleRecipeBookSettings(net.minecraft.network.protocol.game.ClientboundRecipeBookSettingsPacket packet) {
         if (this.fakePlayer != null) {
-            this.fakePlayer.getRecipeBook().setBookSettings(packet.bookSettings());
+            net.minecraft.client.ClientRecipeBook recipeBook = this.fakePlayer.getRecipeBook();
+            recipeBook.setBookSettings(packet.bookSettings());
+            // 与原版 refreshRecipeBook 一致
+            recipeBook.rebuildCollections();
         }
     }
 
     @Override
     public void handlePlaceRecipe(net.minecraft.network.protocol.game.ClientboundPlaceGhostRecipePacket packet) {
-        // 假人无头，幽灵配方显示忽略
+        // 幽灵配方：完整记录原始包（容器 ID + 配方展示）供 AI 读取，不弹主玩家幽灵配方
+        this.session.getState().recordPacket("handlePlaceRecipe", packet);
     }
 
     // ===== 容器/菜单（假人自己的） =====
 
     @Override
     public void handleOpenBook(net.minecraft.network.protocol.game.ClientboundOpenBookPacket packet) {
-        // 假人无头，不打开书本界面
+        // 打开书本：完整记录原始包（手别）+ 书本内容已在假人背包，不弹主玩家书本界面
+        this.session.getState().recordPacket("handleOpenBook", packet);
     }
 
     @Override
@@ -795,15 +1020,19 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleOpenSignEditor(net.minecraft.network.protocol.game.ClientboundOpenSignEditorPacket packet) {
-        // 假人无头，不打开告示牌编辑
+        // 告示牌编辑：完整记录原始包（方块位置/是否正面）供 AI 读取，不弹主玩家编辑界面
+        this.session.getState().recordPacket("handleOpenSignEditor", packet);
     }
 
     @Override
     public void handleMerchantOffers(net.minecraft.network.protocol.game.ClientboundMerchantOffersPacket packet) {
         if (this.fakePlayer != null && this.fakePlayer.containerMenu instanceof net.minecraft.world.inventory.MerchantMenu merchantMenu) {
+            // 与原版一致（this.minecraft.player.containerMenu → this.fakePlayer.containerMenu）
             merchantMenu.setOffers(packet.getOffers());
             merchantMenu.setXp(packet.getVillagerXp());
             merchantMenu.setMerchantLevel(packet.getVillagerLevel());
+            merchantMenu.setShowProgressBar(packet.showProgress());
+            merchantMenu.setCanRestock(packet.canRestock());
         }
     }
 
@@ -811,7 +1040,8 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleTabListCustomisation(net.minecraft.network.protocol.game.ClientboundTabListPacket packet) {
-        // 假人无头，不显示 Tab 列表
+        // Tab 列表 header/footer：完整记录原始包供 AI 读取，不弹主玩家 Tab 界面
+        this.session.getState().recordPacket("handleTabListCustomisation", packet);
     }
 
     @Override
@@ -822,7 +1052,8 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleLowDiskSpaceWarning(net.minecraft.network.protocol.game.ClientboundLowDiskSpaceWarningPacket packet) {
-        // 假人无头，磁盘警告忽略
+        // 磁盘警告：完整记录原始包供 AI 读取（不影响假人逻辑）
+        this.session.getState().recordPacket("handleLowDiskSpaceWarning", packet);
     }
 
     @Override
@@ -835,18 +1066,21 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleGameRuleValues(net.minecraft.network.protocol.game.ClientboundGameRuleValuesPacket packet) {
-        // 假人无头，游戏规则界面忽略（规则已由父类 level 处理）
+        // 游戏规则值：完整记录原始包供 AI 读取（假人无头不弹规则界面）
+        this.session.getState().recordPacket("handleGameRuleValues", packet);
     }
 
     @Override
     public void handleConfigurationStart(net.minecraft.network.protocol.game.ClientboundStartConfigurationPacket packet) {
-        // 服务端要求重进配置。假人无头不走主玩家重进 UI（会清主玩家 level），
-        // 保持连接等待后续 login 包重建假人 level（数据由 handleLogin 重新下发，不丢）。
+        // 服务端要求重进配置：完整记录原始包供 AI 读取。
+        // 假人无头不走主玩家重进 UI（会清主玩家 level），保持连接等待后续 login 包重建假人 level。
+        this.session.getState().recordPacket("handleConfigurationStart", packet);
     }
 
     @Override
     public void handleTestInstanceBlockStatus(net.minecraft.network.protocol.game.ClientboundTestInstanceBlockStatus packet) {
-        // 假人无头，测试实例状态忽略
+        // 测试实例状态：完整记录原始包供 AI 读取（假人无头不弹测试界面）
+        this.session.getState().recordPacket("handleTestInstanceBlockStatus", packet);
     }
 
     // ===== 地图数据 / 世界事件 / 挖矿 / 生物群系 / 出生点 / tick（假人 level，不碰主玩家） =====
@@ -919,32 +1153,68 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleGameTestHighlightPos(net.minecraft.network.protocol.game.ClientboundGameTestHighlightPosPacket packet) {
-        // 假人无头，测试高亮渲染忽略
+        // 测试高亮位置：完整记录原始包供 AI 读取（假人无头不渲染测试高亮）
+        this.session.getState().recordPacket("handleGameTestHighlightPos", packet);
     }
 
     @Override
     public void handlePlayerCombatKill(net.minecraft.network.protocol.game.ClientboundPlayerCombatKillPacket packet) {
-        // 假人死亡：记录到状态，不弹主玩家死亡界面
+        // 假人死亡：完整记录原始包（死亡消息/击杀者/是否弹死亡屏），数据零丢弃；不弹主玩家死亡界面
+        this.session.getState().recordPacket("handlePlayerCombatKill", packet);
         if (this.fakePlayer != null) {
             this.session.getState().setHealth(0.0F);
+            // 与原版一致：死亡后触发重生（假人无死亡屏，直接 respawn → 服务端回 respawn 包走 handleRespawn）。
+            // 否则假人停在「死亡待重生」状态，服务端不释放/移除它。
+            this.fakePlayer.respawn();
         }
     }
 
     @Override
     public void handleSetCamera(net.minecraft.network.protocol.game.ClientboundSetCameraPacket packet) {
-        // 假人无头，不切换主玩家相机；若假人骑乘则视角跟随坐骑由本地模拟处理
-        if (this.fakePlayer != null && this.fakePlayer.isSpectator()) {
-            // 假人是旁观者时记录到状态（无 UI）
-        }
+        // 相机切换：假人无头不切主玩家相机，完整记录原始包（spectator 视角目标实体 ID）供 AI 读取
+        this.session.getState().recordPacket("handleSetCamera", packet);
     }
 
     @Override
     public void handleCustomChatCompletions(net.minecraft.network.protocol.game.ClientboundCustomChatCompletionsPacket packet) {
-        // 假人无头，聊天补全忽略
+        // 聊天补全：完整记录原始包（action + entries）供 AI 读取，不碰主玩家补全提供器
+        this.session.getState().recordPacket("handleCustomChatCompletions", packet);
     }
 
     @Override
     public void handleDeleteChat(net.minecraft.network.protocol.game.ClientboundDeleteChatPacket packet) {
-        // 假人聊天删除忽略（聊天已记录在 state）
+        // 聊天删除：完整记录原始包（消息签名）供 AI 读取（聊天历史文本仍由 handlePlayerChat 记录）
+        this.session.getState().recordPacket("handleDeleteChat", packet);
+    }
+
+    /**
+     * 假人被服务端踢出（ClientboundDisconnectPacket）。
+     * 不调父类——父类 handleDisconnect → connection.disconnect → onDisconnect → Minecraft.disconnect()
+     * 会弹主玩家断线界面并断开主玩家连接（污染）。改为只断开假人 + 从管理器移除。
+     */
+    @Override
+    public void handleDisconnect(net.minecraft.network.protocol.common.ClientboundDisconnectPacket packet) {
+        this.session.getState().recordPacket("handleDisconnect", packet);
+        net.minecraft.network.chat.Component reason = packet.reason();
+        FakeSession.LOG.warn("[{}] 假人被踢出: {}", this.session.getName(), reason.getString());
+        this.cleanupOnKick();
+    }
+
+    /**
+     * 假人连接断开（被踢/断线/服务端关闭）。
+     * 不调父类——父类 onDisconnect 调 Minecraft.disconnect() 会弹主玩家断线界面并断主玩家连接（污染）。
+     */
+    @Override
+    public void onDisconnect(net.minecraft.network.DisconnectionDetails details) {
+        this.session.getState().recordPacket("onDisconnect", details);
+        FakeSession.LOG.warn("[{}] 假人连接断开: {}", this.session.getName(),
+                details.reason() != null ? details.reason().getString() : "unknown");
+        this.cleanupOnKick();
+    }
+
+    /** 断开假人 + 从 SessionManager 移除（幂等，防 handleDisconnect 与 onDisconnect 双调） */
+    private void cleanupOnKick() {
+        // 从管理器移除会触发 disconnect()；若已移除则幂等返回
+        com.mockplayer.session.SessionManager.getInstance().removeFakePlayer(this.session.getName());
     }
 }

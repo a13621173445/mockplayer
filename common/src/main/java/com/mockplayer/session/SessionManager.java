@@ -73,6 +73,17 @@ public class SessionManager {
     }
 
     /**
+     * 全部假人下线（主玩家退出服务器时调用）。
+     */
+    public void clearAll() {
+        for (FakeSession session : sessions.values()) {
+            session.disconnect();
+        }
+        sessions.clear();
+        Constants.LOG.info("主玩家退出，全部假人已下线");
+    }
+
+    /**
      * 当前在线假人名字列表。
      */
     public java.util.Collection<String> getFakePlayerNames() {

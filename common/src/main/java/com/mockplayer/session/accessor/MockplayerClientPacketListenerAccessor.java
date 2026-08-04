@@ -67,6 +67,23 @@ public interface MockplayerClientPacketListenerAccessor {
     void mockplayer$setClientLoaded(boolean loaded);
 
     /**
+     * removedPlayerVehicleId：假人坐骑被移除时记录 ID（供 handleTeleportEntity 兜底应用到假人），
+     * 与原版父类逻辑一致。
+     */
+    @Accessor("removedPlayerVehicleId")
+    java.util.OptionalInt mockplayer$getRemovedPlayerVehicleId();
+
+    @Accessor("removedPlayerVehicleId")
+    void mockplayer$setRemovedPlayerVehicleId(java.util.OptionalInt id);
+
+    /**
+     * 通知服务端玩家已加载（发 ServerboundPlayerLoadedPacket）+ setClientLoaded(true)。
+     * 假人收到 chunk 包（handleLevelChunkWithLight）后调用，恢复物理。
+     */
+    @Invoker("notifyPlayerLoaded")
+    void mockplayer$notifyPlayerLoaded();
+
+    /**
      * 应用位置包到指定实体（handleMovePlayer/handleRotatePlayer 用）。
      * 父类 handleMovePlayer 内部用 this.minecraft.player，假人 override 时用此方法操作假人。
      * 目标是 static 方法，故 @Invoker 必须声明 static。
