@@ -1,13 +1,13 @@
 {
   "required": true,
   "minVersion": "0.8",
-  "package": "com.mockplayer.mixin",
+  "package": "com.mockplayer.session.accessor",
   "compatibilityLevel": "JAVA_25",
-  "refmap": "mockplayer.refmap.json",
-  "mixinextras": {
-    "minVersion": "0.5.4"
-  },
-  "mixins": [],
+  "refmap": "mockplayer.accessor.refmap.json",
+  "mixins": [
+    "MockplayerClientPacketListenerAccessor",
+    "MockplayerClientLevelAccessor"
+  ],
   "client": [],
   "server": [],
   "injectors": {

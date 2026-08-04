@@ -3,9 +3,13 @@
   "minVersion": "0.8",
   "package": "com.mockplayer.mixin",
   "compatibilityLevel": "JAVA_25",
+  "refmap": "mockplayer.fabric.refmap.json",
+  "mixinextras": {
+    "minVersion": "0.5.4"
+  },
   "mixins": [],
   "client": [
-    "MixinTitleScreen"
+    "MixinClientConfigurationPacketListenerImpl"
   ],
   "server": [],
   "injectors": {
