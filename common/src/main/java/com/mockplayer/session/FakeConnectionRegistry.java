@@ -15,7 +15,27 @@ public class FakeConnectionRegistry {
 
     private static final Map<Connection, FakeSession> FAKE_SESSIONS = new ConcurrentHashMap<>();
 
+    /**
+     * 主玩家是否正在 server transfer（被传送到子服）。
+     * 由双端 Mixin 维护：MixinClientCommonPacketListenerImpl 在 handleTransfer 置位，
+     * MixinMinecraft 在 disconnect 时读取——true 则跳过 SessionManager.clearAll（主玩家 transfer 不误清假人）。
+     * 用静态字段（主玩家只有一条连接，无需按连接区分）。
+     */
+    private static volatile boolean transferring;
+
     private FakeConnectionRegistry() {
+    }
+
+    /** 主玩家 transfer 置位（双端 Mixin 调用） */
+    public static void setTransferring(boolean transferring) {
+        FakeConnectionRegistry.transferring = transferring;
+    }
+
+    /** 读取并复位 transfer 标志（双端 Mixin 在 disconnect 时调用）；返回读取前的值 */
+    public static boolean takeTransferring() {
+        boolean was = FakeConnectionRegistry.transferring;
+        FakeConnectionRegistry.transferring = false;
+        return was;
     }
 
     /** 标记一个连接为假人连接，并关联其会话 */

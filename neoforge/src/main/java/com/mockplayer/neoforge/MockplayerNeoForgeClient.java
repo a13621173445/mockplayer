@@ -1,10 +1,10 @@
 package com.mockplayer.neoforge;
 
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 
 import com.mockplayer.Constants;
 import com.mockplayer.session.FakePlayerCommands;
-import com.mockplayer.session.FakeConnectionRegistry;
 import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.SessionManager;
 
@@ -56,6 +56,24 @@ public class MockplayerNeoForgeClient {
                             ctx.getSource().sendSuccess(() -> FakePlayerCommands.control(name), false);
                             return 1;
                         })));
+        dispatcher.register(Commands.literal("connect")
+                .then(Commands.argument("name", FakePlayerNameArgument.fakePlayerName())
+                        .suggests(FakePlayerCommands.fakePlayerNames())
+                        .then(Commands.argument("host", StringArgumentType.word())
+                                .executes(ctx -> {
+                                    String name = StringArgumentType.getString(ctx, "name");
+                                    String host = StringArgumentType.getString(ctx, "host");
+                                    ctx.getSource().sendSuccess(() -> FakePlayerCommands.connectPlayer(name, host, 25565), false);
+                                    return 1;
+                                })
+                                .then(Commands.argument("port", IntegerArgumentType.integer(1, 65535))
+                                        .executes(ctx -> {
+                                            String name = StringArgumentType.getString(ctx, "name");
+                                            String host = StringArgumentType.getString(ctx, "host");
+                                            int port = IntegerArgumentType.getInteger(ctx, "port");
+                                            ctx.getSource().sendSuccess(() -> FakePlayerCommands.connectPlayer(name, host, port), false);
+                                            return 1;
+                                        })))));
         dispatcher.register(Commands.literal("fakelist")
                 .executes(ctx -> {
                     ctx.getSource().sendSuccess(() -> FakePlayerCommands.listPlayers(), false);
@@ -69,12 +87,8 @@ public class MockplayerNeoForgeClient {
     }
 
     private static void onPlayerLogout(ClientPlayerNetworkEvent.LoggingOut event) {
-        // 主玩家退出服务器 → 全部假人下线。
-        // 防御：若断开的连接属于假人（FakeConnectionRegistry 标记），忽略——假人各自独立清理，
-        // 避免误清其他假人。
-        if (FakeConnectionRegistry.isFake(event.getConnection())) {
-            return;
-        }
-        SessionManager.getInstance().clearAll();
+        // 主玩家断线 → 假人清理已由 MixinMinecraft 在 Minecraft.disconnect 统一处理
+        // （能区分 transfer 空窗 vs 真退出，避免主玩家被传送到子服时误清假人）。
+        // 假人连接断开也触发本事件，但假人各自独立清理（cleanupOnKick），这里无需处理。
     }
 }

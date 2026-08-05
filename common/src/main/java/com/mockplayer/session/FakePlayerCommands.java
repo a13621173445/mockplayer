@@ -64,6 +64,32 @@ public class FakePlayerCommands {
     }
 
     /**
+     * 执行 /connect 命令：让已存在的假人直接连接到指定服务器（不存在不新建）。
+     *
+     * @param name 已存在的假人名字
+     * @param host 目标服务器地址（如 127.0.0.1 / localhost / 域名）
+     * @param port 目标服务器端口
+     * @return 反馈消息（发给玩家）
+     */
+    public static Component connectPlayer(String name, String host, int port) {
+        FakeSession session = SessionManager.getInstance().getSession(name);
+        if (session == null) {
+            return Component.translatable("commands.mockplayer.connect.not_found", playerName(name))
+                    .withStyle(FAIL_COLOR);
+        }
+        if (port < 1 || port > 65535) {
+            return Component.translatable("commands.mockplayer.connect.invalid_port")
+                    .withStyle(FAIL_COLOR);
+        }
+        // 断开旧连接重连到指定服务器（reconnecting 保护：旧连接断开不算下线，失败才就地下线）
+        session.setReconnecting(true);
+        session.disconnect();
+        session.connectTo(host, port, null);
+        return Component.translatable("commands.mockplayer.connect.success", playerName(name), host, port)
+                .withStyle(SUCCESS_COLOR);
+    }
+
+    /**
      * 执行 /control 命令（P1 实现切换）。
      */
     public static Component control(String name) {

@@ -1208,6 +1208,57 @@ public class FakePlayListener extends ClientPacketListener {
         this.session.getState().recordPacket("handleDeleteChat", packet);
     }
 
+    /** 假人收资源包推送：记录到 state，不弹主玩家资源包确认框（父类会 minecraft.gui.setScreen）。 */
+    @Override
+    public void handleResourcePackPush(net.minecraft.network.protocol.common.ClientboundResourcePackPushPacket packet) {
+        this.session.getState().recordPacket("handleResourcePackPush", packet);
+    }
+
+    /** 假人收资源包弹出：记录到 state，不碰主玩家 gui（父类经 lambda 弹窗/清理主玩家屏幕）。 */
+    @Override
+    public void handleResourcePackPop(net.minecraft.network.protocol.common.ClientboundResourcePackPopPacket packet) {
+        this.session.getState().recordPacket("handleResourcePackPop", packet);
+    }
+
+    /** 假人收对话框显示：记录到 state，不弹主玩家对话框（父类会 minecraft.gui.showDialog）。 */
+    @Override
+    public void handleShowDialog(net.minecraft.network.protocol.common.ClientboundShowDialogPacket packet) {
+        this.session.getState().recordPacket("handleShowDialog", packet);
+    }
+
+    /** 假人收对话框清除：记录到 state，不碰主玩家 gui（父类 clearDialog 会关主玩家 WarningScreen）。 */
+    @Override
+    public void handleClearDialog(net.minecraft.network.protocol.common.ClientboundClearDialogPacket packet) {
+        this.session.getState().recordPacket("handleClearDialog", packet);
+    }
+
+    /**
+     * 假人被服务端传送到子服务器（server transfer，如资源世界/跨服）。
+     * 完整版跟随传送：不调父类（父类会 ConnectScreen.startConnecting(minecraft) 劫持主玩家），
+     * 改记录 state + 断开旧连接 + 发起到子服的离线登录（原版一致，携带 cookies）。
+     * 若重连失败，由 connectTo 的失败路径就地下线（同 kick）。
+     */
+    @Override
+    public void handleTransfer(net.minecraft.network.protocol.common.ClientboundTransferPacket packet) {        this.session.getState().recordPacket("handleTransfer", packet);
+        String host = packet.host();
+        int port = packet.port();
+        FakeSession.LOG.info("[{}] 假人被传送至子服 {}:{}，跟随重连", this.session.getName(), host, port);
+
+        // 原版一致：构造 TransferState（父类 protected 字段：cookies / seenPlayers / seenInsecureChatWarning）
+        net.minecraft.client.multiplayer.TransferState transferState = new net.minecraft.client.multiplayer.TransferState(
+                this.serverCookies,
+                this.seenPlayers,
+                this.seenInsecureChatWarning
+        );
+
+        // 置重连标志，防止旧连接断开时 cleanupOnKick 删除 session
+        this.session.setReconnecting(true);
+        // 断开旧连接（只断连接，reconnecting 下不触发删除）
+        this.session.disconnect();
+        // 发起到子服的离线登录（target 直接用 transfer 地址）
+        this.session.connectTo(host, port, transferState);
+    }
+
     /**
      * 假人被服务端踢出（ClientboundDisconnectPacket）。
      * 不调父类——父类 handleDisconnect → connection.disconnect → onDisconnect → Minecraft.disconnect()
@@ -1235,6 +1286,11 @@ public class FakePlayListener extends ClientPacketListener {
 
     /** 断开假人 + 从 SessionManager 移除（幂等，防 handleDisconnect 与 onDisconnect 双调） */
     private void cleanupOnKick() {
+        // transfer 跟随重连期间，旧连接断开不算「被踢下线」——session 由重连成功/失败决定去留
+        if (this.session.isReconnecting()) {
+            FakeSession.LOG.info("[{}] 假人重连中，忽略旧连接断开", this.session.getName());
+            return;
+        }
         // 从管理器移除会触发 disconnect()；若已移除则幂等返回
         com.mockplayer.session.SessionManager.getInstance().removeFakePlayer(this.session.getName());
     }

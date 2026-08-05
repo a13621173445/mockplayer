@@ -96,6 +96,14 @@ public class FakeLoginListener implements ClientLoginPacketListener {
         // 切到配置阶段（复用 MC 自带 listener）
         Minecraft mc = Minecraft.getInstance();
         ServerData serverData = new ServerData(name, "mockplayer", ServerData.Type.OTHER);
+        // 跟随传送（transfer）时带上原版一致的 cookies / seenPlayers / seenInsecureChatWarning
+        net.minecraft.client.multiplayer.TransferState transfer = session.getPendingTransfer();
+        java.util.Map<net.minecraft.resources.Identifier, byte[]> cookies =
+                transfer != null ? transfer.cookies() : Map.of();
+        java.util.Map<java.util.UUID, PlayerInfo> seenPlayers =
+                transfer != null ? transfer.seenPlayers() : Map.of();
+        boolean seenInsecureWarning =
+                transfer != null && transfer.seenInsecureChatWarning();
         CommonListenerCookie cookie = new CommonListenerCookie(
                 new LevelLoadTracker(),
                 profile,
@@ -105,12 +113,12 @@ public class FakeLoginListener implements ClientLoginPacketListener {
                 null,
                 serverData,
                 null,
-                Map.of(),
+                cookies,
                 null,
                 Map.of(),
                 ServerLinks.EMPTY,
-                Map.<UUID, PlayerInfo>of(),
-                false
+                seenPlayers,
+                seenInsecureWarning
         );
 
         this.connection.setupInboundProtocol(

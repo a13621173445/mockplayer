@@ -42,6 +42,14 @@ public class FakeSession {
     private net.minecraft.client.player.LocalPlayer fakePlayer;
     /** 连接失败回调（后台网络线程调用，回调内需自行切回主线程；参数为失败提示的翻译 key） */
     private java.util.function.Consumer<String> onConnectFail;
+    /**
+     * 重连中标志：假人被 transfer 到子服时置 true。
+     * 重连期间旧 listener 断开（onDisconnect/handleDisconnect → cleanupOnKick）不能删除 session，
+     * 由重连成功/失败决定去留。
+     */
+    private volatile boolean reconnecting;
+    /** 待注入的 transfer cookies（跟随传送时带过去，原版一致） */
+    private net.minecraft.client.multiplayer.TransferState pendingTransfer;
 
     public FakeSession(String name) {
         this.name = name;
@@ -50,6 +58,24 @@ public class FakeSession {
     /** 设置连接失败回调（SessionManager 注入，用于回收会话 + 通知玩家） */
     public void setOnConnectFail(java.util.function.Consumer<String> onConnectFail) {
         this.onConnectFail = onConnectFail;
+    }
+
+    /** 设置重连中标志（FakePlayListener.handleTransfer 置 true，重连成功/失败复位） */
+    public void setReconnecting(boolean reconnecting) {
+        this.reconnecting = reconnecting;
+    }
+
+    public boolean isReconnecting() {
+        return this.reconnecting;
+    }
+
+    /** 设置待注入的 transfer cookies（跟随传送时，登录成功后合入 CommonListenerCookie） */
+    public void setPendingTransfer(net.minecraft.client.multiplayer.TransferState pendingTransfer) {
+        this.pendingTransfer = pendingTransfer;
+    }
+
+    public net.minecraft.client.multiplayer.TransferState getPendingTransfer() {
+        return this.pendingTransfer;
     }
 
     /** 触发连接失败回调（携带失败提示的翻译 key） */
@@ -125,9 +151,19 @@ public class FakeSession {
             }
         }
 
-        final String fHost = host;
-        final int fPort = port;
-        Thread thread = new Thread(() -> doConnectTcp(fHost, fPort), "Mockplayer Connector #" + name);
+        connectTo(host, port, null);
+    }
+
+    /**
+     * 发起到指定服务器的离线登录（普通连接与 transfer 跟随共用）。
+     *
+     * @param host          目标服务器地址
+     * @param port          目标服务器端口
+     * @param transferState 跟随传送时的 cookies（原版一致），普通连接传 null
+     */
+    public void connectTo(String host, int port, net.minecraft.client.multiplayer.TransferState transferState) {
+        this.pendingTransfer = transferState;
+        Thread thread = new Thread(() -> doConnectTcp(host, port), "Mockplayer Connector #" + name);
         thread.setDaemon(true);
         thread.start();
     }
@@ -158,7 +194,14 @@ public class FakeSession {
         } catch (Exception e) {
             LOG.error("[{}] 假人连接失败", name, e);
             disconnect();
-            notifyConnectFail("commands.mockplayer.newplayer.connection_failed");
+            // 重连（transfer 跟随）失败：复位标志 + 就地下线（同 kick）
+            boolean wasReconnecting = this.reconnecting;
+            this.reconnecting = false;
+            if (wasReconnecting) {
+                com.mockplayer.session.SessionManager.getInstance().removeFakePlayer(name);
+            } else {
+                notifyConnectFail("commands.mockplayer.newplayer.connection_failed");
+            }
         }
     }
 
@@ -212,6 +255,7 @@ public class FakeSession {
 
     /**
      * 断开假人连接。
+     * 注意：reconnecting 时只断连接，session 由重连成功/失败决定去留（transfer 跟随场景）。
      */
     public void disconnect() {
         if (connection != null) {

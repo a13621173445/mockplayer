@@ -1,18 +1,17 @@
 package com.mockplayer.fabric;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 
 import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.session.FakePlayerNameArgument;
-import com.mockplayer.session.FakePlayListener;
 import com.mockplayer.session.SessionManager;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.minecraft.commands.CommandBuildContext;
 
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument;
@@ -55,6 +54,24 @@ public class MockplayerClient implements ClientModInitializer {
                                 ctx.getSource().sendFeedback(FakePlayerCommands.control(name));
                                 return 1;
                             })));
+            dispatcher.register(literal("connect")
+                    .then(argument("name", FakePlayerNameArgument.fakePlayerName())
+                            .suggests(FakePlayerCommands.fakePlayerNames())
+                            .then(argument("host", StringArgumentType.word())
+                                    .executes(ctx -> {
+                                        String name = StringArgumentType.getString(ctx, "name");
+                                        String host = StringArgumentType.getString(ctx, "host");
+                                        ctx.getSource().sendFeedback(FakePlayerCommands.connectPlayer(name, host, 25565));
+                                        return 1;
+                                    })
+                                    .then(argument("port", IntegerArgumentType.integer(1, 65535))
+                                            .executes(ctx -> {
+                                                String name = StringArgumentType.getString(ctx, "name");
+                                                String host = StringArgumentType.getString(ctx, "host");
+                                                int port = IntegerArgumentType.getInteger(ctx, "port");
+                                                ctx.getSource().sendFeedback(FakePlayerCommands.connectPlayer(name, host, port));
+                                                return 1;
+                                            })))));
             dispatcher.register(literal("fakelist")
                     .executes(ctx -> {
                         ctx.getSource().sendFeedback(FakePlayerCommands.listPlayers());
@@ -71,14 +88,9 @@ public class MockplayerClient implements ClientModInitializer {
     }
 
     private void registerDisconnect() {
-        // 主玩家断开服务器 → 全部假人下线。
-        // 注意：FakePlayListener extends ClientPacketListener，假人连接断开也会触发本事件，
-        // 必须过滤掉假人自己的 listener——否则踢一个假人会误清所有假人（假人各自独立清理）。
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, minecraft) -> {
-            if (handler instanceof FakePlayListener) {
-                return;
-            }
-            SessionManager.getInstance().clearAll();
-        });
+        // 主玩家断线 → 假人清理已由 MixinMinecraft 在 Minecraft.disconnect 统一处理
+        // （能区分 transfer 空窗 vs 真退出，避免主玩家被传送到子服时误清假人）。
+        // 这里仅过滤假人自己的断开（假人各自独立清理，无需事件处理）。
+        // 保留监听以防 Mixin 未生效场景，但不再直接 clearAll。
     }
 }
