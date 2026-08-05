@@ -72,11 +72,6 @@ public class MockplayerClient implements ClientModInitializer {
                                                 ctx.getSource().sendFeedback(FakePlayerCommands.connectPlayer(name, host, port));
                                                 return 1;
                                             })))));
-            dispatcher.register(literal("fakelist")
-                    .executes(ctx -> {
-                        ctx.getSource().sendFeedback(FakePlayerCommands.listPlayers());
-                        return 1;
-                    }));
         });
     }
 

@@ -99,23 +99,6 @@ public class FakePlayerCommands {
     }
 
     /**
-     * 列出当前假人。
-     */
-    public static Component listPlayers() {
-        var names = SessionManager.getInstance().getFakePlayerNames();
-        if (names.isEmpty()) {
-            return Component.translatable("commands.mockplayer.fakelist.empty")
-                    .withStyle(ChatFormatting.GRAY);
-        }
-        Component joined = names.stream()
-                .map(FakePlayerCommands::playerName)
-                .reduce((a, b) -> a.append(Component.literal(", ").withStyle(ChatFormatting.GRAY)).append(b))
-                .orElse(Component.empty());
-        return Component.translatable("commands.mockplayer.fakelist.list", joined)
-                .withStyle(SUCCESS_COLOR);
-    }
-
-    /**
      * Tab 补全：当前所有假人名字（用于 /delplayer）。
      */
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> fakePlayerNames() {

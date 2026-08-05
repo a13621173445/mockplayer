@@ -74,11 +74,6 @@ public class MockplayerNeoForgeClient {
                                             ctx.getSource().sendSuccess(() -> FakePlayerCommands.connectPlayer(name, host, port), false);
                                             return 1;
                                         })))));
-        dispatcher.register(Commands.literal("fakelist")
-                .executes(ctx -> {
-                    ctx.getSource().sendSuccess(() -> FakePlayerCommands.listPlayers(), false);
-                    return 1;
-                }));
     }
 
     private static void onClientTick(ClientTickEvent.Post event) {
