@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mockplayer.Constants;
 import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.session.FakeConnectionRegistry;
+import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.SessionManager;
 
 import net.minecraft.commands.Commands;
@@ -33,21 +34,21 @@ public class MockplayerNeoForgeClient {
         var dispatcher = event.getDispatcher();
 
         dispatcher.register(Commands.literal("newplayer")
-                .then(Commands.argument("name", StringArgumentType.word())
+                .then(Commands.argument("name", FakePlayerNameArgument.fakePlayerName())
                         .executes(ctx -> {
                             String name = StringArgumentType.getString(ctx, "name");
                             ctx.getSource().sendSuccess(() -> FakePlayerCommands.newPlayer(name), false);
                             return 1;
                         })));
         dispatcher.register(Commands.literal("delplayer")
-                .then(Commands.argument("name", StringArgumentType.word())
+                .then(Commands.argument("name", FakePlayerNameArgument.fakePlayerName())
                         .executes(ctx -> {
                             String name = StringArgumentType.getString(ctx, "name");
                             ctx.getSource().sendSuccess(() -> FakePlayerCommands.delPlayer(name), false);
                             return 1;
                         })));
         dispatcher.register(Commands.literal("control")
-                .then(Commands.argument("name", StringArgumentType.word())
+                .then(Commands.argument("name", FakePlayerNameArgument.fakePlayerName())
                         .executes(ctx -> {
                             String name = StringArgumentType.getString(ctx, "name");
                             ctx.getSource().sendSuccess(() -> FakePlayerCommands.control(name), false);

@@ -1,7 +1,5 @@
 package com.mockplayer.session;
 
-import com.mockplayer.Constants;
-
 import java.net.InetSocketAddress;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,9 +40,23 @@ public class FakeSession {
     private final FakePlayerState state = new FakePlayerState();
     /** 假人自己的 LocalPlayer（复用物理），进 play 后创建 */
     private net.minecraft.client.player.LocalPlayer fakePlayer;
+    /** 连接失败回调（后台网络线程调用，回调内需自行切回主线程；参数为失败提示的翻译 key） */
+    private java.util.function.Consumer<String> onConnectFail;
 
     public FakeSession(String name) {
         this.name = name;
+    }
+
+    /** 设置连接失败回调（SessionManager 注入，用于回收会话 + 通知玩家） */
+    public void setOnConnectFail(java.util.function.Consumer<String> onConnectFail) {
+        this.onConnectFail = onConnectFail;
+    }
+
+    /** 触发连接失败回调（携带失败提示的翻译 key） */
+    private void notifyConnectFail(String key) {
+        if (this.onConnectFail != null) {
+            this.onConnectFail.accept(key);
+        }
     }
 
     /** 登录成功后由 listener 回调设置 */
@@ -76,7 +88,10 @@ public class FakeSession {
 
     /**
      * 发起离线登录：连接当前客户端所在的服务器，用假人名字登录。
-     * 在独立线程执行（网络阻塞），登录成功后回调到渲染线程。
+     *
+     * 单人/局域网（集成服务器）：必须先对局域网开放（有 TCP 端口），
+     * 未开放则不创建；开放后用集成服务器的真实端口（不写死 25565）。
+     * 多人（独立服务器）：从主玩家连接取真实地址与端口。
      */
     public void connect() {
         Minecraft mc = Minecraft.getInstance();
@@ -85,27 +100,40 @@ public class FakeSession {
             return;
         }
 
-        // 从当前连接拿到服务器地址。优先用当前 ClientPacketListener 的连接。
         String host = "127.0.0.1";
         int port = 25565;
-        Connection main = mc.getConnection() != null ? mc.getConnection().getConnection() : null;
-        if (main != null) {
-            java.net.SocketAddress addr = main.getRemoteAddress();
-            if (addr instanceof java.net.InetSocketAddress inet) {
-                host = inet.getHostString();
-                port = inet.getPort();
+
+        var singleplayer = mc.getSingleplayerServer();
+        if (singleplayer != null) {
+            // 单人/局域网：集成服务器的 publishedPort 仅在开放局域网后才有值（未开放为 -1）
+            int lanPort = singleplayer.getPort();
+            if (lanPort < 0) {
+                LOG.warn("[{}] 未开放局域网，拒绝创建假人", name);
+                notifyConnectFail("commands.mockplayer.newplayer.lan_not_open");
+                return;
+            }
+            port = lanPort;
+        } else {
+            // 多人：从当前主玩家连接拿真实地址端口（绝不写死）
+            Connection main = mc.getConnection() != null ? mc.getConnection().getConnection() : null;
+            if (main != null) {
+                java.net.SocketAddress addr = main.getRemoteAddress();
+                if (addr instanceof java.net.InetSocketAddress inet) {
+                    host = inet.getHostString();
+                    port = inet.getPort();
+                }
             }
         }
 
         final String fHost = host;
         final int fPort = port;
-        Thread thread = new Thread(() -> doConnect(fHost, fPort), "Mockplayer Connector #" + name);
+        Thread thread = new Thread(() -> doConnectTcp(fHost, fPort), "Mockplayer Connector #" + name);
         thread.setDaemon(true);
         thread.start();
     }
 
-    /** 实际连接逻辑（网络线程） */
-    private void doConnect(String host, int port) {
+    /** TCP 建连（网络线程，阻塞直到 TCP 建立） */
+    private void doConnectTcp(String host, int port) {
         try {
             Optional<InetSocketAddress> resolved = ServerNameResolver.DEFAULT
                     .resolveAddress(new ServerAddress(host, port))
@@ -119,35 +147,35 @@ public class FakeSession {
             Connection conn = new Connection(PacketFlow.CLIENTBOUND);
             conn.setBandwidthLogger(Minecraft.getInstance().getDebugOverlay().getBandwidthLogger());
             this.connection = conn;
-
-            // 标记为假人连接（供平台 Mixin 识别，创建 FakePlayListener）
             FakeConnectionRegistry.markFake(conn, this);
 
-            // 建连（阻塞直到 TCP 建立）
             Connection.connect(address, net.minecraft.server.network.EventLoopGroupHolder.remote(Minecraft.getInstance().options.useNativeTransport()), conn)
                     .syncUninterruptibly();
 
-            // 发起登录握手，用一个自定义登录 listener 处理登录阶段
-            FakeLoginListener loginListener = new FakeLoginListener(this, conn, name);
-            conn.initiateServerboundPlayConnection(
-                    address.getHostName(),
-                    address.getPort(),
-                    LoginProtocols.SERVERBOUND,
-                    LoginProtocols.CLIENTBOUND,
-                    loginListener,
-                    false
-            );
-
-            // 离线登录：发 hello 包，带名字和离线 UUID
-            UUID offlineUuid = UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            conn.send(new ServerboundHelloPacket(name, offlineUuid));
-
+            setupLoginAndHello(conn, address.getHostName(), address.getPort());
             connected = true;
             LOG.info("[{}] 假人连接已建立，等待登录完成", name);
         } catch (Exception e) {
             LOG.error("[{}] 假人连接失败", name, e);
             disconnect();
+            notifyConnectFail("commands.mockplayer.newplayer.connection_failed");
         }
+    }
+
+    /** 登录握手公共部分：注册登录 listener + 发离线 hello 包 */
+    private void setupLoginAndHello(Connection conn, String host, int port) {
+        FakeLoginListener loginListener = new FakeLoginListener(this, conn, name);
+        conn.initiateServerboundPlayConnection(
+                host,
+                port,
+                LoginProtocols.SERVERBOUND,
+                LoginProtocols.CLIENTBOUND,
+                loginListener,
+                false
+        );
+
+        UUID offlineUuid = UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        conn.send(new ServerboundHelloPacket(name, offlineUuid));
     }
 
     /**
@@ -188,7 +216,7 @@ public class FakeSession {
     public void disconnect() {
         if (connection != null) {
             FakeConnectionRegistry.unmarkFake(connection);
-            connection.disconnect(net.minecraft.network.chat.Component.literal("Fake player removed"));
+            connection.disconnect(net.minecraft.network.chat.Component.translatable("disconnect.mockplayer.fake_player_removed"));
             // 注意：不再手动调 connection.handleDisconnection()。
             // Connection.tick() 会在 channel 关闭后自动触发一次（disconnectionHandled 幂等），
             // 手动再调会造成 "handleDisconnection() called twice" 噪音警告。

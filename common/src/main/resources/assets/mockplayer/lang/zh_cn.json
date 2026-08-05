@@ -1,0 +1,14 @@
+{
+    "commands.mockplayer.newplayer.not_in_server": "你不在服务器中，无法创建假人",
+    "commands.mockplayer.newplayer.success": "已创建假人 %s",
+    "commands.mockplayer.newplayer.fail": "假人 %s 已存在或名字无效",
+    "commands.mockplayer.newplayer.connection_failed": "假人 %s 连接服务器失败（请确认世界已开放局域网）",
+    "commands.mockplayer.newplayer.lan_not_open": "请先将世界对局域网开放，再创建假人 %s",
+    "commands.mockplayer.delplayer.success": "已移除假人 %s",
+    "commands.mockplayer.delplayer.fail": "假人 %s 不存在",
+    "commands.mockplayer.control.not_implemented": "/control 尚未实现（P1 阶段）",
+    "commands.mockplayer.fakelist.empty": "当前没有假人",
+    "commands.mockplayer.fakelist.list": "当前假人: %s",
+    "commands.mockplayer.name.invalid": "假人名字无效",
+    "disconnect.mockplayer.fake_player_removed": "假人已移除"
+}

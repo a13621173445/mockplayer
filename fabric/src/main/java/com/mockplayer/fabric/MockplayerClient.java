@@ -4,6 +4,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 
 import com.mockplayer.session.FakePlayerCommands;
+import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.FakePlayListener;
 import com.mockplayer.session.SessionManager;
 
@@ -32,21 +33,21 @@ public class MockplayerClient implements ClientModInitializer {
     private void registerCommands() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             dispatcher.register(literal("newplayer")
-                    .then(argument("name", StringArgumentType.word())
+                    .then(argument("name", FakePlayerNameArgument.fakePlayerName())
                             .executes(ctx -> {
                                 String name = StringArgumentType.getString(ctx, "name");
                                 ctx.getSource().sendFeedback(FakePlayerCommands.newPlayer(name));
                                 return 1;
                             })));
             dispatcher.register(literal("delplayer")
-                    .then(argument("name", StringArgumentType.word())
+                    .then(argument("name", FakePlayerNameArgument.fakePlayerName())
                             .executes(ctx -> {
                                 String name = StringArgumentType.getString(ctx, "name");
                                 ctx.getSource().sendFeedback(FakePlayerCommands.delPlayer(name));
                                 return 1;
                             })));
             dispatcher.register(literal("control")
-                    .then(argument("name", StringArgumentType.word())
+                    .then(argument("name", FakePlayerNameArgument.fakePlayerName())
                             .executes(ctx -> {
                                 String name = StringArgumentType.getString(ctx, "name");
                                 ctx.getSource().sendFeedback(FakePlayerCommands.control(name));

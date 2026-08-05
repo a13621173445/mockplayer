@@ -1,8 +1,12 @@
 package com.mockplayer.session;
 
+import java.security.PublicKey;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
+
+import javax.crypto.Cipher;
+import javax.crypto.SecretKey;
 
 import net.minecraft.client.ClientBrandRetriever;
 import net.minecraft.client.Minecraft;
@@ -15,6 +19,7 @@ import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.telemetry.WorldSessionTelemetryManager;
 import net.minecraft.network.Connection;
 import net.minecraft.network.DisconnectionDetails;
+import net.minecraft.network.PacketSendListener;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.PacketUtils;
@@ -29,8 +34,11 @@ import net.minecraft.network.protocol.login.ClientboundHelloPacket;
 import net.minecraft.network.protocol.login.ClientboundLoginCompressionPacket;
 import net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket;
 import net.minecraft.network.protocol.login.ClientboundLoginFinishedPacket;
+import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
+import net.minecraft.network.protocol.login.ServerboundKeyPacket;
 import net.minecraft.network.protocol.login.ServerboundLoginAcknowledgedPacket;
 import net.minecraft.server.ServerLinks;
+import net.minecraft.util.Crypt;
 import net.minecraft.world.flag.FeatureFlags;
 import net.minecraft.CrashReport;
 import net.minecraft.CrashReportCategory;
@@ -58,9 +66,24 @@ public class FakeLoginListener implements ClientLoginPacketListener {
 
     @Override
     public void handleHello(ClientboundHelloPacket packet) {
-        // 离线模式：服务端 shouldAuthenticate()=false 时跳过 Mojang 认证，
-        // 直接接受 hello。离线服通常直接发 LoginFinished。
-        // （完整加密握手留到后续阶段；离线服一般不需要。）
+        // 集成服务器（单人/局域网）usesAuthentication()=true 且假人连接非 memory → 服务端强制加密握手。
+        // 复刻原版 ClientHandshakePacketListenerImpl.handleHello 的加密通道部分：
+        //  1) 生成随机 AES 密钥，用服务端 RSA 公钥加密后回 ServerboundKeyPacket（构造器内部完成加密 + challenge 回应）
+        //  2) 发包成功后切 AES 加解密（PacketSendListener.thenRun，channel 回调线程执行，与原版一致）
+        // 离线/LAN 下 packet.shouldAuthenticate()=true，但假人无正版会话，跳过 Mojang joinServer 认证；
+        // 服务端认证线程 hasJoinedServer 失败时 isSingleplayer()==true 豁免 → createOfflineProfile 放行。
+        try {
+            SecretKey secretKey = Crypt.generateSecretKey();
+            PublicKey publicKey = packet.getPublicKey();
+            Cipher cipherIn = Crypt.getCipher(2, secretKey);
+            Cipher cipherOut = Crypt.getCipher(1, secretKey);
+            ServerboundKeyPacket keyPacket = new ServerboundKeyPacket(secretKey, publicKey, packet.getChallenge());
+            this.connection.send(keyPacket, PacketSendListener.thenRun(
+                    () -> this.connection.setEncryptionKey(cipherIn, cipherOut)));
+        } catch (Exception e) {
+            FakeSession.LOG.warn("[{}] 加密握手失败: {}", name, e.toString());
+            session.disconnect();
+        }
     }
 
     @Override
@@ -113,7 +136,8 @@ public class FakeLoginListener implements ClientLoginPacketListener {
 
     @Override
     public void handleCustomQuery(ClientboundCustomQueryPacket packet) {
-        // 自定义查询（mod 握手）P0 不处理，直接忽略
+        // 原版会回一个空答案，避免服务端等待自定义查询（mod 登录握手）而阻塞登录。
+        this.connection.send(new ServerboundCustomQueryAnswerPacket(packet.transactionId(), null));
     }
 
     @Override
