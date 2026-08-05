@@ -10,8 +10,9 @@
     "commands.mockplayer.connect.invalid_port": "Invalid port",
     "commands.mockplayer.connect.success": "Connecting fake player %s to %s:%d",
     "commands.mockplayer.control.not_implemented": "/control not implemented yet (P1)",
-    "commands.mockplayer.fakelist.empty": "No fake players",
-    "commands.mockplayer.fakelist.list": "Fake players: %s",
+    "commands.mockplayer.control.success": "Now controlling %s",
+    "commands.mockplayer.control.restored_main": "Restored control to main player",
+    "commands.mockplayer.control.not_found": "Fake player %s does not exist",
     "commands.mockplayer.name.invalid": "Invalid fake player name",
     "disconnect.mockplayer.fake_player_removed": "Fake player removed"
 }

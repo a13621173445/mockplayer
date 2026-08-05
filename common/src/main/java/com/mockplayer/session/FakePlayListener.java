@@ -153,8 +153,8 @@ public class FakePlayListener extends ClientPacketListener {
      */
     @Override
     public void handlePlayerChat(net.minecraft.network.protocol.game.ClientboundPlayerChatPacket packet) {
-        // 签名聊天：完整记录原始包（签名/时间戳/聊天气泡类型）供 AI 读取；
-        // 聊天文本优先取 unsignedContent（未签名展示文本），缺失时取签名 body 的 content。
+        // 聊天记录到假人 state（不显示——control 时由主玩家 listener 原版处理显示到 bot 视角聊天栏，
+        // 这里再显示会双发；且 26.2 ChatListener 依赖处理推进消息 index，假人只记录不影响主玩家侧 index）
         this.session.getState().recordPacket("handlePlayerChat", packet);
         net.minecraft.network.chat.Component text = packet.unsignedContent() != null
                 ? packet.unsignedContent()
@@ -295,13 +295,21 @@ public class FakePlayListener extends ClientPacketListener {
     @Override
     public void handlePlayerInfoUpdate(net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket packet) {
         for (net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry entry : packet.newEntries()) {
-            // 新玩家上线：记录 UUID + 名字（profile 可能为空，用 UUID 兜底）
-            String name = entry.profile() != null ? entry.profile().name() : entry.profileId().toString();
+            // 新玩家上线：记录 UUID + 名字。profile 为空时保留已有名字（避免覆盖成 UUID）
+            String name = entry.profile() != null ? entry.profile().name() : null;
+            if (name == null) {
+                String existing = this.session.getState().getOnlinePlayers().get(entry.profileId());
+                name = existing != null ? existing : entry.profileId().toString();
+            }
             this.session.getState().recordPlayerOnline(entry.profileId(), name);
         }
         for (net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry entry : packet.entries()) {
             // 已有玩家更新动作：更新名字（游戏模式等信息后续扩展）
-            String name = entry.profile() != null ? entry.profile().name() : entry.profileId().toString();
+            String name = entry.profile() != null ? entry.profile().name() : null;
+            if (name == null) {
+                String existing = this.session.getState().getOnlinePlayers().get(entry.profileId());
+                name = existing != null ? existing : entry.profileId().toString();
+            }
             this.session.getState().recordPlayerOnline(entry.profileId(), name);
         }
     }
@@ -375,6 +383,17 @@ public class FakePlayListener extends ClientPacketListener {
                 this.fakePlayer.inventoryMenu.initializeContents(packet.stateId(), packet.items(), packet.carriedItem());
             } else if (packet.containerId() == this.fakePlayer.containerMenu.containerId) {
                 this.fakePlayer.containerMenu.initializeContents(packet.stateId(), packet.items(), packet.carriedItem());
+            } else {
+                // 兜底：containerId 未匹配时，若当前打开着菜单（控制 bot 时 super 弹的容器界面），
+                // 用它的 menu 同步并写回假人（覆盖弹 UI 后菜单引用不一致/时序错乱的场景）。
+                net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+                if (mc.gui.screen() instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?> screen) {
+                    net.minecraft.world.inventory.AbstractContainerMenu menu = screen.getMenu();
+                    if (menu.containerId == packet.containerId()) {
+                        menu.initializeContents(packet.stateId(), packet.items(), packet.carriedItem());
+                        this.fakePlayer.containerMenu = menu;
+                    }
+                }
             }
         }
     }
@@ -482,8 +501,11 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleOpenScreen(net.minecraft.network.protocol.game.ClientboundOpenScreenPacket packet) {
-        // 打开容器界面：假人无头不弹主玩家 UI。容器类型/标题记录到 state，
-        // 后续容器内容包（handleContainerContent 等）正常写入假人背包。
+        // control 时：假人是当前玩家，走原版弹容器界面（bot 视角可交互）；挂机记录到 state
+        if (this.session.isControlled()) {
+            super.handleOpenScreen(packet);
+            return;
+        }
         this.session.getState().recordOpenScreen(packet.getType(), packet.getContainerId(), packet.getTitle());
     }
 
@@ -707,6 +729,13 @@ public class FakePlayListener extends ClientPacketListener {
             newPlayer.setDeltaMovement(oldPlayer.getDeltaMovement());
             newPlayer.setYRot(oldPlayer.getYRot());
             newPlayer.setXRot(oldPlayer.getXRot());
+            // 迁移背包：Player.inventory 是 final 字段（不在 entity data），服务端 shouldKeep(2) 时不重发。
+            // 不迁移则重生后新 player 背包空（「背包直接没了」）。
+            net.minecraft.world.entity.player.Inventory oldInv = oldPlayer.getInventory();
+            net.minecraft.world.entity.player.Inventory newInv = newPlayer.getInventory();
+            for (int i = 0; i < newInv.getContainerSize(); i++) {
+                newInv.setItem(i, oldInv.getItem(i));
+            }
         } else {
             newPlayer.resetPos();
             newPlayer.setYRot(-180.0F);
@@ -717,7 +746,11 @@ public class FakePlayListener extends ClientPacketListener {
             newPlayer.getAttributes().assignBaseValues(oldPlayer.getAttributes());
         }
         self.mockplayer$getLevel().addEntity(newPlayer);
-        newPlayer.input = new net.minecraft.client.player.ClientInput();
+        // input：control 时假人是当前玩家，读主玩家键盘（否则 respawn 后 control bot 动不了）；
+        // 挂机保持零输入（不跟主玩家动）。
+        newPlayer.input = this.session.isControlled()
+                ? new net.minecraft.client.player.KeyboardInput(net.minecraft.client.Minecraft.getInstance().options)
+                : new net.minecraft.client.player.ClientInput();
         this.fakeGameMode.adjustPlayer(newPlayer);
         // 这些标志从旧玩家继承（父类逻辑），不从 packet 读——packet 里没有这些字段
         newPlayer.setReducedDebugInfo(oldPlayer.isReducedDebugInfo());
@@ -735,6 +768,18 @@ public class FakePlayListener extends ClientPacketListener {
                 .mockplayer$setPreviousLocalPlayerMode(spawnInfo.previousGameType());
         // 同步假人自己的 gameType 到 FakeLocalPlayer（重生后新 player）
         newPlayer.setFakeGameType(spawnInfo.gameType());
+        // control 期间：假人重生/换维度，同步 mc.level/player/camera——
+        // 否则 mc.level 停在旧维度（画面不切）+ levelExtractor 与假人实际状态不一致（方块不渲染）。
+        // 仅 control 时碰 mc.*（此时 mc.player/level 是假人的领地），挂机假人保持不碰。
+        if (this.session.isControlled()) {
+            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+            net.minecraft.client.multiplayer.ClientLevel respawnLevel = self.mockplayer$getLevel();
+            if (mc.level != respawnLevel) {
+                mc.setLevel(respawnLevel);
+            }
+            mc.player = newPlayer;
+            mc.setCameraEntity(newPlayer);
+        }
         // 等新 level chunk 加载完成再恢复物理。
         // 不用 LevelLoadTracker——它依赖渲染线程编译回调（假人无渲染会等 30-40s 超时）。
         // 改为：setClientLoaded(false) 保持物理暂停，收到第一个 chunk 包（handleLevelChunkWithLight）
@@ -786,9 +831,10 @@ public class FakePlayListener extends ClientPacketListener {
         net.minecraft.world.entity.EntityType<?> type = packet.getType();
         if (type == net.minecraft.world.entity.EntityTypes.PLAYER) {
             String name = this.session.getState().getOnlinePlayers().get(packet.getUUID());
+            // 查不到名字时避免显示 UUID（用占位名），名字由 handlePlayerInfoUpdate 持续记录
             return new net.minecraft.client.player.RemotePlayer(
                     self.mockplayer$getLevel(),
-                    new com.mojang.authlib.GameProfile(packet.getUUID(), name != null ? name : ""));
+                    new com.mojang.authlib.GameProfile(packet.getUUID(), name != null && !name.isBlank() ? name : "Unknown"));
         }
         return type.create(self.mockplayer$getLevel(), net.minecraft.world.entity.EntitySpawnReason.LOAD);
     }
@@ -1012,13 +1058,21 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleOpenBook(net.minecraft.network.protocol.game.ClientboundOpenBookPacket packet) {
-        // 打开书本：完整记录原始包（手别）+ 书本内容已在假人背包，不弹主玩家书本界面
+        // control 时：弹书本界面（bot 视角）；挂机记录原始包
+        if (this.session.isControlled()) {
+            super.handleOpenBook(packet);
+            return;
+        }
         this.session.getState().recordPacket("handleOpenBook", packet);
     }
 
     @Override
     public void handleMountScreenOpen(net.minecraft.network.protocol.game.ClientboundMountScreenOpenPacket packet) {
-        // 骑乘容器：完整建假人自己的菜单（不弹主玩家 UI，但数据进假人背包/菜单）
+        // control 时：弹骑乘容器界面（bot 视角）；挂机建假人自己的菜单（数据进假人背包/菜单）
+        if (this.session.isControlled()) {
+            super.handleMountScreenOpen(packet);
+            return;
+        }
         if (this.fakePlayer == null) {
             return;
         }
@@ -1041,12 +1095,21 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleOpenSignEditor(net.minecraft.network.protocol.game.ClientboundOpenSignEditorPacket packet) {
-        // 告示牌编辑：完整记录原始包（方块位置/是否正面）供 AI 读取，不弹主玩家编辑界面
+        // control 时：弹告示牌编辑界面（bot 视角）；挂机记录原始包
+        if (this.session.isControlled()) {
+            super.handleOpenSignEditor(packet);
+            return;
+        }
         this.session.getState().recordPacket("handleOpenSignEditor", packet);
     }
 
     @Override
     public void handleMerchantOffers(net.minecraft.network.protocol.game.ClientboundMerchantOffersPacket packet) {
+        // control 时：走原版（弹村民交易界面 + 更新 bot 菜单）；挂机更新假人 MerchantMenu 数据
+        if (this.session.isControlled()) {
+            super.handleMerchantOffers(packet);
+            return;
+        }
         if (this.fakePlayer != null && this.fakePlayer.containerMenu instanceof net.minecraft.world.inventory.MerchantMenu merchantMenu) {
             // 与原版一致（this.minecraft.player.containerMenu → this.fakePlayer.containerMenu）
             merchantMenu.setOffers(packet.getOffers());

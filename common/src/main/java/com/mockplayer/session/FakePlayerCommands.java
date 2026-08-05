@@ -10,8 +10,6 @@ import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * 假人命令的执行逻辑（与平台无关）。
@@ -90,29 +88,24 @@ public class FakePlayerCommands {
     }
 
     /**
-     * 执行 /control 命令（P1 实现切换）。
+     * 执行 /control 命令：完整切换控制权到该假人（视角/移动/操作路由）。
+     * toggle：正在控制该假人时再输入一次 → 切回主玩家本体。
      */
     public static Component control(String name) {
-        // P1: 切换控制权到该假人
-        return Component.translatable("commands.mockplayer.control.not_implemented")
-                .withStyle(ChatFormatting.YELLOW);
-    }
-
-    /**
-     * 列出当前假人。
-     */
-    public static Component listPlayers() {
-        var names = SessionManager.getInstance().getFakePlayerNames();
-        if (names.isEmpty()) {
-            return Component.translatable("commands.mockplayer.fakelist.empty")
-                    .withStyle(ChatFormatting.GRAY);
+        // toggle：正在控制该假人 → 切回本体
+        FakeSession controlledSession = ControlManager.getControlled();
+        if (controlledSession != null && controlledSession.getName().equalsIgnoreCase(name)) {
+            ControlManager.restore();
+            return Component.translatable("commands.mockplayer.control.restored_main")
+                    .withStyle(ChatFormatting.GREEN);
         }
-        Component joined = names.stream()
-                .map(FakePlayerCommands::playerName)
-                .reduce((a, b) -> a.append(Component.literal(", ").withStyle(ChatFormatting.GRAY)).append(b))
-                .orElse(Component.empty());
-        return Component.translatable("commands.mockplayer.fakelist.list", joined)
-                .withStyle(SUCCESS_COLOR);
+        if (ControlManager.control(name)) {
+            return Component.translatable("commands.mockplayer.control.success", playerName(name))
+                    .withStyle(ChatFormatting.GREEN);
+        } else {
+            return Component.translatable("commands.mockplayer.control.not_found", playerName(name))
+                    .withStyle(FAIL_COLOR);
+        }
     }
 
     /**
@@ -124,19 +117,11 @@ public class FakePlayerCommands {
     }
 
     /**
-     * Tab 补全：主玩家名字 + 当前所有假人名字（用于 /control）。
-     * 玩家本体在前，假人名字在后。
+     * Tab 补全：当前所有假人名字（用于 /control，toggle 切回本体不需要主玩家名）。
      */
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> controlTargets() {
-        return (ctx, builder) -> {
-            List<String> names = new ArrayList<>();
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null) {
-                names.add(mc.player.getGameProfile().name());
-            }
-            names.addAll(SessionManager.getInstance().getFakePlayerNames());
-            return SharedSuggestionProvider.suggest(names, builder);
-        };
+        return (ctx, builder) -> SharedSuggestionProvider.suggest(
+                SessionManager.getInstance().getFakePlayerNames(), builder);
     }
 
     /**

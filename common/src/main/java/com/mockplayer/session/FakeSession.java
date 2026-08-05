@@ -50,6 +50,8 @@ public class FakeSession {
     private volatile boolean reconnecting;
     /** 待注入的 transfer cookies（跟随传送时带过去，原版一致） */
     private net.minecraft.client.multiplayer.TransferState pendingTransfer;
+    /** 是否被 /control 接管（接管时 Minecraft.tick 驱动假人物理，本 tick 跳过避免双驱动） */
+    private volatile boolean controlled;
 
     public FakeSession(String name) {
         this.name = name;
@@ -76,6 +78,15 @@ public class FakeSession {
 
     public net.minecraft.client.multiplayer.TransferState getPendingTransfer() {
         return this.pendingTransfer;
+    }
+
+    /** 设置是否被 /control 接管 */
+    public void setControlled(boolean controlled) {
+        this.controlled = controlled;
+    }
+
+    public boolean isControlled() {
+        return this.controlled;
     }
 
     /** 触发连接失败回调（携带失败提示的翻译 key） */
@@ -226,11 +237,20 @@ public class FakeSession {
      * 同时驱动假人 LocalPlayer 物理（重力/移动/碰撞 + 发移动包），反作弊合规。
      */
     public void tick() {
+        // connection 收发包/keepalive 始终驱动：
+        // 被 /control 接管时 Minecraft.tick() 只驱动主玩家 connection（mc.getConnection()），
+        // 不驱动假人 connection，这里必须保留 connection.tick()，否则假人收包/keepalive 停 → 被踢。
         if (connection != null && connection.isConnected()) {
             connection.tick();
         } else if (connection != null && !connected) {
             // 已断开
             connection = null;
+        }
+
+        // 被 /control 接管：物理与 listener tick 交给 Minecraft.tick（level.tickEntities → fakePlayer），
+        // 这里跳过避免双驱动；connection 上面已 tick（keepalive 保活必需）。
+        if (this.controlled) {
+            return;
         }
 
         // 驱动 play listener 的 tick（父类 ClientPacketListener.tick 的收尾逻辑；

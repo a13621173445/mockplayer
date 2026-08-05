@@ -104,11 +104,20 @@ public class FakeLoginListener implements ClientLoginPacketListener {
                 transfer != null ? transfer.seenPlayers() : Map.of();
         boolean seenInsecureWarning =
                 transfer != null && transfer.seenInsecureChatWarning();
+        // 单机/局域网：假人和主玩家连同一个集成服务器，registry 必须复用主玩家已同步的完整
+        // registry（= filterRegistries(server.registryAccess) = 服务端同一实例，含数据包条目如
+        // spear/dimension）。假人若用 ClientRegistryLayer（本地基础层，无数据包）或网络收集构建的
+        // 新实例，戳矛时矛的 DAMAGE_TYPE Holder 引用假人自己实例的 spear，服务端编码按对象引用
+        // 找不到 → damage_event 编码崩。多人远程保持原版默认（后续阶段）。
+        net.minecraft.core.RegistryAccess.Frozen registryAccess =
+                mc.getSingleplayerServer() != null && mc.getConnection() != null
+                        ? mc.getConnection().registryAccess()
+                        : ClientRegistryLayer.createRegistryAccess().compositeAccess();
         CommonListenerCookie cookie = new CommonListenerCookie(
                 new LevelLoadTracker(),
                 profile,
                 new WorldSessionTelemetryManager(net.minecraft.client.telemetry.TelemetryEventSender.DISABLED, false, Duration.ZERO, "", UUID.randomUUID()),
-                ClientRegistryLayer.createRegistryAccess().compositeAccess(),
+                registryAccess,
                 FeatureFlags.DEFAULT_FLAGS,
                 null,
                 serverData,

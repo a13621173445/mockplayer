@@ -76,6 +76,8 @@ public class SessionManager {
             Constants.LOG.warn("假人 {} 不存在", name);
             return false;
         }
+        // 若删除的是被控制的假人 → 自动切回主玩家
+        ControlManager.onFakePlayerRemoved(name);
         session.disconnect();
         return true;
     }

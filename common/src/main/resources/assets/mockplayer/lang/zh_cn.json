@@ -10,8 +10,9 @@
     "commands.mockplayer.connect.invalid_port": "端口无效",
     "commands.mockplayer.connect.success": "假人 %s 正在连接到 %s:%d",
     "commands.mockplayer.control.not_implemented": "/control 尚未实现（P1 阶段）",
-    "commands.mockplayer.fakelist.empty": "当前没有假人",
-    "commands.mockplayer.fakelist.list": "当前假人: %s",
+    "commands.mockplayer.control.success": "正在控制 %s",
+    "commands.mockplayer.control.restored_main": "已切回本体",
+    "commands.mockplayer.control.not_found": "假人 %s 不存在",
     "commands.mockplayer.name.invalid": "假人名字无效",
     "disconnect.mockplayer.fake_player_removed": "假人已移除"
 }

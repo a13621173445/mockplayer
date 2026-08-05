@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 
 import com.mockplayer.Constants;
+import com.mockplayer.session.ControlManager;
 import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.SessionManager;
@@ -74,16 +75,12 @@ public class MockplayerNeoForgeClient {
                                             ctx.getSource().sendSuccess(() -> FakePlayerCommands.connectPlayer(name, host, port), false);
                                             return 1;
                                         })))));
-        dispatcher.register(Commands.literal("fakelist")
-                .executes(ctx -> {
-                    ctx.getSource().sendSuccess(() -> FakePlayerCommands.listPlayers(), false);
-                    return 1;
-                }));
     }
 
     private static void onClientTick(ClientTickEvent.Post event) {
-        // 每 tick 驱动假人连接，保持在线
+        // 每 tick 驱动假人连接 + control（被换下主玩家保活），保持在线
         SessionManager.getInstance().tick();
+        ControlManager.tick();
     }
 
     private static void onPlayerLogout(ClientPlayerNetworkEvent.LoggingOut event) {

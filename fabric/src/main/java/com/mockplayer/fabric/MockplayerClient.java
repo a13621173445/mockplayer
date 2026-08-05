@@ -4,6 +4,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 
+import com.mockplayer.session.ControlManager;
 import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.SessionManager;
@@ -72,18 +73,14 @@ public class MockplayerClient implements ClientModInitializer {
                                                 ctx.getSource().sendFeedback(FakePlayerCommands.connectPlayer(name, host, port));
                                                 return 1;
                                             })))));
-            dispatcher.register(literal("fakelist")
-                    .executes(ctx -> {
-                        ctx.getSource().sendFeedback(FakePlayerCommands.listPlayers());
-                        return 1;
-                    }));
         });
     }
 
     private void registerTick() {
-        // 每 tick 驱动假人连接，保持在线
+        // 每 tick 驱动假人连接 + control（被换下主玩家保活），保持在线
         ClientTickEvents.END_CLIENT_TICK.register(minecraft -> {
             SessionManager.getInstance().tick();
+            ControlManager.tick();
         });
     }
 
