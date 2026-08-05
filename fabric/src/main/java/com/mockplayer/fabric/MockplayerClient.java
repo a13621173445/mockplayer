@@ -41,6 +41,7 @@ public class MockplayerClient implements ClientModInitializer {
                             })));
             dispatcher.register(literal("delplayer")
                     .then(argument("name", FakePlayerNameArgument.fakePlayerName())
+                            .suggests(FakePlayerCommands.fakePlayerNames())
                             .executes(ctx -> {
                                 String name = StringArgumentType.getString(ctx, "name");
                                 ctx.getSource().sendFeedback(FakePlayerCommands.delPlayer(name));
@@ -48,6 +49,7 @@ public class MockplayerClient implements ClientModInitializer {
                             })));
             dispatcher.register(literal("control")
                     .then(argument("name", FakePlayerNameArgument.fakePlayerName())
+                            .suggests(FakePlayerCommands.controlTargets())
                             .executes(ctx -> {
                                 String name = StringArgumentType.getString(ctx, "name");
                                 ctx.getSource().sendFeedback(FakePlayerCommands.control(name));

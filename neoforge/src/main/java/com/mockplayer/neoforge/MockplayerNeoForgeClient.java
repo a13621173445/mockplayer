@@ -42,6 +42,7 @@ public class MockplayerNeoForgeClient {
                         })));
         dispatcher.register(Commands.literal("delplayer")
                 .then(Commands.argument("name", FakePlayerNameArgument.fakePlayerName())
+                        .suggests(FakePlayerCommands.fakePlayerNames())
                         .executes(ctx -> {
                             String name = StringArgumentType.getString(ctx, "name");
                             ctx.getSource().sendSuccess(() -> FakePlayerCommands.delPlayer(name), false);
@@ -49,6 +50,7 @@ public class MockplayerNeoForgeClient {
                         })));
         dispatcher.register(Commands.literal("control")
                 .then(Commands.argument("name", FakePlayerNameArgument.fakePlayerName())
+                        .suggests(FakePlayerCommands.controlTargets())
                         .executes(ctx -> {
                             String name = StringArgumentType.getString(ctx, "name");
                             ctx.getSource().sendSuccess(() -> FakePlayerCommands.control(name), false);

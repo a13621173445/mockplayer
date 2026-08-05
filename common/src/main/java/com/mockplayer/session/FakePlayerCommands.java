@@ -2,10 +2,16 @@ package com.mockplayer.session;
 
 import com.mockplayer.Constants;
 
+import com.mojang.brigadier.suggestion.SuggestionProvider;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 假人命令的执行逻辑（与平台无关）。
@@ -81,6 +87,30 @@ public class FakePlayerCommands {
                 .orElse(Component.empty());
         return Component.translatable("commands.mockplayer.fakelist.list", joined)
                 .withStyle(SUCCESS_COLOR);
+    }
+
+    /**
+     * Tab 补全：当前所有假人名字（用于 /delplayer）。
+     */
+    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> fakePlayerNames() {
+        return (ctx, builder) -> SharedSuggestionProvider.suggest(
+                SessionManager.getInstance().getFakePlayerNames(), builder);
+    }
+
+    /**
+     * Tab 补全：主玩家名字 + 当前所有假人名字（用于 /control）。
+     * 玩家本体在前，假人名字在后。
+     */
+    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> controlTargets() {
+        return (ctx, builder) -> {
+            List<String> names = new ArrayList<>();
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null) {
+                names.add(mc.player.getGameProfile().name());
+            }
+            names.addAll(SessionManager.getInstance().getFakePlayerNames());
+            return SharedSuggestionProvider.suggest(names, builder);
+        };
     }
 
     /**
