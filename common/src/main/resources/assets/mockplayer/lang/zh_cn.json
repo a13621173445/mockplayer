@@ -6,6 +6,7 @@
     "commands.mockplayer.newplayer.lan_not_open": "请先将世界对局域网开放，再创建假人 %s",
     "commands.mockplayer.delplayer.success": "已移除假人 %s",
     "commands.mockplayer.delplayer.fail": "假人 %s 不存在",
+    "commands.mockplayer.delplayer.not_owner": "假人 %s 不是由你创建的，无法删除",
     "commands.mockplayer.connect.not_found": "假人 %s 不存在",
     "commands.mockplayer.connect.invalid_port": "端口无效",
     "commands.mockplayer.connect.success": "假人 %s 正在连接到 %s:%d",

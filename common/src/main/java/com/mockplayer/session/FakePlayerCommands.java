@@ -41,7 +41,9 @@ public class FakePlayerCommands {
             return Component.translatable("commands.mockplayer.newplayer.not_in_server")
                     .withStyle(FAIL_COLOR);
         }
-        if (SessionManager.getInstance().createFakePlayer(name)) {
+        // 命令创建：owner="command"（特权）
+        if (com.mockplayer.api.MockplayerApi.bots().createBot(
+                com.mockplayer.api.BotProfile.of(name, BotManagerImpl.COMMAND_OWNER)) != null) {
             return Component.translatable("commands.mockplayer.newplayer.success", playerName(name))
                     .withStyle(SUCCESS_COLOR);
         } else {
@@ -51,16 +53,17 @@ public class FakePlayerCommands {
     }
 
     /**
-     * 执行 /delplayer 命令。
+     * 执行 /delplayer 命令（命令特权，可删除任何 owner 的假人）。
      */
     public static Component delPlayer(String name) {
-        if (SessionManager.getInstance().removeFakePlayer(name)) {
-            return Component.translatable("commands.mockplayer.delplayer.success", playerName(name))
+        return switch (com.mockplayer.api.MockplayerApi.bots().removeBot(name, BotManagerImpl.COMMAND_OWNER)) {
+            case REMOVED -> Component.translatable("commands.mockplayer.delplayer.success", playerName(name))
                     .withStyle(SUCCESS_COLOR);
-        } else {
-            return Component.translatable("commands.mockplayer.delplayer.fail", playerName(name))
+            case NOT_OWNER -> Component.translatable("commands.mockplayer.delplayer.not_owner", playerName(name))
                     .withStyle(FAIL_COLOR);
-        }
+            case NOT_FOUND -> Component.translatable("commands.mockplayer.delplayer.fail", playerName(name))
+                    .withStyle(FAIL_COLOR);
+        };
     }
 
     /**

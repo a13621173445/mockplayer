@@ -28,18 +28,18 @@ public class FakeSession {
 
     /** 假人名字 */
     private final String name;
-    /** 独立网络连接 */
-    private Connection connection;
-    /** 当前是否已连接（TCP 层面） */
-    private boolean connected;
-    /** 服务端下发的登录 profile */
-    private com.mojang.authlib.GameProfile profile;
-    /** 假人 play 阶段 listener（进 play 后设置） */
-    private FakePlayListener playListener;
+    /** 独立网络连接（后台网络线程建连写入，渲染线程 tick 读取 → volatile） */
+    private volatile Connection connection;
+    /** 当前是否已连接（TCP 层面，网络线程写入 → volatile） */
+    private volatile boolean connected;
+    /** 服务端下发的登录 profile（后台线程写入 → volatile） */
+    private volatile com.mojang.authlib.GameProfile profile;
+    /** 假人 play 阶段 listener（进 play 后设置，后台线程写入 → volatile） */
+    private volatile FakePlayListener playListener;
     /** 假人完整状态（无头但完整感知） */
     private final FakePlayerState state = new FakePlayerState();
-    /** 假人自己的 LocalPlayer（复用物理），进 play 后创建 */
-    private net.minecraft.client.player.LocalPlayer fakePlayer;
+    /** 假人自己的 LocalPlayer（复用物理），进 play 后创建（后台线程写入 → volatile） */
+    private volatile net.minecraft.client.player.LocalPlayer fakePlayer;
     /** 连接失败回调（后台网络线程调用，回调内需自行切回主线程；参数为失败提示的翻译 key） */
     private java.util.function.Consumer<String> onConnectFail;
     /**
@@ -50,9 +50,45 @@ public class FakeSession {
     private volatile boolean reconnecting;
     /** 待注入的 transfer cookies（跟随传送时带过去，原版一致） */
     private net.minecraft.client.multiplayer.TransferState pendingTransfer;
+    /** 创建者标识（BotManagerImpl 创建时写入）："command" = 主玩家命令；外部 mod 用自己 modId */
+    private String owner = BotManagerImpl.COMMAND_OWNER;
+    /** 关联的 Bot 实现（BotManagerImpl 创建时写入，驱动事件/动作） */
+    private BotImpl bot;
 
     public FakeSession(String name) {
         this.name = name;
+    }
+
+    /** 设置创建者标识（BotManagerImpl.createBot 调用） */
+    public void setOwner(String owner) {
+        if (owner != null && !owner.isBlank()) {
+            this.owner = owner;
+        }
+    }
+
+    /** 创建者标识 */
+    public String getOwner() {
+        return this.owner;
+    }
+
+    /** 设置关联 Bot（BotManagerImpl.createBot 调用） */
+    public void setBot(BotImpl bot) {
+        this.bot = bot;
+    }
+
+    /** 关联的 Bot 实现 */
+    public BotImpl getBot() {
+        return this.bot;
+    }
+
+    /** 是否处于连接/登录阶段（TCP 建连中或已建连未 PLAYING） */
+    public boolean isConnecting() {
+        return this.connection != null && !isConnected();
+    }
+
+    /** 服务端下发的登录 profile（登录完成前为 null） */
+    public com.mojang.authlib.GameProfile getProfile() {
+        return this.profile;
     }
 
     /** 设置连接失败回调（SessionManager 注入，用于回收会话 + 通知玩家） */
@@ -88,6 +124,11 @@ public class FakeSession {
     /** 登录成功后由 listener 回调设置 */
     void setProfile(com.mojang.authlib.GameProfile profile) {
         this.profile = profile;
+    }
+
+    /** 登录完成（PLAYING）时由 FakePlayListener.handleLogin 调用：标记已连接，消除与 connected 的竞态 */
+    public void markConnected() {
+        this.connected = true;
     }
 
     /** play 阶段 listener 设置（进 play 后由配置 Mixin 回调） */
@@ -183,14 +224,16 @@ public class FakeSession {
             Connection conn = new Connection(PacketFlow.CLIENTBOUND);
             conn.setBandwidthLogger(Minecraft.getInstance().getDebugOverlay().getBandwidthLogger());
             this.connection = conn;
+            // 必须在赋值后立即置 connected=true：否则登录期间（TCP 已建、connected 尚未置位）渲染线程
+            // tick() 会走到 `connection != null && !connected` 分支误把 connection 置 null，导致连接断开。
+            connected = true;
             FakeConnectionRegistry.markFake(conn, this);
 
             Connection.connect(address, net.minecraft.server.network.EventLoopGroupHolder.remote(Minecraft.getInstance().options.useNativeTransport()), conn)
                     .syncUninterruptibly();
 
             setupLoginAndHello(conn, address.getHostName(), address.getPort());
-            connected = true;
-            LOG.info("[{}] 假人连接已建立，等待登录完成", name);
+            FakeSession.LOG.info("[{}] 假人连接已建立，等待登录完成", name);
         } catch (Exception e) {
             LOG.error("[{}] 假人连接失败", name, e);
             disconnect();
@@ -249,6 +292,15 @@ public class FakeSession {
                 this.fakePlayer.tick();
             } catch (Exception e) {
                 LOG.error("[{}] 假人物理 tick 出错", name, e);
+            }
+        }
+
+        // 驱动 Bot：应用持续动作输入 + 派发 onTick/onMove 事件
+        if (this.bot != null) {
+            try {
+                this.bot.tick();
+            } catch (Exception e) {
+                LOG.error("[{}] 假人 bot tick 出错", name, e);
             }
         }
     }

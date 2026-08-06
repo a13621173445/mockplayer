@@ -1,0 +1,16 @@
+{
+    "schemaVersion": 1,
+    "id": "mockplayer-test",
+    "version": "${version}",
+    "name": "Mockplayer Test",
+    "description": "Mockplayer 自动化游戏内测试（仅测试环境加载，不进生产产物）",
+    "environment": "client",
+    "entrypoints": {
+        "client": [
+            "com.mockplayer.test.MockplayerTestMod"
+        ]
+    },
+    "depends": {
+        "mockplayer": "*"
+    }
+}

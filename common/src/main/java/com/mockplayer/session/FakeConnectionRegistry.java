@@ -23,7 +23,26 @@ public class FakeConnectionRegistry {
      */
     private static volatile boolean transferring;
 
+    /**
+     * 假人是否正处于配置阶段（登录完成 → 进 play）。
+     * neoforge 服务端对假人（TCP）发 FrozenRegistrySyncCompletedPayload，客户端
+     * RegistryManager.applySnapshot 会把 BuiltInRegistries.BLOCK 的 tags 覆盖成服务端
+     * snapshot（基础态 16），破坏假人本地完整 block tags（395）→ 原版数据包加载缺 tag。
+     * 主玩家（内存连接）不走 neoforge 网络同步不受影响。假人配置阶段跳过 applySnapshot。
+     */
+    private static volatile boolean configuringFake;
+
     private FakeConnectionRegistry() {
+    }
+
+    /** 标记假人进入配置阶段（FakeLoginListener 登录完成时置位） */
+    public static void setConfiguringFake(boolean configuring) {
+        FakeConnectionRegistry.configuringFake = configuring;
+    }
+
+    /** 当前是否有假人正在配置阶段（neoforge RegistryManager.applySnapshot 用它跳过假人） */
+    public static boolean isConfiguringFake() {
+        return FakeConnectionRegistry.configuringFake;
     }
 
     /** 主玩家 transfer 置位（双端 Mixin 调用） */

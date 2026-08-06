@@ -45,6 +45,8 @@ public class FakePlayListener extends ClientPacketListener {
      * 若血量 <= 0 说明服务端认为假人已死，触发 respawn 重生。
      */
     private boolean checkDeathOnLogin;
+    /** 上次血量（供 onHealthChanged/onDamage 事件推断） */
+    private float lastHealth = 20.0F;
 
     public FakePlayListener(FakeSession session, Minecraft minecraft, Connection connection, CommonListenerCookie cookie) {
         super(minecraft, connection, cookie);
@@ -61,6 +63,19 @@ public class FakePlayListener extends ClientPacketListener {
 
     public MultiPlayerGameMode getFakeGameMode() {
         return this.fakeGameMode;
+    }
+
+    /** 关联的 Bot（用于派发事件；BotManagerImpl 创建时已 setBot，理论上非 null） */
+    private BotImpl botOrNull() {
+        return this.session != null ? this.session.getBot() : null;
+    }
+
+    /** 事件派发辅助：bot 非 null 才触发（惰性由 BotEventBus 内部判断） */
+    private void fire(java.util.function.Consumer<BotImpl> action) {
+        BotImpl bot = botOrNull();
+        if (bot != null) {
+            action.accept(bot);
+        }
     }
 
     /**
@@ -117,8 +132,11 @@ public class FakePlayListener extends ClientPacketListener {
         this.fakePlayer.resetPos();
         this.fakePlayer.setId(packet.playerId());
         self.mockplayer$getLevel().addEntity(this.fakePlayer);
-        // 关键：标记客户端已加载，否则 LocalPlayer.tick() 里的物理（super.tick）不执行 → 假人悬空
-        self.mockplayer$setClientLoaded(true);
+        // 标记未加载：等 chunk 包（handleLevelChunkWithLight）→ notifyPlayerLoaded 恢复物理 +
+        // 发 ServerboundPlayerLoadedPacket 告知服务端已加载。
+        // 原版 ClientPacketListener 登录后等 chunk 加载完成才 notifyPlayerLoaded——若直接 setClientLoaded(true)，
+        // loaded 包永不发送 → 服务端 ServerPlayer.hasClientLoaded() 恒 false → 拒绝假人一切交互（useItemOn 等）。
+        self.mockplayer$setClientLoaded(false);
         // 用 ClientInput（零输入），不用 KeyboardInput——KeyboardInput 读主玩家的按键，
         // 会导致假人跟着主玩家移动（挂机时假人应静止，只受重力/击退等环境影响）
         this.fakePlayer.input = new net.minecraft.client.player.ClientInput();
@@ -143,7 +161,11 @@ public class FakePlayListener extends ClientPacketListener {
         this.session.setPlayListener(this);
         // 重置登录后首包血量检查标志（服务端若认为假人已死，登录后第一个 setHealth 包血量 <= 0）
         this.checkDeathOnLogin = true;
+        // 标记已连接（消除 connected 与 PLAYING 的跨线程竞态，见 FakeSession.doConnectTcp 注释）
+        this.session.markConnected();
         FakeSession.LOG.info("[{}] 假人进入 play 阶段，已创建独立 world/player", this.session.getName());
+        // Bot 事件：登录完成、LocalPlayer 就绪
+        fire(b -> b.fireOnPlayReady());
     }
 
     // ===== override 污染源 handler：假人收到的一切包处理到假人自己，绝不写主玩家全局 =====
@@ -160,16 +182,19 @@ public class FakePlayListener extends ClientPacketListener {
                 ? packet.unsignedContent()
                 : net.minecraft.network.chat.Component.literal(packet.body().content());
         this.session.getState().addChat(text);
+        fire(b -> b.fireOnChat(text));
     }
 
     @Override
     public void handleSystemChat(net.minecraft.network.protocol.game.ClientboundSystemChatPacket packet) {
         this.session.getState().addChat(packet.content());
+        fire(b -> b.fireOnChat(packet.content()));
     }
 
     @Override
     public void handleDisguisedChat(net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket packet) {
         this.session.getState().addChat(packet.message());
+        fire(b -> b.fireOnChat(packet.message()));
     }
 
     /**
@@ -184,6 +209,13 @@ public class FakePlayListener extends ClientPacketListener {
         }
         this.session.getState().setHealth(packet.getHealth());
         this.session.getState().setFoodLevel(packet.getFood());
+        // Bot 事件：血量变化
+        fire(b -> b.fireOnHealthChanged(this.lastHealth, packet.getHealth()));
+        // 血量下降视为受到伤害（无 DamageSource 详情，MVP 级别）
+        if (packet.getHealth() < this.lastHealth) {
+            fire(b -> b.fireOnDamage(null, this.lastHealth - packet.getHealth()));
+        }
+        this.lastHealth = packet.getHealth();
 
         // 登录后首包血量检查（只检查一次）：覆盖「死亡后掉线、重连服务端仍判死」的竞态。
         // 登录包不含血量，服务端会随登录后第一批包下发 setHealth(当前血量)——血量 <= 0 即服务端认为假人已死。
@@ -298,6 +330,7 @@ public class FakePlayListener extends ClientPacketListener {
             // 新玩家上线：记录 UUID + 名字（profile 可能为空，用 UUID 兜底）
             String name = entry.profile() != null ? entry.profile().name() : entry.profileId().toString();
             this.session.getState().recordPlayerOnline(entry.profileId(), name);
+            fire(b -> b.fireOnPlayerJoined(entry.profile()));
         }
         for (net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry entry : packet.entries()) {
             // 已有玩家更新动作：更新名字（游戏模式等信息后续扩展）
@@ -362,6 +395,7 @@ public class FakePlayListener extends ClientPacketListener {
     public void handleSetHeldSlot(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket packet) {
         if (net.minecraft.world.entity.player.Inventory.isHotbarSlot(packet.slot())) {
             this.fakePlayer.getInventory().setSelectedSlot(packet.slot());
+            fire(b -> b.fireOnHeldSlotChanged(packet.slot()));
         }
     }
 
@@ -400,6 +434,7 @@ public class FakePlayListener extends ClientPacketListener {
             } else if (packet.getContainerId() == this.fakePlayer.containerMenu.containerId) {
                 this.fakePlayer.containerMenu.setItem(slot, packet.getStateId(), itemStack);
             }
+            fire(b -> b.fireOnContainerSlotChanged(packet.getContainerId(), slot, itemStack));
         }
     }
 
@@ -414,6 +449,10 @@ public class FakePlayListener extends ClientPacketListener {
             // （父类 clientSideCloseContainer 还会 gui.setScreen(null)，假人无头跳过）
             this.fakePlayer.containerMenu = this.fakePlayer.inventoryMenu;
         }
+        fire(b -> {
+            b.clearOpenMenu();
+            b.fireOnContainerClosed(packet.getContainerId());
+        });
     }
 
     // ===== 粒子（假人无头不渲染到主玩家屏幕，完整记录原始包供 AI 读取） =====
@@ -482,9 +521,30 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handleOpenScreen(net.minecraft.network.protocol.game.ClientboundOpenScreenPacket packet) {
-        // 打开容器界面：假人无头不弹主玩家 UI。容器类型/标题记录到 state，
-        // 后续容器内容包（handleContainerContent 等）正常写入假人背包。
+        // 打开容器界面：照原版 ClientPacketListener.handleOpenScreen 建对应菜单赋给假人，
+        // 使后续 ContainerContent/ContainerSetSlot 能写进假人菜单（补铁律：容器内容不丢失），
+        // 并作为 Bot.getContainer() 的容器会话基础。假人无头不弹主玩家 UI（跳过 gui.setScreen）。
+        if (this.fakePlayer != null) {
+            net.minecraft.world.inventory.MenuType<?> menuType = packet.getType();
+            if (menuType != null) {
+                try {
+                    // 26.2：MenuType.create(containerId, inventory)（标题由菜单/资源包另行提供）
+                    net.minecraft.world.inventory.AbstractContainerMenu menu = menuType.create(
+                            packet.getContainerId(), this.fakePlayer.getInventory());
+                    this.fakePlayer.containerMenu = menu;
+                } catch (Exception e) {
+                    // 菜单构造失败（如 MERCHANT 客户端状态未就绪）：记录，不崩连接
+                    FakeSession.LOG.warn("[{}] 打开容器菜单 {} 失败: {}", this.session.getName(), menuType, e.toString());
+                }
+            }
+        }
+        // 记录到 state（保留 AI 感知：类型/标题/id）
         this.session.getState().recordOpenScreen(packet.getType(), packet.getContainerId(), packet.getTitle());
+        // Bot 事件：容器打开 + 更新容器会话
+        fire(b -> {
+            b.setOpenMenu(this.fakePlayer != null ? this.fakePlayer.containerMenu : null, packet.getTitle());
+            b.fireOnContainerOpened(packet.getType(), packet.getContainerId(), packet.getTitle());
+        });
     }
 
     // ===== 骑乘（假人自己） =====
@@ -533,6 +593,7 @@ public class FakePlayListener extends ClientPacketListener {
                 this.fakePlayer.getCooldowns().addCooldown(packet.cooldownGroup(), packet.duration());
             }
         }
+        fire(b -> b.fireOnItemCooldown(packet.cooldownGroup(), packet.duration()));
     }
 
     // ===== 标题/UI（假人无头，完整记录原始包供 AI 读取） =====
@@ -739,6 +800,8 @@ public class FakePlayListener extends ClientPacketListener {
         // 不用 LevelLoadTracker——它依赖渲染线程编译回调（假人无渲染会等 30-40s 超时）。
         // 改为：setClientLoaded(false) 保持物理暂停，收到第一个 chunk 包（handleLevelChunkWithLight）
         // 时调用 notifyPlayerLoaded() 恢复物理 + 告知服务端已加载（见 handleLevelChunkWithLight override）。
+        // Bot 事件：重生
+        fire(b -> b.fireOnRespawn());
     }
 
     /**
@@ -890,6 +953,10 @@ public class FakePlayListener extends ClientPacketListener {
             this.session.getState().recordParticle("item_pickup", from.getX(), from.getY(), from.getZ());
             // 实体被拾取移除（数据保留到假人 level）
             self.mockplayer$getLevel().removeEntity(from.getId(), net.minecraft.world.entity.Entity.RemovalReason.DISCARDED);
+            // Bot 事件：拾取物品（经验球不触发）
+            if (from instanceof net.minecraft.world.entity.item.ItemEntity itemEntity) {
+                fire(b -> b.fireOnPickupItem(itemEntity.getItem()));
+            }
         }
     }
 
@@ -1054,6 +1121,7 @@ public class FakePlayListener extends ClientPacketListener {
             merchantMenu.setMerchantLevel(packet.getVillagerLevel());
             merchantMenu.setShowProgressBar(packet.showProgress());
             merchantMenu.setCanRestock(packet.canRestock());
+            fire(b -> b.fireOnMerchantOffersUpdated(packet.getOffers()));
         }
     }
 
@@ -1188,6 +1256,15 @@ public class FakePlayListener extends ClientPacketListener {
             // 否则假人停在「死亡待重生」状态，服务端不释放/移除它。
             this.fakePlayer.respawn();
         }
+        // Bot 事件：死亡（26.2 ClientboundPlayerCombatKillPacket 是 record，死亡消息 accessor = message()）
+        net.minecraft.network.chat.Component deathMessage;
+        try {
+            deathMessage = packet.message();
+        } catch (Exception ignored) {
+            deathMessage = net.minecraft.network.chat.Component.translatable("death.attack.generic");
+        }
+        net.minecraft.network.chat.Component finalDeathMessage = deathMessage;
+        fire(b -> b.fireOnDeath(finalDeathMessage));
     }
 
     @Override

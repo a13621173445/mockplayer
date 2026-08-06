@@ -16,6 +16,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
+import net.neoforged.neoforge.common.NeoForge;
 
 /**
  * NeoForge 客户端专属入口：注册假人命令 + 驱动假人连接 tick。
@@ -24,10 +25,13 @@ import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 @Mod(value = Constants.MOD_ID, dist = Dist.CLIENT)
 public class MockplayerNeoForgeClient {
 
-    public MockplayerNeoForgeClient(IEventBus eventBus) {
-        eventBus.addListener(MockplayerNeoForgeClient::registerCommands);
-        eventBus.addListener(MockplayerNeoForgeClient::onClientTick);
-        eventBus.addListener(MockplayerNeoForgeClient::onPlayerLogout);
+    public MockplayerNeoForgeClient(IEventBus modBus) {
+        // RegisterClientCommandsEvent / ClientTickEvent.Post / ClientPlayerNetworkEvent.LoggingOut 都是
+        // GAME 事件（发在 NeoForge.EVENT_BUS），不是 IModBusEvent——注册到 mod bus 会抛
+        // "This bus only accepts subclasses of IModBusEvent"。必须注册到 NeoForge.EVENT_BUS。
+        NeoForge.EVENT_BUS.addListener(MockplayerNeoForgeClient::registerCommands);
+        NeoForge.EVENT_BUS.addListener(MockplayerNeoForgeClient::onClientTick);
+        NeoForge.EVENT_BUS.addListener(MockplayerNeoForgeClient::onPlayerLogout);
     }
 
     private static void registerCommands(RegisterClientCommandsEvent event) {

@@ -92,6 +92,9 @@ public class FakeLoginListener implements ClientLoginPacketListener {
         GameProfile profile = packet.gameProfile();
         session.setProfile(profile);
         FakeSession.LOG.info("[{}] 登录完成，profile={}", name, profile.name());
+        // 进入配置阶段：neoforge RegistryManager.applySnapshot 会覆盖 BuiltInRegistries.BLOCK，
+        // 配置阶段置位让 neoforge Mixin 跳过假人的 registry snapshot（见 FakeConnectionRegistry.configuringFake）
+        FakeConnectionRegistry.setConfiguringFake(true);
 
         // 切到配置阶段（复用 MC 自带 listener）
         Minecraft mc = Minecraft.getInstance();
@@ -104,11 +107,13 @@ public class FakeLoginListener implements ClientLoginPacketListener {
                 transfer != null ? transfer.seenPlayers() : Map.of();
         boolean seenInsecureWarning =
                 transfer != null && transfer.seenInsecureChatWarning();
-        // 单机/局域网：假人和主玩家连同一个集成服务器，registry 必须复用主玩家已同步的完整
-        // registry（= filterRegistries(server.registryAccess) = 服务端同一实例，含数据包条目如
-        // spear/dimension）。假人若用 ClientRegistryLayer（本地基础层，无数据包）或网络收集构建的
-        // 新实例，戳矛时矛的 DAMAGE_TYPE Holder 引用假人自己实例的 spear，服务端编码按对象引用
-        // 找不到 → damage_event 编码崩。多人远程保持原版默认（后续阶段）。
+        // 假人 cookie 必须复用主玩家 play registryAccess（单机/局域网），不能用 ClientRegistryLayer
+        // 基础层。原因：neoforge 服务端对假人（TCP）发 RegistrySnapshot 包，服务端按假人 cookie 的
+        // registry 打包 snapshot，客户端 ClientPayloadHandler → RegistryManager.applySnapshot 会把
+        // BuiltInRegistries.BLOCK 的 tags 覆盖成 snapshot 内容。若 cookie 是 ClientRegistryLayer
+        // （block 基础态 16 tags），服务端打包 16 → applySnapshot 覆盖 395 → 原版配置阶段
+        // loadNewElementsAndTags 解析数据包缺 tag（infiniburn_overworld 等）→ Registry Loading 崩。
+        // 主玩家（内存连接）不走 neoforge 网络同步所以不受影响。多人远程保持原版默认（后续阶段）。
         net.minecraft.core.RegistryAccess.Frozen registryAccess =
                 mc.getSingleplayerServer() != null && mc.getConnection() != null
                         ? mc.getConnection().registryAccess()

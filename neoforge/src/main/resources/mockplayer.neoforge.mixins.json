@@ -12,7 +12,9 @@
     "MixinClientConfigurationPacketListenerImpl",
     "MixinClientCommonPacketListenerImpl",
     "MixinLocalPlayer",
-    "MixinMinecraft"
+    "MixinMinecraft",
+    "MixinRegistryManager",
+    "MixinConfigSync"
   ],
   "server": [],
   "injectors": {

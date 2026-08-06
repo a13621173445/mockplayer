@@ -8,6 +8,15 @@ dependencies {
     implementation("net.fabricmc.fabric-api:fabric-api:${fabric_version}")
 }
 
+// 自动化测试 mod 源集（fabric-loom 不自动注册，手动建）：
+// 独立命名空间 com.mockplayer.test，产物绝不进生产 jar（生产 jar 只含 main 源集）
+sourceSets {
+    testmod {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+}
+
 loom {
     def aw = project(':common').file("src/main/resources/${mod_id}.accesswidener")
     if (aw.exists()) {
@@ -19,6 +28,16 @@ loom {
             setConfigName('Fabric Client')
             ideConfigGenerated(true)
             runDir('runs/client')
+        }
+        testClient {
+            client()
+            setConfigName('Fabric Test')
+            ideConfigGenerated(false)
+            runDir('runs/client')
+            source(sourceSets.testmod)
+            // IDE 右上角用 .idea/runConfigurations/Fabric_Test.xml（Gradle 任务 :fabric:runTestClient -Psuite=all）
+            // 命令行 -Psuite=api-smoke 单套件；缺省 all = 全部套件
+            property('mockplayer.test', project.findProperty('suite') ?: 'all')
         }
         server {
             server()

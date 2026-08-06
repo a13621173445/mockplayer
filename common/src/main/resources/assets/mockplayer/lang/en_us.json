@@ -6,6 +6,7 @@
     "commands.mockplayer.newplayer.lan_not_open": "Open your world to LAN first, then create fake player %s",
     "commands.mockplayer.delplayer.success": "Removed fake player %s",
     "commands.mockplayer.delplayer.fail": "Fake player %s does not exist",
+    "commands.mockplayer.delplayer.not_owner": "Fake player %s was not created by you",
     "commands.mockplayer.connect.not_found": "Fake player %s does not exist",
     "commands.mockplayer.connect.invalid_port": "Invalid port",
     "commands.mockplayer.connect.success": "Connecting fake player %s to %s:%d",

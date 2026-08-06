@@ -3,12 +3,41 @@ plugins {
     id 'net.neoforged.moddev'
 }
 
+// 自动化测试 mod 源集（独立命名空间 com.mockplayer.test，产物绝不进生产 jar）
+// 必须先于 neoForge block 定义（mods 注册引用它）
+sourceSets {
+    testmod {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+}
+
+// neoforge loader 扫描 testmod 的 classes 目录作为独立 mod 文件，必须物理含 META-INF/neoforge.mods.toml
+// （main 源集由 moddev 特殊处理可容忍缺失，自定义 testmod 源集不行）
+tasks.register('copyTestmodModsToml', Copy) {
+    from('src/testmod/resources/META-INF') {
+        include 'neoforge.mods.toml'
+    }
+    into layout.buildDirectory.dir('classes/java/testmod/META-INF')
+}
+tasks.named('testmodClasses').configure {
+    dependsOn tasks.named('copyTestmodModsToml')
+}
+
 neoForge {
     version = neoforge_version
     // Automatically enable neoforge AccessTransformers if the file exists
     def at = project(':common').file('src/main/resources/META-INF/accesstransformer.cfg')
     if (at.exists()) {
         accessTransformers.from(at.absolutePath)
+    }
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+        "${mod_id}_test" {
+            sourceSet sourceSets.testmod
+        }
     }
     runs {
         configureEach {
@@ -18,6 +47,17 @@ neoForge {
         client {
             client()
             gameDirectory = this.mkdir(this.file('runs/client'))
+            // 主 client 只加载主 mod（不含 testmod，避免污染正常启动）
+            loadedMods = [mods."${mod_id}"]
+        }
+        testClient {
+            client()
+            gameDirectory = this.mkdir(this.file('runs/client'))
+            disableIdeRun() // IDE 右上角用 .idea/runConfigurations/NeoForge_Test.xml（Gradle 任务），不生成重复配置
+            // 测试 client 加载主 mod + testmod
+            loadedMods = [mods."${mod_id}", mods."${mod_id}_test"]
+            // IDE 右上角跑（无 -Psuite）默认 all = 全部套件；命令行 -Psuite=api-smoke 单套件
+            systemProperty('mockplayer.test', project.findProperty('suite') ?: 'all')
         }
         data {
             clientData()
@@ -30,11 +70,6 @@ neoForge {
             server()
             this.file('runs/server').createParentDirectories()
             gameDirectory = this.mkdir(this.file('runs/server'))
-        }
-    }
-    mods {
-        "${mod_id}" {
-            sourceSet sourceSets.main
         }
     }
 }

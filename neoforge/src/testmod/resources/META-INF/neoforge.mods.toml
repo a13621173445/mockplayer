@@ -1,0 +1,15 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="MIT"
+
+[[mods]]
+modId="mockplayer_test"
+displayName="Mockplayer Test"
+description="Mockplayer 自动化游戏内测试（仅测试环境加载，不进生产产物）"
+version="1.0.0"
+environment="CLIENT"
+
+[[dependencies.mockplayer_test]]
+modId="mockplayer"
+type="required"
+versionRange="[1.0,)"
