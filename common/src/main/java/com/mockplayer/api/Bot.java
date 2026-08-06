@@ -127,14 +127,14 @@ public interface Bot {
     /**
      * 当前打开的容器菜单（服务端 openScreen 后才有值）。
      *
-     * @return Optional<BotContainer>，未打开容器则为 empty
+     * @return {@code Optional<BotContainer>}，未打开容器则为 empty
      */
     Optional<BotContainer> getContainer();
 
     /**
      * 当前打开的是村民交易菜单时的交易视图。
      *
-     * @return Optional<BotMerchantMenu>，非交易菜单则为 empty
+     * @return {@code Optional<BotMerchantMenu>}，非交易菜单则为 empty
      */
     Optional<BotMerchantMenu> getMerchant();
 }

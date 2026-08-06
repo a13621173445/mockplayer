@@ -27,7 +27,7 @@ public interface BotManager {
      * 按名字查找 bot。
      *
      * @param name bot 名字
-     * @return Optional<Bot>
+     * @return {@code Optional<Bot>}
      */
     Optional<Bot> getBot(String name);
 

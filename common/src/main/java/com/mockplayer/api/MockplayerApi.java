@@ -64,7 +64,7 @@ public final class MockplayerApi {
      * 按名字找 bot（未初始化时为空）。
      *
      * @param name bot 名字
-     * @return Optional<Bot>
+     * @return {@code Optional<Bot>}
      */
     public static Optional<Bot> bot(String name) {
         return bots == null ? Optional.empty() : bots.getBot(name);
