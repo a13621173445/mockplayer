@@ -50,6 +50,8 @@ public final class TestRunner {
 
     private static Phase phase = Phase.WAIT_TITLE;
     private static long phaseStart;
+    /** 当前套件开始时间（finishSuite 算耗时） */
+    private static long suiteStart;
     private static boolean worldCreationStarted;
     private static boolean gamerulesApplied;
     private static String suite = "";
@@ -82,6 +84,7 @@ public final class TestRunner {
             suite = suiteQueue.get(0);
             phase = Phase.WAIT_TITLE;
             phaseStart = System.currentTimeMillis();
+            suiteStart = phaseStart;
         }
         long now = System.currentTimeMillis();
         advance(mc);
@@ -429,16 +432,18 @@ public final class TestRunner {
 
     /** 当前套件收尾：写结果 JSON → 推进下一个套件（world 已在，直接 RUN）或全部完成退出 */
     private static void finishSuite() {
-        writeResultJson();
+        long elapsed = System.currentTimeMillis() - suiteStart;
+        writeResultJson(elapsed);
         boolean passed = records.stream().allMatch(Record::passed);
         System.out.println("[mocktest] suite " + suite + " " + (passed ? "PASSED" : "FAILED")
-                + " (" + records.size() + " checks)");
+                + " (" + records.size() + " checks) in " + elapsed + "ms");
         suiteIndex++;
         if (suiteIndex < suiteQueue.size()) {
             suite = suiteQueue.get(suiteIndex);
             resetSuiteState();
             phase = Phase.RUN;
             phaseStart = System.currentTimeMillis();
+            suiteStart = phaseStart;
         } else {
             phase = Phase.DONE;
             // 全部套件跑完：主动退出游戏，保证 gradlew 返回、bash 不被卡死
@@ -460,12 +465,13 @@ public final class TestRunner {
         merchantOpened = false;
     }
 
-    /** 写当前套件结果 JSON（runs/client/test-results/<suite>.json） */
-    private static void writeResultJson() {
+    /** 写当前套件结果 JSON（runs/client/test-results/<suite>.json），含耗时 */
+    private static void writeResultJson(long durationMs) {
         boolean passed = records.stream().allMatch(Record::passed);
         StringBuilder json = new StringBuilder();
         json.append("{\n  \"suite\": \"").append(suite).append("\",\n");
         json.append("  \"passed\": ").append(passed).append(",\n");
+        json.append("  \"duration_ms\": ").append(durationMs).append(",\n");
         json.append("  \"results\": [\n");
         for (int i = 0; i < records.size(); i++) {
             Record r = records.get(i);
