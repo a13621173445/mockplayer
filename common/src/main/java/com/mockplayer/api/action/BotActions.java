@@ -77,6 +77,15 @@ public interface BotActions {
     BotActions lookAt(Entity entity);
 
     /**
+     * 相对转向（在当前朝向基础上叠加，用于巡逻/扫视）。
+     *
+     * @param yaw   水平角增量
+     * @param pitch 垂直角增量（自动钳制 -90~90）
+     * @return this
+     */
+    BotActions turn(float yaw, float pitch);
+
+    /**
      * 持续跳跃（按住空格）。
      *
      * @return this
@@ -84,7 +93,30 @@ public interface BotActions {
     BotActions jump();
 
     /**
-     * 停止所有持续状态（移动/潜行/疾跑/跳跃归零）。
+     * 持续攻击目标（每 tick 自动 attack 一次，目标死亡自动停止；配合 {@link #stopSustained()}）。
+     *
+     * @param target 攻击目标
+     * @return this
+     */
+    BotActions sustainedAttack(Entity target);
+
+    /**
+     * 持续右键目标（每 tick 自动 interact 一次，目标死亡自动停止；配合 {@link #stopSustained()}）。
+     *
+     * @param target 交互目标
+     * @return this
+     */
+    BotActions sustainedUse(Entity target);
+
+    /**
+     * 停止持续攻击/使用（sustainedAttack/sustainedUse）。
+     *
+     * @return this
+     */
+    BotActions stopSustained();
+
+    /**
+     * 停止所有持续状态（移动/潜行/疾跑/跳跃/持续攻击/持续使用归零）。
      *
      * @return this
      */
@@ -136,12 +168,45 @@ public interface BotActions {
     void useItemOn(BlockPos pos, Direction side);
 
     /**
+     * 放置方块（手持方块对准 pos 的 side 面放置；与 useItemOn 同通道，独立语义原语）。
+     *
+     * @param pos  相邻方块位置
+     * @param side 放置的面
+     */
+    void placeBlock(BlockPos pos, Direction side);
+
+    /**
      * 丢弃当前选中槽位的物品（1 个）。
      */
     void dropSelected();
 
     /**
+     * 指定快捷栏槽位丢弃（1 个或整组）。
+     *
+     * @param slot    快捷栏槽位（0-8，越界钳制）
+     * @param dropAll true 整组，false 1 个
+     */
+    void drop(int slot, boolean dropAll);
+
+    /**
      * 交换主手/副手物品。
      */
     void swapHands();
+
+    /**
+     * 骑乘附近最近的坐骑（马/船/矿车；可选的只骑可骑乘实体）。
+     *
+     * @param onlyRideables true 只骑 Minecart/Boat/AbstractHorse，false 附近任意实体
+     */
+    void mount(boolean onlyRideables);
+
+    /**
+     * 骑乘附近最近的坐骑（只骑可骑乘实体）。
+     */
+    void mount();
+
+    /**
+     * 下马。
+     */
+    void dismount();
 }

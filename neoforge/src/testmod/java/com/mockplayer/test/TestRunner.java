@@ -171,6 +171,10 @@ public final class TestRunner {
             case 2 -> {
                 bot.actions().look(0.0F, 0.0F);
                 check("look yRot", Math.abs(bot.getLocalPlayer().getYRot() - 0.0F) < 1.0F);
+                // turn：相对叠加（90 水平 + 30 垂直）
+                bot.actions().turn(90.0F, 30.0F);
+                check("turn yRot+90", Math.abs(((bot.getLocalPlayer().getYRot() % 360) + 360) % 360 - 90.0F) < 1.0F);
+                check("turn xRot+30", Math.abs(bot.getLocalPlayer().getXRot() - 30.0F) < 1.0F);
                 bot.actions().setForward(1.0F);
                 bot.actions().setSneak(true);
                 step = 3;
@@ -199,6 +203,14 @@ public final class TestRunner {
             }
             case 6 -> {
                 check("getContainer empty (no menu open)", bot.getContainer().isEmpty());
+                // 新原语冒烟：无环境空操作不崩（drop/mount/dismount/持续攻击使用）
+                bot.actions().drop(0, false);
+                bot.actions().mount(true);
+                bot.actions().dismount();
+                bot.actions().sustainedAttack(null);
+                bot.actions().sustainedUse(null);
+                bot.actions().stopSustained();
+                check("new primitives no-crash", true);
                 check("removeBot own owner", MockplayerApi.bots().removeBot("tbot", "test") == RemoveResult.REMOVED);
                 check("removeBot not found", MockplayerApi.bots().removeBot("tbot", "test") == RemoveResult.NOT_FOUND);
                 finishSuite();

@@ -10,10 +10,19 @@ import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.animal.equine.AbstractHorse;
+import net.minecraft.world.entity.decoration.ItemFrame;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.vehicle.boat.Boat;
+import net.minecraft.world.entity.vehicle.minecart.Minecart;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * BotActions 实现：持续状态写入假人 LocalPlayer.input（每 tick 由 BotImpl.tick 应用），
@@ -28,6 +37,8 @@ public class BotActionsImpl implements BotActions {
     private boolean sneaking;
     private boolean sprinting;
     private boolean jumping;
+    private Entity sustainedAttackTarget;
+    private Entity sustainedUseTarget;
 
     public BotActionsImpl(BotImpl bot) {
         this.bot = bot;
@@ -88,8 +99,37 @@ public class BotActionsImpl implements BotActions {
     }
 
     @Override
+    public BotActions turn(float yaw, float pitch) {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player != null) {
+            player.setYRot(player.getYRot() + yaw);
+            player.setXRot(Mth.clamp(player.getXRot() + pitch, -90.0F, 90.0F));
+        }
+        return this;
+    }
+
+    @Override
     public BotActions jump() {
         this.jumping = true;
+        return this;
+    }
+
+    @Override
+    public BotActions sustainedAttack(Entity target) {
+        this.sustainedAttackTarget = target;
+        return this;
+    }
+
+    @Override
+    public BotActions sustainedUse(Entity target) {
+        this.sustainedUseTarget = target;
+        return this;
+    }
+
+    @Override
+    public BotActions stopSustained() {
+        this.sustainedAttackTarget = null;
+        this.sustainedUseTarget = null;
         return this;
     }
 
@@ -100,6 +140,8 @@ public class BotActionsImpl implements BotActions {
         this.sneaking = false;
         this.sprinting = false;
         this.jumping = false;
+        this.sustainedAttackTarget = null;
+        this.sustainedUseTarget = null;
         return this;
     }
 
@@ -114,6 +156,21 @@ public class BotActionsImpl implements BotActions {
         player.input.keyPresses = new net.minecraft.world.entity.player.Input(
                 this.forward > 0, this.forward < 0, this.strafe < 0, this.strafe > 0,
                 this.jumping, this.sneaking, this.sprinting);
+        // 持续攻击/使用：目标死亡/无效则自动停止
+        if (this.sustainedAttackTarget != null) {
+            if (this.sustainedAttackTarget.isAlive()) {
+                this.attack(this.sustainedAttackTarget);
+            } else {
+                this.sustainedAttackTarget = null;
+            }
+        }
+        if (this.sustainedUseTarget != null) {
+            if (this.sustainedUseTarget.isAlive()) {
+                this.interact(this.sustainedUseTarget);
+            } else {
+                this.sustainedUseTarget = null;
+            }
+        }
     }
 
     @Override
@@ -187,12 +244,31 @@ public class BotActionsImpl implements BotActions {
     }
 
     @Override
+    public void placeBlock(BlockPos pos, Direction side) {
+        // 放置方块 = 手持方块对着 pos 的 side 面 useItemOn；独立语义原语，事件复用 onInteractBlock
+        this.useItemOn(pos, side);
+    }
+
+    @Override
     public void dropSelected() {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null) {
             return;
         }
         player.drop(false);
+        this.bot.fireOnDropItem(player.getMainHandItem());
+    }
+
+    @Override
+    public void drop(int slot, boolean dropAll) {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null) {
+            return;
+        }
+        // 只能丢快捷栏当前选中槽（原版 Q/Ctrl+Q）；slot 越界钳制到 0-8
+        int selected = Mth.clamp(slot, 0, Inventory.getSelectionSize() - 1);
+        player.getInventory().setSelectedSlot(selected);
+        player.drop(dropAll);
         this.bot.fireOnDropItem(player.getMainHandItem());
     }
 
@@ -206,5 +282,44 @@ public class BotActionsImpl implements BotActions {
                 ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND,
                 BlockPos.ZERO, Direction.DOWN));
         this.bot.fireOnSwapHands();
+    }
+
+    @Override
+    public void mount(boolean onlyRideables) {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null || this.bot.getGameMode() == null || this.bot.getLevel() == null) {
+            return;
+        }
+        List<Entity> entities;
+        if (onlyRideables) {
+            entities = this.bot.getLevel().getEntities(player, player.getBoundingBox().inflate(3.0D, 1.0D, 3.0D),
+                    e -> e instanceof Minecart || e instanceof Boat || e instanceof AbstractHorse);
+        } else {
+            entities = this.bot.getLevel().getEntities(player, player.getBoundingBox().inflate(3.0D, 1.0D, 3.0D));
+        }
+        Entity closest = entities.stream()
+                .filter(e -> e != player && e.isAlive() && e.getVehicle() != player)
+                .min(Comparator.comparingDouble(e -> e.distanceToSqr(player)))
+                .orElse(null);
+        if (closest == null) {
+            return;
+        }
+        // 客户端骑乘：右键坐骑走 ServerboundInteractPacket，服务端处理上马
+        this.bot.getGameMode().interact(player, closest, new EntityHitResult(closest), InteractionHand.MAIN_HAND);
+    }
+
+    @Override
+    public void mount() {
+        this.mount(true);
+    }
+
+    @Override
+    public void dismount() {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null) {
+            return;
+        }
+        // 客户端下马：removeVehicle 会发 ServerboundPlayerInputPacket 通知服务端
+        player.removeVehicle();
     }
 }
