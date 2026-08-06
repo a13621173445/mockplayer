@@ -46,7 +46,7 @@ public final class TestRunner {
     /** 全部套件（suite=all / IDE 默认入口时按序连续跑） */
     private static final List<String> ALL_SUITES = List.of(
             "api-smoke", "containers", "crafting", "furnace",
-            "combat-stab", "combat-sprint", "merchant");
+            "combat-stab", "combat-sprint", "enchanting", "merchant");
 
     private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }
 
@@ -71,6 +71,7 @@ public final class TestRunner {
             case "furnace" -> "tbot-furn";
             case "combat-stab" -> "tbot-stab";
             case "combat-sprint" -> "tbot-spr";
+            case "enchanting" -> "tbot-enc";
             case "merchant" -> "tbot-merk";
             default -> "tbot";
         };
@@ -203,6 +204,7 @@ public final class TestRunner {
             case "furnace" -> runFurnace(mc);
             case "combat-stab" -> runCombatStab(mc);
             case "combat-sprint" -> runCombatSprint(mc);
+            case "enchanting" -> runEnchanting(mc);
             case "merchant" -> runMerchant(mc);
             default -> {
                 fail("unknown suite: " + suite);
@@ -551,6 +553,7 @@ public final class TestRunner {
     private static volatile boolean sprintFacingOk;
     private static volatile boolean sprintUsingOk;
     private static volatile float combatHuskHealth = -1;
+    private static volatile boolean encSwordEnchanted;
 
     /** 服务端 /summon 无 AI 尸壳在假人前方 ahead 格（Husk 免疫阳光自燃） */
     private static void summonHusk(MinecraftServer server, double ahead) {
@@ -1050,6 +1053,136 @@ public final class TestRunner {
         }
     }
 
+    // ===== enchanting：附魔台（验证 GUI 通用抽象 getEnchantment + 附魔执行） =====
+
+    private static BlockPos encPos;
+    private static boolean encOpened;
+    private static boolean encGiveDone;
+    private static boolean encLoaded;
+    private static volatile int encCost0;
+
+    private static void runEnchanting(Minecraft mc) {
+        MinecraftServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            fail("no singleplayer server");
+            finishSuite();
+            return;
+        }
+        switch (step) {
+            case 0 -> {
+                prepareBot(server);
+                if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
+                    step = 1;
+                }
+            }
+            case 1 -> {
+                if (encPos == null) {
+                    encPos = bot.getLocalPlayer().blockPosition().offset(3, 0, 0);
+                    BlockPos p = encPos;
+                    server.execute(() -> server.getLevel(Level.OVERWORLD).setBlock(p, Blocks.ENCHANTING_TABLE.defaultBlockState(), 3));
+                }
+                step = 2;
+            }
+            case 2 -> {
+                if (bot.getBlockState(encPos).is(Blocks.ENCHANTING_TABLE)) {
+                    check("client sees enchanting table", true);
+                    step = 3;
+                }
+            }
+            case 3 -> {
+                if (!encOpened) {
+                    encOpened = true;
+                    bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(encPos));
+                    net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
+                            net.minecraft.world.phys.Vec3.atCenterOf(encPos), Direction.WEST, encPos, false);
+                    bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
+                    check("useItemOn enchanting table issued", true);
+                }
+                step = 4;
+            }
+            case 4 -> {
+                Optional<com.mockplayer.api.container.BotEnchantmentMenu> enc = bot.getEnchantment();
+                if (enc.isPresent()) {
+                    check("getScreen present", bot.getScreen().isPresent());
+                    check("getEnchantment present", true);
+                    check("menuType is enchanting", enc.get().getMenuType() == MenuType.ENCHANTMENT);
+                    step = 5;
+                }
+            }
+            case 5 -> {
+                if (!encGiveDone) {
+                    encGiveDone = true;
+                    server.execute(() -> {
+                        var source = server.createCommandSourceStack();
+                        server.getCommands().performPrefixedCommand(source, "give " + botName + " minecraft:diamond_sword 1");
+                        server.getCommands().performPrefixedCommand(source, "give " + botName + " minecraft:lapis_lazuli 1");
+                        server.getCommands().performPrefixedCommand(source, "experience set " + botName + " 30 levels");
+                    });
+                }
+                step = 6;
+            }
+            case 6 -> {
+                if (bot.getLocalPlayer().getInventory().countItem(net.minecraft.world.item.Items.DIAMOND_SWORD) > 0
+                        && bot.getLocalPlayer().getInventory().countItem(net.minecraft.world.item.Items.LAPIS_LAZULI) > 0) {
+                    check("client has sword + lapis", true);
+                    step = 7;
+                } else if (++waitTicks > 200) {
+                    encGiveDone = false; // give 竞态丢失 → 重试
+                    waitTicks = 0;
+                    step = 5;
+                }
+            }
+            case 7 -> {
+                if (!encLoaded) {
+                    encLoaded = true;
+                    // give 的剑/青金石在快捷栏0/1 = EnchantmentMenu 槽29/30（0 物品 / 1 青金石 / 2-28 主背包 / 29-37 快捷栏）
+                    bot.getEnchantment().ifPresent(c -> {
+                        c.click(29, 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 剑→鼠标
+                        c.click(0, 0, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 剑→附魔槽0
+                        c.click(30, 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 青金石→鼠标
+                        c.click(1, 0, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 青金石→槽1
+                    });
+                    check("enchantment load clicks issued", true);
+                }
+                step = 8;
+            }
+            case 8 -> {
+                // 等服务端算出附魔成本（物品+青金石放入后 slotsChanged 更新 costs）
+                bot.getEnchantment().ifPresent(c -> encCost0 = c.getCosts()[0]);
+                if (encCost0 > 0) {
+                    check("enchantment costs available (cost0=" + encCost0 + ")", true);
+                    step = 9;
+                } else if (++waitTicks > 200) {
+                    fail("enchantment costs timeout (cost0=" + encCost0 + ")");
+                    step = 9;
+                }
+            }
+            case 9 -> {
+                // 执行附魔（服务端校验材料/经验 + 给物品附魔）→ 断言附魔槽0 的剑有 ENCHANTMENTS
+                bot.getEnchantment().ifPresent(c -> c.enchant(0));
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        net.minecraft.world.item.ItemStack sword = sp.containerMenu.getSlot(0).getItem();
+                        encSwordEnchanted = sword.is(net.minecraft.world.item.Items.DIAMOND_SWORD)
+                                && sword.has(net.minecraft.core.component.DataComponents.ENCHANTMENTS);
+                    }
+                });
+                if (encSwordEnchanted) {
+                    check("sword enchanted (ENCHANTMENTS component)", true);
+                    step = 10;
+                } else if (++waitTicks > 200) {
+                    fail("enchant timeout (sword not enchanted)");
+                    step = 10;
+                }
+            }
+            case 10 -> {
+                MockplayerApi.bots().removeBot(botName, "test");
+                finishSuite();
+            }
+        }
+    }
+
     // ===== merchant：服务端开交易菜单（ClientSideMerchant，无实体依赖）→ 假人交易会话断言 =====
 
     private static boolean merchantOpened;
@@ -1188,6 +1321,12 @@ public final class TestRunner {
         combatLastDamageIsSpear = false;
         combatServerScale = -1;
         combatHuskHealth = -1;
+        encPos = null;
+        encOpened = false;
+        encGiveDone = false;
+        encLoaded = false;
+        encCost0 = 0;
+        encSwordEnchanted = false;
         sprintFacingOk = false;
         sprintUsingOk = false;
         craftPos = null;

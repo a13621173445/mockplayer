@@ -3,7 +3,11 @@ package com.mockplayer.session;
 import com.mockplayer.api.Bot;
 import com.mockplayer.api.BotLifecycle;
 import com.mockplayer.api.action.BotActions;
+import com.mockplayer.api.container.BotAnvilMenu;
 import com.mockplayer.api.container.BotContainer;
+import com.mockplayer.api.container.BotCraftingMenu;
+import com.mockplayer.api.container.BotEnchantmentMenu;
+import com.mockplayer.api.container.BotFurnaceMenu;
 import com.mockplayer.api.container.BotMerchantMenu;
 
 import com.mojang.authlib.GameProfile;
@@ -188,6 +192,47 @@ public class BotImpl implements Bot {
             return Optional.empty();
         }
         return Optional.of(new BotContainerImpl(this, menu, this.openTitle));
+    }
+
+    @Override
+    public Optional<BotContainer> getScreen() {
+        return this.getContainer();
+    }
+
+    @Override
+    public Optional<BotEnchantmentMenu> getEnchantment() {
+        AbstractContainerMenu menu = this.openMenu;
+        if (menu instanceof net.minecraft.world.inventory.EnchantmentMenu enchant) {
+            return Optional.of(new BotEnchantmentMenuImpl(this, menu, this.openTitle, enchant));
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public Optional<BotAnvilMenu> getAnvil() {
+        AbstractContainerMenu menu = this.openMenu;
+        if (menu instanceof net.minecraft.world.inventory.AnvilMenu anvil) {
+            return Optional.of(new BotAnvilMenuImpl(this, menu, this.openTitle, anvil));
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public Optional<BotFurnaceMenu> getFurnace() {
+        AbstractContainerMenu menu = this.openMenu;
+        if (menu instanceof net.minecraft.world.inventory.AbstractFurnaceMenu) {
+            return Optional.of(new BotFurnaceMenuImpl(this, menu, this.openTitle));
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public Optional<BotCraftingMenu> getCrafting() {
+        AbstractContainerMenu menu = this.openMenu;
+        if (menu instanceof net.minecraft.world.inventory.CraftingMenu) {
+            return Optional.of(new BotCraftingMenuImpl(this, menu, this.openTitle));
+        }
+        return Optional.empty();
     }
 
     @Override

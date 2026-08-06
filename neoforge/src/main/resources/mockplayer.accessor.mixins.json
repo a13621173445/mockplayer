@@ -10,7 +10,8 @@
     "MockplayerClientCommonListenerAccessor",
     "MockplayerClientLevelAccessor",
     "MockplayerClientInputAccessor",
-    "MockplayerMultiPlayerGameModeAccessor"
+    "MockplayerMultiPlayerGameModeAccessor",
+    "MockplayerAbstractFurnaceMenuAccessor"
   ],
   "server": [],
   "injectors": {
