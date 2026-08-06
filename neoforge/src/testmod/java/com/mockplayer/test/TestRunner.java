@@ -51,6 +51,7 @@ public final class TestRunner {
     private static Phase phase = Phase.WAIT_TITLE;
     private static long phaseStart;
     private static boolean worldCreationStarted;
+    private static boolean gamerulesApplied;
     private static String suite = "";
     private static List<String> suiteQueue;
     private static int suiteIndex;
@@ -90,7 +91,7 @@ public final class TestRunner {
         }
     }
 
-    /** 阶段推进：主菜单 → 自动建世界 → 单机就绪+开局域网 → 跑套件 */
+    /** 阶段推进：主菜单 → 清旧档+建超平坦世界 → 单机就绪+开局域网+锁 gamerules → 跑套件 */
     private static void advance(Minecraft mc) {
         long now = System.currentTimeMillis();
         switch (phase) {
@@ -102,16 +103,22 @@ public final class TestRunner {
                 } else if (!worldCreationStarted) {
                     worldCreationStarted = true;
                     phaseStart = now;
+                    deleteOldWorld(mc);
                     createWorld(mc);
                 }
             }
             case WAIT_WORLD -> {
                 if (mc.getSingleplayerServer() != null && mc.level != null && mc.player != null) {
-                    if (!mc.getSingleplayerServer().isPublished()) {
-                        // 显式端口（26.2 port=0 不自动分配，getPort() 会返回 0）
-                        mc.getSingleplayerServer().publishServer(MultiplayerScope.LAN, GameType.SURVIVAL, false, 25565);
+                    MinecraftServer server = mc.getSingleplayerServer();
+                    if (!gamerulesApplied) {
+                        gamerulesApplied = true;
+                        applyTestGameRules(server);
                     }
-                    if (mc.getSingleplayerServer().isPublished() && mc.getSingleplayerServer().getPort() > 0) {
+                    if (!server.isPublished()) {
+                        // 显式端口（26.2 port=0 不自动分配，getPort() 会返回 0）
+                        server.publishServer(MultiplayerScope.LAN, GameType.SURVIVAL, false, 25565);
+                    }
+                    if (server.isPublished() && server.getPort() > 0) {
                         phase = Phase.RUN;
                         phaseStart = now;
                     }
@@ -121,15 +128,45 @@ public final class TestRunner {
         }
     }
 
-    /** 创建单机测试世界（只调一次）：用默认超平坦?不，正常主世界 preset */
+    /** 删除旧测试存档（世界未加载时调用），保证每次从干净世界开始 */
+    private static void deleteOldWorld(Minecraft mc) {
+        try {
+            net.minecraft.world.level.storage.LevelStorageSource source = mc.getLevelSource();
+            if (source.levelExists("mocktest")) {
+                java.nio.file.Path levelPath = source.getLevelPath("mocktest");
+                System.out.println("[mocktest] deleting old world: " + levelPath);
+                try (var walk = java.nio.file.Files.walk(levelPath)) {
+                    walk.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                        try {
+                            java.nio.file.Files.delete(p);
+                        } catch (java.io.IOException ignored) {
+                        }
+                    });
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("[mocktest] failed to delete old world: " + e);
+        }
+    }
+
+    /** 锁测试 gamerules：不昼夜循环 / 不更新天气 / 不生成生物（26.2 注册制 GameRule<Boolean>） */
+    private static void applyTestGameRules(MinecraftServer server) {
+        var rules = server.getGameRules();
+        rules.set(net.minecraft.world.level.gamerules.GameRules.ADVANCE_TIME, false, server);
+        rules.set(net.minecraft.world.level.gamerules.GameRules.ADVANCE_WEATHER, false, server);
+        rules.set(net.minecraft.world.level.gamerules.GameRules.SPAWN_MOBS, false, server);
+        System.out.println("[mocktest] test gamerules applied (advance_time/advance_weather/spawn_mobs = false)");
+    }
+
+    /** 创建单机测试世界（只调一次）：原版官方测试 preset（FLAT_ALL_DIMENSIONS 三维度超平坦，加载快/环境干净） */
     private static void createWorld(Minecraft mc) {
-        System.out.println("[mocktest] creating singleplayer world 'mocktest'");
+        System.out.println("[mocktest] creating singleplayer world 'mocktest' (flat)");
         mc.createWorldOpenFlows().createFreshLevel(
                 "mocktest",
                 new LevelSettings("mocktest", GameType.SURVIVAL,
                         LevelSettings.DifficultySettings.DEFAULT, true, WorldDataConfiguration.DEFAULT),
                 new WorldOptions(0L, false, false),
-                WorldPresets::createNormalWorldDimensions,
+                WorldPresets::createTestWorldDimensions,
                 null);
     }
 
