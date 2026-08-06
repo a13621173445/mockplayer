@@ -132,6 +132,14 @@ public interface BotActions {
     void attack(Entity target);
 
     /**
+     * 左键戳刺（矛等穿刺武器 PIERCING_WEAPON 的近战戳刺：发 ServerboundPlayerActionPacket(STAB) +
+     * 假人本地 onAttack/postPiercingAttack）。注意：原版 MultiPlayerGameMode.piercingAttack 内部用
+     * 主玩家（this.minecraft.player），假人不能直接调——本方法照它逻辑写假人版。
+     * 需要攻击蓄力满（MINIMUM_ATTACK_CHARGE）；普通 attack 对穿刺武器会被服务端 handleAttack 跳过。
+     */
+    void stab();
+
+    /**
      * 右键交互实体（村民交易/喂食/骑乘/开门等）。
      *
      * @param target 目标实体

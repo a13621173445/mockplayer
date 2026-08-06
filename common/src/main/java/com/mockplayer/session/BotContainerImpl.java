@@ -2,6 +2,8 @@ package com.mockplayer.session;
 
 import com.mockplayer.api.container.BotContainer;
 
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerInput;
@@ -55,10 +57,19 @@ public class BotContainerImpl implements BotContainer {
 
     @Override
     public void click(int slot, int button, ContainerInput input) {
-        if (this.bot.getLocalPlayer() == null) {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null) {
             return;
         }
-        this.menu.clicked(slot, button, input, this.bot.getLocalPlayer());
+        // 复用原版发包方法：handleContainerInput 内部调 menu.clicked（本地移动）+ 生成并发送
+        // ServerboundContainerClickPacket（含 stateId/changedSlots/carried）。只调 menu.clicked 会本地改
+        // 但服务端容器不更新（点击包没发出去），测试实测容器操作不生效。
+        MultiPlayerGameMode gameMode = this.bot.getGameMode();
+        if (gameMode != null) {
+            gameMode.handleContainerInput(this.menu.containerId, slot, button, input, player);
+        } else {
+            this.menu.clicked(slot, button, input, player);
+        }
     }
 
     @Override

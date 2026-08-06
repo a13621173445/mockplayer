@@ -44,7 +44,9 @@ public final class TestRunner {
     private static final long TIMEOUT_MS = 45_000;
 
     /** 全部套件（suite=all / IDE 默认入口时按序连续跑） */
-    private static final List<String> ALL_SUITES = List.of("api-smoke", "containers", "merchant");
+    private static final List<String> ALL_SUITES = List.of(
+            "api-smoke", "containers", "crafting", "furnace",
+            "combat-stab", "combat-sprint", "merchant");
 
     private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }
 
@@ -55,6 +57,24 @@ public final class TestRunner {
     private static boolean worldCreationStarted;
     private static boolean gamerulesApplied;
     private static String suite = "";
+    /**
+     * 当前套件假人唯一名（MC 玩家名最长 16 字符，套件名截短映射；唯一名避免同名玩家数据继承）
+     */
+    private static String botName;
+
+    /** 套件 → 假人短名（离线登录假人，名字过长服务端拒绝登录） */
+    private static String botNameFor(String suite) {
+        return switch (suite) {
+            case "api-smoke" -> "tbot-smoke";
+            case "containers" -> "tbot-cont";
+            case "crafting" -> "tbot-craft";
+            case "furnace" -> "tbot-furn";
+            case "combat-stab" -> "tbot-stab";
+            case "combat-sprint" -> "tbot-spr";
+            case "merchant" -> "tbot-merk";
+            default -> "tbot";
+        };
+    }
     private static List<String> suiteQueue;
     private static int suiteIndex;
     private static Bot bot;
@@ -65,6 +85,8 @@ public final class TestRunner {
     private static int step;
     /** 等待帧计数（实体同步等） */
     private static int waitTicks;
+    /** 套件间冷却（tick）：让上一套件残留状态过期（假人断开 / lastDamageSource 40 tick 等），避免干扰下一套件 */
+    private static int suiteCooldown;
 
     private TestRunner() {
     }
@@ -177,6 +199,10 @@ public final class TestRunner {
         switch (suite) {
             case "api-smoke" -> runApiSmoke(mc);
             case "containers" -> runContainers(mc);
+            case "crafting" -> runCrafting(mc);
+            case "furnace" -> runFurnace(mc);
+            case "combat-stab" -> runCombatStab(mc);
+            case "combat-sprint" -> runCombatSprint(mc);
             case "merchant" -> runMerchant(mc);
             default -> {
                 fail("unknown suite: " + suite);
@@ -185,18 +211,51 @@ public final class TestRunner {
         }
     }
 
-    // ===== api-smoke：创建/生命周期/世界信息/动作原语/owner 删除 =====
+    // ===== api-smoke：创建/生命周期/世界信息/动作原语（含移动/跳跃端到端）/owner 删除 =====
+
+    private static volatile double fakeSx;
+    private static volatile double fakeSz;
+    private static volatile double fakeSy;
+    private static volatile double fakeJumpStartY;
+    private static volatile double fakeMoveBaseX;
+    private static volatile double fakeMoveBaseZ;
+
+    /**
+     * 准备 bot：等旧假人从服务端 PlayerList 完全消失再创建。
+     * 每个套件用唯一假人名（botName = "tbot-" + suite）——离线登录假人同名 = 同一离线 UUID =
+     * 服务端按 playerdata/<uuid>.dat 加载同一个玩家存档，物品栏会跨套件继承（实测 crafting 的
+     * 木棍跑到 furnace 假人背包）。唯一名 = 不同 UUID = 空玩家数据。返回 null 表示还在等旧假人消失。
+     */
+    private static Bot prepareBot(MinecraftServer server) {
+        if (bot != null) {
+            return bot;
+        }
+        if (botName == null) {
+            botName = botNameFor(suite);
+        }
+        if (suiteCooldown > 0) {
+            // 套件间冷却：等上一套件假人断开 + 残留 lastDamageSource（40 tick）过期，避免干扰
+            suiteCooldown--;
+            return null;
+        }
+        if (server.getPlayerList().getPlayerByName(botName) != null) {
+            MockplayerApi.bots().removeBot(botName, "test");
+            return null;
+        }
+        bot = MockplayerApi.bots().createBot(BotProfile.of(botName, "test"));
+        return bot;
+    }
 
     private static void runApiSmoke(Minecraft mc) {
+        MinecraftServer server = mc.getSingleplayerServer();
         switch (step) {
             case 0 -> {
-                bot = MockplayerApi.bots().createBot(BotProfile.of("tbot", "test"));
-                check("createBot non-null", bot != null);
-                if (bot == null) {
-                    finishSuite();
-                    return;
+                prepareBot(mc.getSingleplayerServer());
+                if (bot != null) {
+                    check("createBot non-null", true);
+                    step = 1;
                 }
-                step = 1;
+                // bot null = 套件间冷却中，继续等
             }
             case 1 -> {
                 if (bot.getLifecycle() == BotLifecycle.PLAYING) {
@@ -223,25 +282,80 @@ public final class TestRunner {
                 // keyPresses 由 BotImpl.tick 的 applyInput 应用（需下一帧生效）
                 check("forward keyPresses", bot.getLocalPlayer().input.keyPresses.forward());
                 check("sneak keyPresses", bot.getLocalPlayer().input.keyPresses.shift());
-                bot.actions().stop();
+                // 记录假人初始服务端位置（移动端到端验证基线）
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        fakeSx = sp.getX();
+                        fakeSz = sp.getZ();
+                        fakeSy = sp.getY();
+                        fakeMoveBaseX = sp.getX();
+                        fakeMoveBaseZ = sp.getZ();
+                    }
+                });
                 step = 4;
             }
             case 4 -> {
-                check("stop resets input", !bot.getLocalPlayer().input.keyPresses.forward()
-                        && !bot.getLocalPlayer().input.keyPresses.shift());
-                step = 5;
+                // 移动端到端：setForward(1) 后假人应真的移动（服务端位置 x/z 变化，不只是 input 位）
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        fakeSx = sp.getX();
+                        fakeSz = sp.getZ();
+                        fakeSy = sp.getY();
+                    }
+                });
+                if (Math.abs(fakeSx - fakeMoveBaseX) > 0.5 || Math.abs(fakeSz - fakeMoveBaseZ) > 0.5) {
+                    check("fake moved on server (dx/dz changed)", true);
+                    bot.actions().stop();
+                    // 跳跃端到端：setForward + jump → 服务端 Y 上升
+                    bot.actions().setForward(1.0F);
+                    bot.actions().jump();
+                    fakeMoveBaseX = fakeSx;
+                    fakeMoveBaseZ = fakeSz;
+                    fakeJumpStartY = fakeSy;
+                    waitTicks = 0;
+                    step = 5;
+                } else if (++waitTicks > 200) {
+                    fail("fake movement timeout");
+                    bot.actions().stop();
+                    step = 5;
+                }
             }
             case 5 -> {
+                // 跳跃端到端：服务端 Y 应高于起跳 Y + 0.3（假人真的跳起来了）
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        fakeSy = sp.getY();
+                    }
+                });
+                if (fakeSy > fakeJumpStartY + 0.3) {
+                    check("fake jumped on server (y +" + String.format("%.2f", fakeSy - fakeJumpStartY) + ")", true);
+                    bot.actions().stop();
+                    step = 6;
+                } else if (++waitTicks > 100) {
+                    fail("fake jump timeout");
+                    bot.actions().stop();
+                    step = 6;
+                }
+            }
+            case 6 -> {
+                check("stop resets input", !bot.getLocalPlayer().input.keyPresses.forward()
+                        && !bot.getLocalPlayer().input.keyPresses.shift());
+                step = 7;
+            }
+            case 7 -> {
                 // 实体/区块同步有延迟：等假人 level 有区块 + 周围出现主玩家实体（neoforge 端更慢，等 300 tick）
                 if ((bot.isBlockLoaded(bot.getLocalPlayer().blockPosition())
                         && !bot.getEntitiesNear(64).isEmpty()) || ++waitTicks > 300) {
                     check("getEntitiesNear", !bot.getEntitiesNear(64).isEmpty());
                     check("isBlockLoaded", bot.isBlockLoaded(bot.getLocalPlayer().blockPosition()));
                     check("getBlockState air check", bot.getBlockState(bot.getLocalPlayer().blockPosition()) != null);
-                    step = 6;
+                    step = 8;
                 }
             }
-            case 6 -> {
+            case 8 -> {
                 check("getContainer empty (no menu open)", bot.getContainer().isEmpty());
                 // 新原语冒烟：无环境空操作不崩（drop/mount/dismount/持续攻击使用）
                 bot.actions().drop(0, false);
@@ -251,8 +365,8 @@ public final class TestRunner {
                 bot.actions().sustainedUse(null);
                 bot.actions().stopSustained();
                 check("new primitives no-crash", true);
-                check("removeBot own owner", MockplayerApi.bots().removeBot("tbot", "test") == RemoveResult.REMOVED);
-                check("removeBot not found", MockplayerApi.bots().removeBot("tbot", "test") == RemoveResult.NOT_FOUND);
+                check("removeBot own owner", MockplayerApi.bots().removeBot(botName, "test") == RemoveResult.REMOVED);
+                check("removeBot not found", MockplayerApi.bots().removeBot(botName, "test") == RemoveResult.NOT_FOUND);
                 finishSuite();
             }
         }
@@ -262,6 +376,10 @@ public final class TestRunner {
 
     private static BlockPos containerPos;
     private static boolean openIssued;
+    private static boolean openIssued2;
+    private static boolean chestGiveDone;
+    private static volatile boolean chestSlotHasStone;
+    private static volatile boolean chestSlotEmpty;
 
     private static void runContainers(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -272,9 +390,7 @@ public final class TestRunner {
         }
         switch (step) {
             case 0 -> {
-                if (bot == null) {
-                    bot = MockplayerApi.bots().createBot(BotProfile.of("tbot", "test"));
-                }
+                prepareBot(server);
                 if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
                     step = 1;
                 }
@@ -293,7 +409,7 @@ public final class TestRunner {
             }
             case 3 -> {
                 // 等服务端玩家可交互：awaitingPositionFromClient 清除（收到位置包）后原版才接受交互
-                net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName("tbot");
+                net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
                 if (sp != null && !isAwaitingPosition(sp)) {
                     step = 4;
                 }
@@ -326,9 +442,83 @@ public final class TestRunner {
             case 6 -> {
                 if (bot.getContainer().isEmpty()) {
                     check("container closed", true);
-                    MockplayerApi.bots().removeBot("tbot", "test");
-                    finishSuite();
+                    step = 7;
                 }
+            }
+            case 7 -> {
+                // give 石头 → 假人背包同步后放/取箱子物品（端到端：click → 服务端箱子状态变化）
+                if (!chestGiveDone) {
+                    chestGiveDone = true;
+                    server.execute(() -> {
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "give " + botName + " minecraft:stone 1");
+                    });
+                }
+                step = 8;
+            }
+            case 8 -> {
+                if (bot.getLocalPlayer().getInventory().countItem(net.minecraft.world.item.Items.STONE) > 0) {
+                    check("client has stone", true);
+                    step = 9;
+                } else if (++waitTicks > 200) {
+                    // give 与假人刚登录背包初始化竞态可能丢失 → 重试 give
+                    chestGiveDone = false;
+                    waitTicks = 0;
+                    step = 7;
+                }
+            }
+            case 9 -> {
+                if (!openIssued2) {
+                    openIssued2 = true;
+                    bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(containerPos));
+                    net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
+                            net.minecraft.world.phys.Vec3.atCenterOf(containerPos), Direction.WEST, containerPos, false);
+                    bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
+                }
+                step = 10;
+            }
+            case 10 -> {
+                Optional<BotContainer> container = bot.getContainer();
+                if (container.isPresent()) {
+                    // 假人刚登录背包空：give 的石头在快捷栏槽0 = ChestMenu(9x3) 槽54（0-26 容器 / 27-53 背包 / 54-62 快捷栏）
+                    container.get().click(54, 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 石头→鼠标
+                    container.get().click(0, 0, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 石头→箱子槽0
+                    check("put stone into chest issued", true);
+                    step = 11;
+                }
+            }
+            case 11 -> {
+                server.execute(() -> {
+                    net.minecraft.world.level.block.entity.ChestBlockEntity chest =
+                            (net.minecraft.world.level.block.entity.ChestBlockEntity) server.getLevel(Level.OVERWORLD).getBlockEntity(containerPos);
+                    chestSlotHasStone = chest != null && chest.getItem(0).is(net.minecraft.world.item.Items.STONE);
+                });
+                if (chestSlotHasStone) {
+                    check("chest slot0 has stone (server)", true);
+                    bot.getContainer().ifPresent(c -> c.click(0, 0, net.minecraft.world.inventory.ContainerInput.PICKUP)); // 取回
+                    step = 12;
+                } else if (++waitTicks > 100) {
+                    fail("put stone into chest timeout");
+                    step = 12;
+                }
+            }
+            case 12 -> {
+                server.execute(() -> {
+                    net.minecraft.world.level.block.entity.ChestBlockEntity chest =
+                            (net.minecraft.world.level.block.entity.ChestBlockEntity) server.getLevel(Level.OVERWORLD).getBlockEntity(containerPos);
+                    chestSlotEmpty = chest != null && chest.getItem(0).isEmpty();
+                });
+                if (chestSlotEmpty) {
+                    check("chest slot0 empty after pickup (server)", true);
+                    step = 13;
+                } else if (++waitTicks > 100) {
+                    fail("pickup stone from chest timeout");
+                    step = 13;
+                }
+            }
+            case 13 -> {
+                bot.getContainer().ifPresent(c -> c.close());
+                MockplayerApi.bots().removeBot(botName, "test");
+                finishSuite();
             }
         }
     }
@@ -341,6 +531,522 @@ public final class TestRunner {
             return f.get(sp.connection) != null;
         } catch (Exception ignored) {
             return true; // 读不到按等待处理（宁等勿早）
+        }
+    }
+
+    // ===== 矛 combat 端到端（d0535eb 矛 DAMAGE_TYPE 编码崩回归——服务端不崩 + SPEAR 伤害生效） =====
+    // 矛两种用法：
+    //   1) 蓄力戳刺（combat-stab）：普通 attack，需蓄力满（MINIMUM_ATTACK_CHARGE=1.0）+ 距离 AttackRange 2.0~4.5
+    //   2) 冲刺戳刺（combat-sprint）：使用矛（startUsingItem）+ 冲刺（KineticWeapon 相对速度 >= 4.6）→ 服务端 onUseTick
+    // 用 /summon 命令 spawn 无 AI 尸壳（Husk 免疫阳光自燃，排除"掉血=自燃"假阳性）；断言受伤攻击类型 = SPEAR。
+
+    private static boolean stabSummoned;
+    private static boolean stabSpearGiven;
+    private static boolean stabAttacked;
+    private static boolean sprintSummoned;
+    private static boolean sprintSpearGiven;
+    private static boolean sprintThrustIssued;
+    private static volatile boolean combatLastDamageIsSpear;
+    private static volatile float combatServerScale = -1;
+    private static volatile boolean sprintFacingOk;
+    private static volatile boolean sprintUsingOk;
+    private static volatile float combatHuskHealth = -1;
+
+    /** 服务端 /summon 无 AI 尸壳在假人前方 ahead 格（Husk 免疫阳光自燃） */
+    private static void summonHusk(MinecraftServer server, double ahead) {
+        server.execute(() -> {
+            net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+            if (sp != null) {
+                String cmd = String.format("summon minecraft:husk %.2f %.2f %.2f {NoAI:1b}",
+                        sp.getX() + ahead, sp.getY(), sp.getZ());
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), cmd);
+            }
+        });
+    }
+
+    /** 服务端给假人铁矛 + 客户端选快捷栏 0 */
+    private static void giveSpear(MinecraftServer server) {
+        server.execute(() -> {
+            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "give " + botName + " minecraft:iron_spear 1");
+        });
+        bot.getLocalPlayer().getInventory().setSelectedSlot(0);
+    }
+
+    /** combat 收尾：清理服务端 Husk（避免残留 lastDamageSource 干扰下一套件） */
+    private static void removeHusks(MinecraftServer server) {
+        server.execute(() -> {
+            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill @e[type=minecraft:husk]");
+        });
+    }
+
+    /** 读服务端 Husk 最近伤害来源 → combatLastDamageIsSpear（40 tick 内有效）+ 服务端蓄力 */
+    private static void readSpearDamage(MinecraftServer server) {
+        server.execute(() -> {
+            net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+            if (sp != null) {
+                net.minecraft.server.level.ServerLevel level = server.getLevel(Level.OVERWORLD);
+                net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(
+                        sp.getX() - 12, sp.getY() - 12, sp.getZ() - 12,
+                        sp.getX() + 12, sp.getY() + 12, sp.getZ() + 12);
+                java.util.List<net.minecraft.world.entity.monster.zombie.Zombie> zombies =
+                        java.util.List.copyOf(level.getEntitiesOfClass(net.minecraft.world.entity.monster.zombie.Zombie.class, box));
+                net.minecraft.world.damagesource.DamageSource ds = zombies.isEmpty() ? null : zombies.get(0).getLastDamageSource();
+                combatLastDamageIsSpear = ds != null && ds.is(net.minecraft.world.damagesource.DamageTypes.SPEAR);
+                combatServerScale = sp.getAttackStrengthScale(1.0F);
+                combatHuskHealth = zombies.isEmpty() ? -1 : zombies.get(0).getHealth();
+            }
+        });
+    }
+
+    // ===== combat-stab：蓄力戳刺（普通 attack，站着也能戳） =====
+
+    private static void runCombatStab(Minecraft mc) {
+        MinecraftServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            fail("no singleplayer server");
+            finishSuite();
+            return;
+        }
+        switch (step) {
+            case 0 -> {
+                prepareBot(server);
+                if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
+                    step = 1;
+                }
+            }
+            case 1 -> {
+                // Husk 前 3 格（矛 AttackRange 2.0~4.5 内，避开 minReach 太近打不到）
+                if (!stabSummoned) {
+                    stabSummoned = true;
+                    summonHusk(server, 3.0);
+                }
+                step = 2;
+            }
+            case 2 -> {
+                if (bot.getEntitiesNear(64).stream().anyMatch(e -> e instanceof net.minecraft.world.entity.monster.zombie.Zombie)) {
+                    check("client sees husk", true);
+                    step = 3;
+                }
+            }
+            case 3 -> {
+                if (!stabSpearGiven) {
+                    stabSpearGiven = true;
+                    giveSpear(server);
+                }
+                step = 4;
+            }
+            case 4 -> {
+                if (bot.getLocalPlayer().getMainHandItem().is(net.minecraft.world.item.Items.IRON_SPEAR)) {
+                    check("client holds spear", true);
+                    step = 5;
+                } else if (++waitTicks > 200) {
+                    stabSpearGiven = false; // give 竞态丢失 → 重试
+                    waitTicks = 0;
+                    step = 3;
+                }
+            }
+            case 5 -> {
+                // 左键戳刺：矛是 PIERCING_WEAPON，普通 attack 被服务端 handleAttack 跳过；
+                // 戳刺走 ServerboundPlayerActionPacket(STAB) → 服务端 PiercingWeapon.attack（SPEAR 伤害）。
+                // 需要攻击蓄力满（MINIMUM_ATTACK_CHARGE，服务端 cannotAttackWithItem 检查）。
+                readSpearDamage(server);
+                if (combatLastDamageIsSpear && combatHuskHealth >= 0 && combatHuskHealth < 20) {
+                    check("husk hurt by SPEAR (left-click stab)", true);
+                    check("fake still PLAYING (no server crash)", bot.getLifecycle() == BotLifecycle.PLAYING);
+                    step = 6;
+                } else if (combatServerScale >= 1.0F) {
+                    // 戳刺射线沿视线方向（ProjectileUtil.getHitEntitiesAlong），必须先面向僵尸
+                    net.minecraft.world.entity.Entity target = bot.getEntitiesNear(64).stream()
+                            .filter(e -> e instanceof net.minecraft.world.entity.monster.zombie.Zombie)
+                            .findFirst().orElse(null);
+                    if (target != null) {
+                        bot.actions().lookAt(target);
+                        bot.actions().stab();
+                        stabAttacked = true;
+                        check("left-click STAB issued", true);
+                    }
+                } else if (++waitTicks > 400) {
+                    fail("stab timeout (no SPEAR damage)");
+                    step = 6;
+                }
+            }
+            case 6 -> {
+                removeHusks(server);
+                MockplayerApi.bots().removeBot(botName, "test");
+                finishSuite();
+            }
+        }
+    }
+
+    // ===== combat-sprint：冲刺戳刺（使用矛 + 疾跑 → KineticWeapon 相对速度伤害） =====
+
+    private static void runCombatSprint(Minecraft mc) {
+        MinecraftServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            fail("no singleplayer server");
+            finishSuite();
+            return;
+        }
+        switch (step) {
+            case 0 -> {
+                prepareBot(server);
+                if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
+                    step = 1;
+                }
+            }
+            case 1 -> {
+                // Husk 前 6 格（留冲刺距离；冲刺时相对速度 ~5.6 >= KineticWeapon 条件 4.6）
+                if (!sprintSummoned) {
+                    sprintSummoned = true;
+                    summonHusk(server, 6.0);
+                }
+                step = 2;
+            }
+            case 2 -> {
+                if (bot.getEntitiesNear(64).stream().anyMatch(e -> e instanceof net.minecraft.world.entity.monster.zombie.Zombie)) {
+                    check("client sees husk", true);
+                    step = 3;
+                }
+            }
+            case 3 -> {
+                if (!sprintSpearGiven) {
+                    sprintSpearGiven = true;
+                    giveSpear(server);
+                }
+                step = 4;
+            }
+            case 4 -> {
+                if (bot.getLocalPlayer().getMainHandItem().is(net.minecraft.world.item.Items.IRON_SPEAR)) {
+                    check("client holds spear", true);
+                    step = 5;
+                } else if (++waitTicks > 200) {
+                    sprintSpearGiven = false; // give 竞态丢失 → 重试
+                    waitTicks = 0;
+                    step = 3;
+                }
+            }
+            case 5 -> {
+                if (!sprintThrustIssued) {
+                    sprintThrustIssued = true;
+                    net.minecraft.world.entity.Entity target = bot.getEntitiesNear(64).stream()
+                            .filter(e -> e instanceof net.minecraft.world.entity.monster.zombie.Zombie)
+                            .findFirst().orElse(null);
+                    if (target != null) {
+                        bot.actions().lookAt(target);
+                    }
+                    bot.actions().setForward(1.0F);
+                    bot.actions().setSprint(true);
+                    bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND);
+                    // 记录冲刺移动基线（服务端位置，验证假人真的冲出去）
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            fakeMoveBaseX = sp.getX();
+                            fakeMoveBaseZ = sp.getZ();
+                            fakeSx = sp.getX();
+                            fakeSz = sp.getZ();
+                        }
+                    });
+                    check("sprint-thrust issued (sprint + use)", true);
+                }
+                step = 6;
+            }
+            case 6 -> {
+                // 冲刺移动：KineticWeapon 相对速度伤害的前提（假人真的冲出去）
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        fakeSx = sp.getX();
+                        fakeSz = sp.getZ();
+                    }
+                });
+                if (Math.abs(fakeSx - fakeMoveBaseX) > 0.5 || Math.abs(fakeSz - fakeMoveBaseZ) > 0.5) {
+                    check("fake sprinted on server (moved)", true);
+                    waitTicks = 0;
+                    step = 7;
+                } else if (++waitTicks > 300) {
+                    fail("sprint movement timeout (fake didn't move)");
+                    step = 7;
+                }
+            }
+            case 7 -> {
+                // 面向 Husk + 正在使用矛（戳刺射线沿视线 + onUseTick 前提）
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        net.minecraft.server.level.ServerLevel level = server.getLevel(Level.OVERWORLD);
+                        net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(
+                                sp.getX() - 12, sp.getY() - 12, sp.getZ() - 12,
+                                sp.getX() + 12, sp.getY() + 12, sp.getZ() + 12);
+                                java.util.List<net.minecraft.world.entity.monster.zombie.Zombie> zombies =
+                                        java.util.List.copyOf(level.getEntitiesOfClass(net.minecraft.world.entity.monster.zombie.Zombie.class, box));
+                        if (!zombies.isEmpty()) {
+                            net.minecraft.world.entity.Entity husk = zombies.get(0);
+                            // 假人 yRot 朝向 Husk 的夹角（MC yRot：0=南，顺时针）
+                            double dx = husk.getX() - sp.getX();
+                            double dz = husk.getZ() - sp.getZ();
+                            double targetYaw = Math.toDegrees(Math.atan2(-dx, dz));
+                            double yaw = sp.getYRot() % 360.0;
+                            if (yaw < 0) {
+                                yaw += 360.0;
+                            }
+                            double diff = Math.abs(yaw - targetYaw);
+                            if (diff > 180.0) {
+                                diff = 360.0 - diff;
+                            }
+                            sprintFacingOk = diff < 45.0;
+                            sprintUsingOk = sp.isUsingItem();
+                        }
+                    }
+                });
+                if (sprintFacingOk && sprintUsingOk) {
+                    check("fake facing husk", true);
+                    check("fake using spear", true);
+                    waitTicks = 0;
+                    step = 8;
+                } else if (++waitTicks > 200) {
+                    fail("sprint facing/using timeout (facing=" + sprintFacingOk + " using=" + sprintUsingOk + ")");
+                    step = 8;
+                }
+            }
+            case 8 -> {
+                readSpearDamage(server);
+                if (combatLastDamageIsSpear && combatHuskHealth >= 0 && combatHuskHealth < 20) {
+                    check("husk hurt by SPEAR (sprint-thrust)", true);
+                    check("fake still PLAYING (no server crash)", bot.getLifecycle() == BotLifecycle.PLAYING);
+                    step = 9;
+                } else if (++waitTicks > 300) {
+                    fail("sprint-thrust timeout (no SPEAR damage)");
+                    step = 9;
+                }
+            }
+            case 9 -> {
+                removeHusks(server);
+                MockplayerApi.bots().removeBot(botName, "test");
+                finishSuite();
+            }
+        }
+    }
+
+    // ===== crafting：工作台合成（give 木板 → 放合成格 → 取 4 木棍，服务端验证） =====
+
+    private static BlockPos craftPos;
+    private static boolean craftPlanksGiven;
+    private static boolean craftClicked;
+    private static volatile int craftSticksCount;
+
+    private static void runCrafting(Minecraft mc) {
+        MinecraftServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            fail("no singleplayer server");
+            finishSuite();
+            return;
+        }
+        switch (step) {
+            case 0 -> {
+                prepareBot(server);
+                if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
+                    step = 1;
+                }
+            }
+            case 1 -> {
+                if (craftPos == null) {
+                    craftPos = bot.getLocalPlayer().blockPosition().offset(3, 0, 0);
+                    BlockPos p = craftPos;
+                    server.execute(() -> server.getLevel(Level.OVERWORLD).setBlock(p, Blocks.CRAFTING_TABLE.defaultBlockState(), 3));
+                }
+                step = 2;
+            }
+            case 2 -> {
+                if (bot.getBlockState(craftPos).is(Blocks.CRAFTING_TABLE)) {
+                    check("client sees crafting table", true);
+                    step = 3;
+                }
+            }
+            case 3 -> {
+                if (!openIssued) {
+                    openIssued = true;
+                    bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(craftPos));
+                    net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
+                            net.minecraft.world.phys.Vec3.atCenterOf(craftPos), Direction.WEST, craftPos, false);
+                    bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
+                    check("useItemOn crafting table issued", true);
+                }
+                step = 4;
+            }
+            case 4 -> {
+                Optional<BotContainer> container = bot.getContainer();
+                if (container.isPresent()) {
+                    check("getContainer present", true);
+                    check("menuType is crafting", container.get().getMenuType() == MenuType.CRAFTING);
+                    step = 5;
+                }
+            }
+            case 5 -> {
+                if (!craftPlanksGiven) {
+                    craftPlanksGiven = true;
+                    // 2 木板（竖排 → 4 木棍；1 木板单独是橡木按钮，别踩坑）
+                    server.execute(() -> {
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "give " + botName + " minecraft:oak_planks 2");
+                    });
+                }
+                step = 6;
+            }
+            case 6 -> {
+                if (bot.getLocalPlayer().getInventory().countItem(net.minecraft.world.item.Items.OAK_PLANKS) >= 2) {
+                    check("client has 2 planks", true);
+                    step = 7;
+                } else if (++waitTicks > 200) {
+                    craftPlanksGiven = false; // give 竞态丢失 → 重试
+                    waitTicks = 0;
+                    step = 5;
+                }
+            }
+            case 7 -> {
+                if (!craftClicked) {
+                    craftClicked = true;
+                    // give 2 木板叠在快捷栏0 = CraftingMenu 槽37（0 结果 / 1-9 合成格 / 10-36 主背包 / 37-45 快捷栏）
+                    // click(37) 一次拿走 2 个，PICKUP 放合成格每次 1 个；合成格1（左上）+4（左中）= 竖排 2 木板 → 4 木棍
+                    bot.getContainer().ifPresent(c -> {
+                        c.click(37, 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 左键拿 2 木板→鼠标
+                        c.click(1, 1, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 右键放 1→合成格1
+                        c.click(4, 1, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 右键放 1→合成格4（竖排）
+                        c.click(0, 0, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 左键取 4 木棍→鼠标
+                        c.click(37, 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 木棍放回快捷栏0
+                    });
+                    check("crafting clicks issued", true);
+                }
+                step = 8;
+            }
+            case 8 -> {
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    craftSticksCount = sp != null ? sp.getInventory().countItem(net.minecraft.world.item.Items.STICK) : 0;
+                });
+                if (craftSticksCount > 0) {
+                    check("crafted 4 sticks on server", craftSticksCount >= 4, "count=" + craftSticksCount);
+                    step = 9;
+                } else if (++waitTicks > 200) {
+                    fail("crafting timeout (sticks=" + craftSticksCount + ")");
+                    step = 9;
+                }
+            }
+            case 9 -> {
+                MockplayerApi.bots().removeBot(botName, "test");
+                finishSuite();
+            }
+        }
+    }
+
+    // ===== furnace：熔炉烧制（give 原木+煤炭 → 放原料/燃料 → 取木炭产物） =====
+
+    private static BlockPos furnacePos;
+    private static boolean furnaceGiven;
+    private static boolean furnaceClicked;
+    private static volatile boolean furnaceCharcoal;
+
+    private static void runFurnace(Minecraft mc) {
+        MinecraftServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            fail("no singleplayer server");
+            finishSuite();
+            return;
+        }
+        switch (step) {
+            case 0 -> {
+                prepareBot(server);
+                if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
+                    step = 1;
+                }
+            }
+            case 1 -> {
+                if (furnacePos == null) {
+                    furnacePos = bot.getLocalPlayer().blockPosition().offset(3, 0, 0);
+                    BlockPos p = furnacePos;
+                    server.execute(() -> server.getLevel(Level.OVERWORLD).setBlock(p, Blocks.FURNACE.defaultBlockState(), 3));
+                }
+                step = 2;
+            }
+            case 2 -> {
+                if (bot.getBlockState(furnacePos).is(Blocks.FURNACE)) {
+                    check("client sees furnace", true);
+                    step = 3;
+                }
+            }
+            case 3 -> {
+                if (!openIssued) {
+                    openIssued = true;
+                    bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(furnacePos));
+                    net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
+                            net.minecraft.world.phys.Vec3.atCenterOf(furnacePos), Direction.WEST, furnacePos, false);
+                    bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
+                    check("useItemOn furnace issued", true);
+                }
+                step = 4;
+            }
+            case 4 -> {
+                Optional<BotContainer> container = bot.getContainer();
+                if (container.isPresent()) {
+                    check("getContainer present", true);
+                    check("menuType is furnace", container.get().getMenuType() == MenuType.FURNACE);
+                    step = 5;
+                }
+            }
+            case 5 -> {
+                if (!furnaceGiven) {
+                    furnaceGiven = true;
+                    server.execute(() -> {
+                        var source = server.createCommandSourceStack();
+                        server.getCommands().performPrefixedCommand(source, "give " + botName + " minecraft:oak_log 1");
+                        server.getCommands().performPrefixedCommand(source, "give " + botName + " minecraft:coal 1");
+                    });
+                }
+                step = 6;
+            }
+            case 6 -> {
+                if (bot.getLocalPlayer().getInventory().countItem(net.minecraft.world.item.Items.OAK_LOG) > 0
+                        && bot.getLocalPlayer().getInventory().countItem(net.minecraft.world.item.Items.COAL) > 0) {
+                    check("client has log + coal", true);
+                    step = 7;
+                } else if (++waitTicks > 200) {
+                    furnaceGiven = false; // give 竞态丢失 → 重试
+                    waitTicks = 0;
+                    step = 5;
+                }
+            }
+            case 7 -> {
+                if (!furnaceClicked) {
+                    furnaceClicked = true;
+                    // 快捷栏槽0=原木、槽1=煤炭（FurnaceMenu：0 原料 / 1 燃料 / 2 产物 / 3-29 主背包 / 30-38 快捷栏）
+                    bot.getContainer().ifPresent(c -> {
+                        c.click(30, 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 原木→鼠标
+                        c.click(0, 0, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 原木→原料槽
+                        c.click(31, 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 煤炭→鼠标
+                        c.click(1, 0, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 煤炭→燃料槽
+                    });
+                    check("furnace load clicks issued", true);
+                }
+                step = 8;
+            }
+            case 8 -> {
+                // 等烧制完成：用服务端熔炉 BlockEntity 产物槽（比客户端菜单同步可靠，flaky 更稳）
+                server.execute(() -> {
+                    net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity be =
+                            (net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity) server.getLevel(Level.OVERWORLD).getBlockEntity(furnacePos);
+                    furnaceCharcoal = be != null && be.getItem(2).is(net.minecraft.world.item.Items.CHARCOAL);
+                });
+                if (furnaceCharcoal) {
+                    check("furnace produced charcoal", true);
+                    step = 9;
+                } else if (++waitTicks > 300) {
+                    fail("furnace timeout (no charcoal)");
+                    step = 9;
+                }
+            }
+            case 9 -> {
+                MockplayerApi.bots().removeBot(botName, "test");
+                finishSuite();
+            }
         }
     }
 
@@ -357,9 +1063,7 @@ public final class TestRunner {
         }
         switch (step) {
             case 0 -> {
-                if (bot == null) {
-                    bot = MockplayerApi.bots().createBot(BotProfile.of("tbot", "test"));
-                }
+                prepareBot(server);
                 if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
                     step = 1;
                 }
@@ -370,7 +1074,7 @@ public final class TestRunner {
                 if (!merchantOpened) {
                     merchantOpened = true;
                     server.execute(() -> {
-                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName("tbot");
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
                         if (sp != null) {
                             try {
                                 net.minecraft.world.entity.npc.ClientSideMerchant clientMerchant = new net.minecraft.world.entity.npc.ClientSideMerchant(sp);
@@ -408,7 +1112,7 @@ public final class TestRunner {
                 }
             }
             case 3 -> {
-                MockplayerApi.bots().removeBot("tbot", "test");
+                MockplayerApi.bots().removeBot(botName, "test");
                 finishSuite();
             }
         }
@@ -417,17 +1121,23 @@ public final class TestRunner {
     // ===== 断言与结果 =====
 
     private static void check(String name, boolean ok) {
-        records.add(new Record(name, ok, ok ? "" : "assertion failed"));
-        log(name, ok);
+        check(name, ok, ok ? "" : "assertion failed");
+    }
+
+    /** 断言（可带失败详情：实际值/期望值，FAIL 时打印具体原因） */
+    private static void check(String name, boolean ok, String detail) {
+        records.add(new Record(name, ok, ok ? "" : detail));
+        log(name, ok, detail);
     }
 
     private static void fail(String name) {
         records.add(new Record(name, false, "failure"));
-        log(name, false);
+        log(name, false, "failure");
     }
 
-    private static void log(String name, boolean ok) {
-        System.out.println("[mocktest] " + (ok ? "PASS " : "FAIL ") + name);
+    private static void log(String name, boolean ok, String detail) {
+        String suffix = (ok || detail == null || detail.isEmpty()) ? "" : " <" + detail + ">";
+        System.out.println("[mocktest] " + (ok ? "PASS " : "FAIL ") + name + suffix);
     }
 
     /** 当前套件收尾：写结果 JSON → 推进下一个套件（world 已在，直接 RUN）或全部完成退出 */
@@ -451,18 +1161,43 @@ public final class TestRunner {
         }
     }
 
-    /** 套件间重置（世界不重建，只重置套件状态 + 清理上一个假人） */
+    /** 套件间重置（世界不重建，只重置套件状态 + 清理上一个假人；假人名用套件唯一名） */
     private static void resetSuiteState() {
         step = 0;
         waitTicks = 0;
+        suiteCooldown = 40; // 套件间冷却 2 秒：假人断开完成 + 残留 lastDamageSource 过期
         records.clear();
+        botName = botNameFor(suite);
         for (Bot b : MockplayerApi.bots().getBots()) {
             MockplayerApi.bots().removeBot(b.getName(), "test");
         }
         bot = null;
         containerPos = null;
         openIssued = false;
+        openIssued2 = false;
+        chestGiveDone = false;
+        chestSlotHasStone = false;
+        chestSlotEmpty = false;
         merchantOpened = false;
+        stabSummoned = false;
+        stabSpearGiven = false;
+        stabAttacked = false;
+        sprintSummoned = false;
+        sprintSpearGiven = false;
+        sprintThrustIssued = false;
+        combatLastDamageIsSpear = false;
+        combatServerScale = -1;
+        combatHuskHealth = -1;
+        sprintFacingOk = false;
+        sprintUsingOk = false;
+        craftPos = null;
+        craftPlanksGiven = false;
+        craftClicked = false;
+        craftSticksCount = 0;
+        furnacePos = null;
+        furnaceGiven = false;
+        furnaceClicked = false;
+        furnaceCharcoal = false;
     }
 
     /** 写当前套件结果 JSON（runs/client/test-results/<suite>.json），含耗时 */

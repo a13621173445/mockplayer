@@ -22,10 +22,15 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * 假人连接 → 换成 FakePlayListener（无头但完整：独立 world/player/物理，不污染主玩家）。
  * 主玩家连接 → 原逻辑（new ClientPacketListener）。
  *
- * 单机 registry 对齐：原版配置结束用 collectGameRegistries + filterRegistries 重建最终 registry，
- * 假人（TCP 第二个连接）走网络收集构建的是"新实例"（与服务端不同源）→ 矛 Holder 不同源 → 服务端编码崩。
+ * ===== runWithResources hack（⚠️ 不要移除，否则矛戳刺服务端崩）=====
+ * 单机 registry 对齐：原版配置结束用 collectGameRegistries（假人走网络收集）构建的 registry 是
+ * "新实例"（与服务端不同源）→ 假人拿到矛的 DAMAGE_TYPE Holder 引用自己实例的 spear，服务端编码
+ * ClientboundDamageEventPacket 时按 Holder 查服务端 registry 找不到 id →
+ * "Can't find id for .../damage_type/minecraft:spear" 崩（2026-08 测试实测抓出回归）。
  * 这里假人单机直接跳过收集（runWithResources 返回服务端完整实例），后续 filterRegistries 基于它的
  * 完整 keys 从服务端取 → 假人编解码 = 服务端实例（含 spear/dimension，同源）。
+ * 只在单机（集成服务器，同进程能拿到 server.registryAccess()）生效；多人远程走原逻辑。
+ * 历史：d0535eb 最初修复；2026-08-06 曾误删（neoforge 端）导致矛戳刺崩，测试抓出后恢复。
  */
 @Mixin(ClientConfigurationPacketListenerImpl.class)
 public abstract class MixinClientConfigurationPacketListenerImpl {

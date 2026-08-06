@@ -12,7 +12,8 @@
     "MixinClientConfigurationPacketListenerImpl",
     "MixinClientCommonPacketListenerImpl",
     "MixinLocalPlayer",
-    "MixinMinecraft"
+    "MixinMinecraft",
+    "MixinMultiPlayerGameMode"
   ],
   "server": [],
   "injectors": {

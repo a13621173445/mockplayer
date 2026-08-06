@@ -9,6 +9,7 @@
     "MockplayerClientPacketListenerAccessor",
     "MockplayerClientCommonListenerAccessor",
     "MockplayerClientLevelAccessor",
+    "MockplayerClientInputAccessor",
     "MockplayerMultiPlayerGameModeAccessor"
   ],
   "server": [],

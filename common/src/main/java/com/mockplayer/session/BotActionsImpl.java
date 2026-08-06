@@ -19,6 +19,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
@@ -146,8 +147,8 @@ public class BotActionsImpl implements BotActions {
     }
 
     /** 内部：每 tick 应用持续输入（BotImpl.tick 调用）。
-     *  26.2 输入模型：ClientInput.keyPresses 是 Input record（forward/backward/left/right/jump/shift/sprint），
-     *  LocalPlayer.applyInput 每 tick 消费它 → travel 驱动移动/跳跃/潜行。 */
+     *  26.2 输入模型：LocalPlayer.applyInput 用 input.getMoveVector()（moveVector）算移动（xxa/zza），
+     *  keyPresses 只管 sprint/jump。两个都要写——只写 keyPresses 假人不会移动（实测 bug）。 */
     void applyInput() {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null) {
@@ -156,6 +157,9 @@ public class BotActionsImpl implements BotActions {
         player.input.keyPresses = new net.minecraft.world.entity.player.Input(
                 this.forward > 0, this.forward < 0, this.strafe < 0, this.strafe > 0,
                 this.jumping, this.sneaking, this.sprinting);
+        // moveVector (x=左右, y=前后) 是移动输入，LocalPlayer.applyInput 用它设 xxa/zza
+        ((com.mockplayer.session.accessor.MockplayerClientInputAccessor) player.input)
+                .mockplayer$setMoveVector(new Vec2(this.strafe, this.forward));
         // 持续攻击/使用：目标死亡/无效则自动停止
         if (this.sustainedAttackTarget != null) {
             if (this.sustainedAttackTarget.isAlive()) {
@@ -184,6 +188,22 @@ public class BotActionsImpl implements BotActions {
             player.swing(InteractionHand.MAIN_HAND);
         }
         this.bot.fireOnAttackEntity(target);
+    }
+
+    @Override
+    public void stab() {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null || this.bot.getGameMode() == null) {
+            return;
+        }
+        net.minecraft.world.item.component.PiercingWeapon weapon =
+                player.getMainHandItem().get(net.minecraft.core.component.DataComponents.PIERCING_WEAPON);
+        if (weapon != null) {
+            // 复用原版 MultiPlayerGameMode.piercingAttack（MixinMultiPlayerGameMode 把方法内
+            // this.minecraft.player 换成假人），与 mod 扩展的原版戳刺逻辑保持一致。
+            // 原版方法硬编码主玩家，假人不能直接调（污染主玩家），Mixin 替换作用对象后即可复用。
+            this.bot.getGameMode().piercingAttack(weapon);
+        }
     }
 
     @Override

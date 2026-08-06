@@ -13,6 +13,7 @@
     "MixinClientCommonPacketListenerImpl",
     "MixinLocalPlayer",
     "MixinMinecraft",
+    "MixinMultiPlayerGameMode",
     "MixinRegistryManager",
     "MixinConfigSync"
   ],
