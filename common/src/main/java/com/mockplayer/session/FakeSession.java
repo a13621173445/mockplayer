@@ -145,6 +145,11 @@ public class FakeSession {
         return this.fakePlayer;
     }
 
+    /** 假人 level（假人 player 所在 level）——假人 gameMode 操作（挖矿/交互）隔离用，绝不返回主玩家 level */
+    public net.minecraft.client.multiplayer.ClientLevel getFakeLevel() {
+        return this.fakePlayer != null ? (net.minecraft.client.multiplayer.ClientLevel) this.fakePlayer.level() : null;
+    }
+
     public FakePlayerState getState() {
         return this.state;
     }

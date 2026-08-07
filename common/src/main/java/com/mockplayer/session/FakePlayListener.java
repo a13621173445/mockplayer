@@ -343,14 +343,23 @@ public class FakePlayListener extends ClientPacketListener {
      */
     @Override
     public void handlePlayerInfoUpdate(net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket packet) {
+        // 玩家列表更新：像原版一样填假人 playerInfoMap（否则 Bot.getOnlinePlayers() 读不到），
+        // 同时完整记录到假人 state。跳过原版主玩家 playerSocialManager.addPlayer（不污染主玩家）。
+        MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
+        java.util.Map<java.util.UUID, net.minecraft.client.multiplayer.PlayerInfo> infoMap = self.mockplayer$getPlayerInfoMap();
         for (net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry entry : packet.newEntries()) {
-            // 新玩家上线：记录 UUID + 名字（profile 可能为空，用 UUID 兜底）
+            // 新玩家上线：填假人 playerInfoMap（enforcesSecureChat 父类 private，简化 true）+ 记录 state
+            if (entry.profile() != null) {
+                net.minecraft.client.multiplayer.PlayerInfo playerInfo =
+                        new net.minecraft.client.multiplayer.PlayerInfo(entry.profile(), true);
+                infoMap.putIfAbsent(entry.profileId(), playerInfo);
+            }
             String name = entry.profile() != null ? entry.profile().name() : entry.profileId().toString();
             this.session.getState().recordPlayerOnline(entry.profileId(), name);
             fire(b -> b.fireOnPlayerJoined(entry.profile()));
         }
         for (net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry entry : packet.entries()) {
-            // 已有玩家更新动作：更新名字（游戏模式等信息后续扩展）
+            // 已有玩家更新动作：记录 state（applyPlayerInfoUpdate 父类 private，假人不调；tab list 主体由 newEntries 填充）
             String name = entry.profile() != null ? entry.profile().name() : entry.profileId().toString();
             this.session.getState().recordPlayerOnline(entry.profileId(), name);
         }

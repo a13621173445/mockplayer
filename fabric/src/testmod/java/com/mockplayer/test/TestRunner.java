@@ -44,7 +44,7 @@ public final class TestRunner {
 
     /** 全部套件（suite=all / IDE 默认入口时按序连续跑） */
     private static final List<String> ALL_SUITES = List.of(
-            "api-smoke", "containers", "containers-all", "crafting", "furnace",
+            "api-smoke", "api-full", "use-items", "containers", "containers-all", "crafting", "furnace",
             "combat-stab", "combat-sprint", "enchanting", "merchant");
 
     private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }
@@ -65,6 +65,8 @@ public final class TestRunner {
     private static String botNameFor(String suite) {
         return switch (suite) {
             case "api-smoke" -> "tbot-smoke";
+            case "api-full" -> "tbot-full";
+            case "use-items" -> "tbot-use";
             case "containers" -> "tbot-cont";
             case "containers-all" -> "tbot-call";
             case "crafting" -> "tbot-craft";
@@ -199,6 +201,8 @@ public final class TestRunner {
     private static void run(Minecraft mc) {
         switch (suite) {
             case "api-smoke" -> runApiSmoke(mc);
+            case "api-full" -> runApiFull(mc);
+            case "use-items" -> runUseItems(mc);
             case "containers" -> runContainers(mc);
             case "containers-all" -> runContainersAll(mc);
             case "crafting" -> runCrafting(mc);
@@ -246,6 +250,10 @@ public final class TestRunner {
             return null;
         }
         bot = MockplayerApi.bots().createBot(BotProfile.of(botName, "test"));
+        // 套件开始：清理上一个套件残留的非玩家实体（husk/村民/马/箭/掉落物等）——连跑稳定
+        MinecraftServer srv = server;
+        srv.execute(() -> srv.getCommands().performPrefixedCommand(
+                srv.createCommandSourceStack(), "kill @e[type=!minecraft:player]"));
         return bot;
     }
 
@@ -282,8 +290,10 @@ public final class TestRunner {
                 step = 3;
             }
             case 3 -> {
-                // keyPresses 由 BotImpl.tick 的 applyInput 应用（需下一帧生效）
-                check("forward keyPresses", bot.getLocalPlayer().input.keyPresses.forward());
+                // 输入解耦：移动走抽象 moveVector（y=前后=forward，x=左右=strafe），不写 keyPresses 移动位
+                net.minecraft.world.phys.Vec2 mv = ((com.mockplayer.session.accessor.MockplayerClientInputAccessor)
+                        bot.getLocalPlayer().input).mockplayer$getMoveVector();
+                check("forward moveVector", mv.y > 0);
                 check("sneak keyPresses", bot.getLocalPlayer().input.keyPresses.shift());
                 // 记录假人初始服务端位置（移动端到端验证基线）
                 server.execute(() -> {
@@ -370,6 +380,654 @@ public final class TestRunner {
                 check("new primitives no-crash", true);
                 check("removeBot own owner", MockplayerApi.bots().removeBot(botName, "test") == RemoveResult.REMOVED);
                 check("removeBot not found", MockplayerApi.bots().removeBot(botName, "test") == RemoveResult.NOT_FOUND);
+                finishSuite();
+            }
+        }
+    }
+
+    // ===== api-full：全接口真实路径（补 api-smoke 未覆盖的 Bot/BotActions/BotContainer/BotManager 接口） =====
+
+    private static boolean afItemGiven;
+    private static boolean afStrafeMoved;
+    private static boolean afSwapped;
+    private static boolean afDropped;
+    private static boolean afDropIssued;
+    private static boolean afPlaced;
+    private static boolean afMined;
+    private static volatile boolean afOffhandHasItem;
+    private static volatile boolean afInvReduced;
+    private static volatile boolean afPlacedServer;
+    private static volatile boolean afMinedServer;
+    private static volatile int afListenerBreakCount;
+    private static BlockPos afPlacePos;
+    private static boolean afContainerChecked;
+    private static BlockPos afChestPos;
+
+    private static void runApiFull(Minecraft mc) {
+        MinecraftServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            fail("no singleplayer server");
+            finishSuite();
+            return;
+        }
+        switch (step) {
+            case 0 -> {
+                prepareBot(server);
+                if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
+                    // 注册事件监听（真实路径：mineBlock 应触发 onBreakBlock）
+                    MockplayerApi.listen(new com.mockplayer.api.event.BotListener() {
+                        @Override
+                        public void onBreakBlock(Bot b, BlockPos pos) {
+                            afListenerBreakCount++;
+                        }
+                    });
+                    check("createBot PLAYING", true);
+                    step = 1;
+                }
+            }
+            case 1 -> {
+                // 信息接口：UUID / 在线玩家（tab list 同步延迟，重试）/ 过滤实体 / getScreen 别名
+                check("getUUID non-null", bot.getUUID() != null);
+                if (!bot.getOnlinePlayers().isEmpty()) {
+                    check("getOnlinePlayers non-empty", true);
+                    check("getEntitiesNear pred (villager filter no-crash)", bot.getEntitiesNear(64, e -> e instanceof net.minecraft.world.entity.npc.villager.Villager) != null);
+                    check("getScreen alias getContainer", bot.getScreen().isEmpty() == bot.getContainer().isEmpty());
+                    step = 2;
+                } else if (++waitTicks > 200) {
+                    fail("getOnlinePlayers timeout");
+                    step = 2;
+                }
+            }
+            case 2 -> {
+                // setStrafe 横移：服务端 x/z 位置变化（真实移动，纯 strafe 无 forward）
+                if (!afStrafeMoved) {
+                    afStrafeMoved = true;
+                    bot.actions().setForward(0.0F);
+                    bot.actions().setStrafe(1.0F);
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            fakeMoveBaseX = sp.getX();
+                            fakeMoveBaseZ = sp.getZ();
+                        }
+                    });
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        fakeSx = sp.getX();
+                        fakeSz = sp.getZ();
+                    }
+                });
+                if (Math.abs(fakeSx - fakeMoveBaseX) > 0.3 || Math.abs(fakeSz - fakeMoveBaseZ) > 0.3) {
+                    check("setStrafe moved on server", true);
+                    bot.actions().stop();
+                    step = 3;
+                } else if (++waitTicks > 200) {
+                    fail("setStrafe movement timeout");
+                    bot.actions().stop();
+                    step = 3;
+                }
+            }
+            case 3 -> {
+                // swapHands：give 物品快捷栏0 → swapHands → 服务端副手有物品
+                if (!afItemGiven) {
+                    afItemGiven = true;
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            sp.getInventory().clearContent();
+                            sp.getInventory().setItem(0, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.OAK_PLANKS, 2));
+                            sp.getInventory().setSelectedSlot(0);
+                        }
+                    });
+                }
+                if (!afSwapped) {
+                    afSwapped = true;
+                    bot.actions().swapHands();
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        afOffhandHasItem = sp.getOffhandItem().is(net.minecraft.world.item.Items.OAK_PLANKS);
+                    }
+                });
+                if (afOffhandHasItem) {
+                    check("swapHands moved item to offhand (server)", true);
+                    step = 4;
+                } else if (++waitTicks > 200) {
+                    fail("swapHands timeout");
+                    step = 4;
+                }
+            }
+            case 4 -> {
+                // drop(slot, all)：重新给快捷栏0 物品（swapHands 后快捷栏空）→ drop 1 → 服务端数量减少
+                if (!afDropped) {
+                    afDropped = true;
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            sp.getInventory().clearContent();
+                            sp.getInventory().setItem(0, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.OAK_PLANKS, 3));
+                            sp.getInventory().setSelectedSlot(0);
+                        }
+                    });
+                }
+                if (!afDropIssued && bot.getLocalPlayer().getMainHandItem().is(net.minecraft.world.item.Items.OAK_PLANKS)) {
+                    afDropIssued = true;
+                    bot.actions().drop(0, false);
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            fakeMoveBaseX = sp.getInventory().getItem(0).getCount();
+                        }
+                    });
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        afInvReduced = sp.getInventory().getItem(0).getCount() < fakeMoveBaseX;
+                    }
+                });
+                if (afInvReduced) {
+                    check("drop reduced inventory (server)", true);
+                    step = 5;
+                } else if (++waitTicks > 200) {
+                    fail("drop timeout");
+                    step = 5;
+                }
+            }
+            case 5 -> {
+                // placeBlock：give 方块 → 假人放方块 → 服务端方块存在（placeBlock(pos,UP) 放 pos 上方）
+                if (afPlacePos == null) {
+                    afPlacePos = bot.getLocalPlayer().blockPosition().offset(2, 0, 0);
+                    server.execute(() -> {
+                        // 原版命令：清背包保证 give 落快捷栏0 + 放置位置清空
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            sp.getInventory().clearContent();
+                        }
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "give " + botName + " minecraft:dirt 1");
+                        if (sp != null) {
+                            System.out.println("[mocktest] diag giveAfter slot0=" + sp.getInventory().getItem(0)
+                                    + " dirtCount=" + sp.getInventory().countItem(net.minecraft.world.item.Items.DIRT));
+                        }
+                        server.getLevel(Level.OVERWORLD).setBlock(afPlacePos, Blocks.AIR.defaultBlockState(), 3);
+                    });
+                }
+                // 等假人位置同步 + 主手 dirt（give 命令正式发放同步）再放置
+                if (!afPlaced) {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null && !isAwaitingPosition(sp)
+                            && bot.getLocalPlayer().getMainHandItem().is(net.minecraft.world.item.Items.DIRT)) {
+                        afPlaced = true;
+                        bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(afPlacePos));
+                        bot.actions().placeBlock(afPlacePos, Direction.UP);
+                    }
+                }
+                server.execute(() -> {
+                    afPlacedServer = server.getLevel(Level.OVERWORLD).getBlockState(afPlacePos).is(Blocks.DIRT);
+                });
+                if (afPlacedServer) {
+                    check("placeBlock placed dirt (server)", true);
+                    step = 6;
+                } else if (++waitTicks > 400) {
+                    server.execute(() -> System.out.println("[mocktest] diag place pos="
+                            + server.getLevel(Level.OVERWORLD).getBlockState(afPlacePos)
+                            + " clientHand=" + bot.getLocalPlayer().getMainHandItem()));
+                    fail("placeBlock timeout");
+                    step = 6;
+                }
+            }
+            case 6 -> {
+                // mineBlock：复用原版挖掘（START+STOP，服务端 delayedDestroy 推进破坏）——只调一次，等服务端破坏
+                if (!afMined) {
+                    afMined = true;
+                    bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(afPlacePos));
+                    bot.actions().mineBlock(afPlacePos);
+                }
+                server.execute(() -> {
+                    afMinedServer = server.getLevel(Level.OVERWORLD).getBlockState(afPlacePos).isAir();
+                });
+                if (afMinedServer) {
+                    check("mineBlock broke dirt (server)", true);
+                    if (afListenerBreakCount > 0) {
+                        check("BotListener onBreakBlock fired", true);
+                        step = 7;
+                    }
+                    // 服务端已挖掉：等假人 level 同步 air → tickMining 的 continueDestroyBlock 返回 false → fire 事件
+                } else if (++waitTicks > 400) {
+                    server.execute(() -> System.out.println("[mocktest] diag mine server="
+                            + server.getLevel(Level.OVERWORLD).getBlockState(afPlacePos)
+                            + " client=" + bot.getBlockState(afPlacePos)
+                            + " loaded=" + bot.isBlockLoaded(afPlacePos)));
+                    fail("mineBlock timeout");
+                    step = 7;
+                }
+            }
+            case 7 -> {
+                // useItem：使用物品（记录事件）
+                bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND);
+                check("useItem issued", true);
+                step = 8;
+            }
+            case 8 -> {
+                // 容器：打开箱子 → getTitle/getSize/setSlot（服务端验证 setSlot）
+                if (afChestPos == null) {
+                    afChestPos = bot.getLocalPlayer().blockPosition().offset(1, 0, 0);
+                    BlockPos p = afChestPos;
+                    server.execute(() -> server.getLevel(Level.OVERWORLD).setBlock(p, Blocks.CHEST.defaultBlockState(), 3));
+                }
+                if (!afContainerChecked) {
+                    // 服务端箱子存在 + 假人位置同步（假人客户端 level 可能未同步该区块，useItemOn 由服务端处理）
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    boolean serverChest = server.getLevel(Level.OVERWORLD).getBlockState(afChestPos).is(Blocks.CHEST);
+                    if (sp != null && !isAwaitingPosition(sp) && serverChest) {
+                        afContainerChecked = true;
+                        bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(afChestPos));
+                        net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
+                                net.minecraft.world.phys.Vec3.atCenterOf(afChestPos), Direction.WEST, afChestPos, false);
+                        bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
+                    }
+                }
+                Optional<BotContainer> container = bot.getContainer();
+                if (container.isPresent()) {
+                    check("getTitle non-empty", !container.get().getTitle().getString().isEmpty());
+                    check("getSize > 0", container.get().getSize() > 0);
+                    // setSlot：客户端本地乐观写（服务端不参与 setSlot 语义，验证客户端容器会话可写）
+                    container.get().setSlot(0, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STONE));
+                    check("setSlot slot0 stone (client)", container.get().getSlot(0).is(net.minecraft.world.item.Items.STONE));
+                    step = 9;
+                } else if (++waitTicks > 200) {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    net.minecraft.server.level.ServerLevel lv = server.getLevel(Level.OVERWORLD);
+                    System.out.println("[mocktest] diag chest server=" + lv.getBlockState(afChestPos)
+                            + " client=" + bot.getBlockState(afChestPos)
+                            + " dirtPos=" + lv.getBlockState(afPlacePos)
+                            + " awaiting=" + (sp != null && isAwaitingPosition(sp))
+                            + " serverMenu=" + (sp != null ? sp.containerMenu : "null"));
+                    fail("container open timeout");
+                    step = 9;
+                }
+            }
+            case 9 -> {
+                // BotManager / MockplayerApi：getBot/getBots/getBots(owner)/allBots
+                check("getBot found", MockplayerApi.bots().getBot(botName).isPresent());
+                check("getBots contains", MockplayerApi.bots().getBots().stream().anyMatch(b -> botName.equals(b.getName())));
+                check("getBots(owner=test) contains", MockplayerApi.bots().getBots("test").stream().anyMatch(b -> botName.equals(b.getName())));
+                check("allBots contains", MockplayerApi.allBots().stream().anyMatch(b -> botName.equals(b.getName())));
+                // removeBot 幂等
+                check("removeBot owner ok", MockplayerApi.bots().removeBot(botName, "test") == RemoveResult.REMOVED);
+                check("removeBot not found", MockplayerApi.bots().removeBot(botName, "test") == RemoveResult.NOT_FOUND);
+                finishSuite();
+            }
+        }
+    }
+
+    // ===== use-items：长按使用物品真实路径（食物自动吃完/盾牌格挡/弓蓄力放箭/雪球投掷，服务端强断言） =====
+
+    private static boolean uiBreadGiven;
+    private static boolean uiBreadUsed;
+    private static volatile boolean uiBreadEaten;
+    private static volatile boolean uiBreadVisibleToMain;
+    private static boolean uiBreadVisibleChecked;
+    private static volatile boolean uiBreadServer;
+    private static int uiBreadBaseFood = 20;
+    private static boolean uiShieldGiven;
+    private static boolean uiShieldUsed;
+    private static boolean uiShieldReleased;
+    private static volatile boolean uiShieldUsing;
+    private static volatile boolean uiShieldVisibleToMain;
+    private static volatile boolean uiShieldServer;
+    private static volatile boolean uiShieldReleasedServer;
+    private static boolean uiShieldBlockedChecked;
+    private static int uiShieldHoldTicks;
+    private static boolean uiBowGiven;
+    private static boolean uiBowUsed;
+    private static boolean uiBowReleased;
+    private static volatile boolean uiBowUsing;
+    private static volatile boolean uiBowVisibleToMain;
+    private static volatile boolean uiBowServer;
+    private static volatile boolean uiArrowServer;
+    private static boolean uiSnowGiven;
+    private static boolean uiSnowUsed;
+    private static volatile boolean uiSnowballServer;
+    private static volatile boolean uiSnowballVisibleToMain;
+    private static volatile boolean uiSnowServer;
+    private static boolean uiOffhandGiven;
+    private static boolean uiOffhandUsed;
+    private static volatile boolean uiOffhandUsing;
+
+    private static void runUseItems(Minecraft mc) {
+        MinecraftServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            fail("no singleplayer server");
+            finishSuite();
+            return;
+        }
+        switch (step) {
+            case 0 -> {
+                prepareBot(server);
+                if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
+                    check("createBot PLAYING", true);
+                    step = 1;
+                }
+            }
+            // ===== 食物：先饥饿（服务端设 hunger=2，否则满饱食度吃面包不变）→ useItem 面包 → 服务端自动吃完（32 tick）→ 饥饿值上升 + 面包消耗 =====
+            case 1 -> {
+                if (!uiBreadGiven) {
+                    uiBreadGiven = true;
+                    server.execute(() -> {
+                        // 原版命令先清背包（保证 give 落主手）+ 让假人饥饿（否则满饱食度吃面包无变化）
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            sp.getInventory().clearContent();
+                            sp.getFoodData().setFoodLevel(2);
+                            sp.getFoodData().setSaturation(0.0F);
+                            uiBreadBaseFood = sp.getFoodData().getFoodLevel();
+                        }
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " weapon.mainhand with minecraft:bread");
+                        bot.getLocalPlayer().getInventory().setSelectedSlot(0);
+                    });
+                }
+                // 服务端强断言：主手拿到面包
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiBreadServer = sp != null && sp.getMainHandItem().is(net.minecraft.world.item.Items.BREAD);
+                });
+                if (uiBreadServer) {
+                    check("server holds bread", true);
+                    step = 2;
+                } else if (++waitTicks > 200) {
+                    uiBreadGiven = false;
+                    waitTicks = 0;
+                }
+            }
+            case 2 -> {
+                if (!uiBreadUsed) {
+                    uiBreadUsed = true;
+                    bot.getLocalPlayer().getInventory().setSelectedSlot(0);
+                    bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND);
+                    check("useItem bread issued", true);
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        // 主玩家视角：主玩家 level 的假人实体吃面包（EAT 使用动画对主玩家可见）
+                        uiBreadVisibleToMain = mc.level.getEntitiesOfClass(net.minecraft.world.entity.player.Player.class,
+                                        new net.minecraft.world.phys.AABB(sp.position().add(-32, -32, -32), sp.position().add(32, 32, 32)))
+                                .stream().anyMatch(p -> p.getName().getString().equals(botName)
+                                        && p.isUsingItem() && p.getUseItem().is(net.minecraft.world.item.Items.BREAD));
+                        // 强断言：吃完（面包消耗）+ 饥饿值上升（比吃前 base 高）
+                        uiBreadEaten = !sp.isUsingItem()
+                                && sp.getInventory().countItem(net.minecraft.world.item.Items.BREAD) == 0
+                                && sp.getFoodData().getFoodLevel() > uiBreadBaseFood;
+                    }
+                });
+                if (uiBreadVisibleToMain && !uiBreadVisibleChecked) {
+                    uiBreadVisibleChecked = true;
+                    check("bread eat action visible to main player", true);
+                }
+                if (uiBreadEaten) {
+                    check("bread auto-eaten + hunger (server)", true);
+                    step = 3;
+                } else if (++waitTicks > 200) {
+                    fail("bread not eaten timeout (food=" + uiBreadBaseFood + ")");
+                    step = 3;
+                }
+            }
+            // ===== 盾牌：useItem 格挡（isUsingItem 持续多 tick）→ releaseUsingItem 解除 =====
+            case 3 -> {
+                if (!uiShieldGiven) {
+                    uiShieldGiven = true;
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            sp.getInventory().clearContent();
+                        }
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " weapon.mainhand with minecraft:shield");
+                        bot.getLocalPlayer().getInventory().setSelectedSlot(0);
+                    });
+                }
+                // 服务端强断言：主手拿到盾
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiShieldServer = sp != null && sp.getMainHandItem().is(net.minecraft.world.item.Items.SHIELD);
+                });
+                if (uiShieldServer) {
+                    check("server holds shield", true);
+                    step = 4;
+                } else if (++waitTicks > 200) {
+                    uiShieldGiven = false;
+                    waitTicks = 0;
+                }
+            }
+            case 4 -> {
+                if (!uiShieldUsed) {
+                    uiShieldUsed = true;
+                    bot.getLocalPlayer().getInventory().setSelectedSlot(0);
+                    bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND);
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiShieldUsing = sp != null && sp.isUsingItem() && sp.getUseItem().is(net.minecraft.world.item.Items.SHIELD);
+                    // 主玩家视角：主玩家 level 的假人实体使用状态（假人动作对主玩家可见——服务端广播使用标志）
+                    if (sp != null) {
+                        uiShieldVisibleToMain = mc.level.getEntitiesOfClass(net.minecraft.world.entity.player.Player.class,
+                                        new net.minecraft.world.phys.AABB(sp.position().add(-32, -32, -32), sp.position().add(32, 32, 32)))
+                                .stream().anyMatch(p -> p.getName().getString().equals(botName)
+                                        && p.isUsingItem() && p.getUseItem().is(net.minecraft.world.item.Items.SHIELD));
+                    }
+                });
+                if (uiShieldUsing) {
+                    // 强断言：盾牌举盾持续（isUsingItem 保持 10+ tick）+ 主玩家视角能看到假人举盾动作
+                    if (!uiShieldBlockedChecked) {
+                        uiShieldBlockedChecked = true;
+                        check("shield blocking (server isUsingItem)", true);
+                        check("shield action visible to main player", uiShieldVisibleToMain);
+                    }
+                    if (++uiShieldHoldTicks >= 10) {
+                        check("shield held 10+ ticks (sustained)", true);
+                        step = 5;
+                    }
+                } else if (++waitTicks > 200) {
+                    fail("shield not blocking timeout");
+                    step = 5;
+                }
+            }
+            case 5 -> {
+                if (!uiShieldReleased) {
+                    uiShieldReleased = true;
+                    bot.actions().releaseUsingItem();
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiShieldReleasedServer = sp != null && !sp.isUsingItem();
+                });
+                if (uiShieldReleasedServer) {
+                    check("shield released (server)", true);
+                    step = 6;
+                } else if (++waitTicks > 200) {
+                    fail("shield release timeout");
+                    step = 6;
+                }
+            }
+            // ===== 弓：useItem 蓄力（isUsingItem）→ releaseUsingItem 放箭（服务端箭实体） =====
+            case 6 -> {
+                if (!uiBowGiven) {
+                    uiBowGiven = true;
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            sp.getInventory().clearContent();
+                        }
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " weapon.mainhand with minecraft:bow");
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "give " + botName + " minecraft:arrow 64");
+                        if (sp != null) {
+                            sp.getInventory().setSelectedSlot(0);
+                        }
+                    });
+                    bot.getLocalPlayer().getInventory().setSelectedSlot(0);
+                }
+                // 服务端强断言：主手确实拿到弓（give 竞态/selected 被覆盖都逃不过服务端验证）
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiBowServer = sp != null && sp.getMainHandItem().is(net.minecraft.world.item.Items.BOW);
+                });
+                if (uiBowServer) {
+                    check("server holds bow", true);
+                    step = 7;
+                } else if (++waitTicks > 200) {
+                    uiBowGiven = false; // give 竞态 → 重试
+                    waitTicks = 0;
+                }
+            }
+            case 7 -> {
+                if (!uiBowUsed) {
+                    uiBowUsed = true;
+                    bot.getLocalPlayer().getInventory().setSelectedSlot(0);
+                    bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND);
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiBowUsing = sp != null && sp.isUsingItem() && sp.getUseItem().is(net.minecraft.world.item.Items.BOW);
+                    // 主玩家视角：主玩家 level 的假人实体拉弓（BOW 拉弦动画对主玩家可见）
+                    if (sp != null) {
+                        uiBowVisibleToMain = mc.level.getEntitiesOfClass(net.minecraft.world.entity.player.Player.class,
+                                        new net.minecraft.world.phys.AABB(sp.position().add(-32, -32, -32), sp.position().add(32, 32, 32)))
+                                .stream().anyMatch(p -> p.getName().getString().equals(botName)
+                                        && p.isUsingItem() && p.getUseItem().is(net.minecraft.world.item.Items.BOW));
+                    }
+                });
+                if (uiBowUsing) {
+                    check("bow charging (server isUsingItem)", true);
+                    check("bow pull action visible to main player", uiBowVisibleToMain);
+                    step = 8;
+                } else if (++waitTicks > 200) {
+                    fail("bow not charging timeout");
+                    step = 8;
+                }
+            }
+            case 8 -> {
+                if (!uiBowReleased) {
+                    uiBowReleased = true;
+                    bot.actions().releaseUsingItem();
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        uiArrowServer = !sp.level().getEntitiesOfClass(
+                                net.minecraft.world.entity.projectile.arrow.AbstractArrow.class,
+                                new net.minecraft.world.phys.AABB(sp.position().add(-16, -8, -16), sp.position().add(16, 8, 16))).isEmpty();
+                    }
+                });
+                if (uiArrowServer) {
+                    check("bow released arrow (server)", true);
+                    step = 9;
+                } else if (++waitTicks > 200) {
+                    fail("bow no arrow timeout");
+                    step = 9;
+                }
+            }
+            // ===== 雪球：useItem 直接投掷（服务端雪球实体） =====
+            case 9 -> {
+                if (!uiSnowGiven) {
+                    uiSnowGiven = true;
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            sp.getInventory().clearContent();
+                        }
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " weapon.mainhand with minecraft:snowball");
+                        bot.getLocalPlayer().getInventory().setSelectedSlot(0);
+                    });
+                }
+                // 服务端强断言：主手拿到雪球
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiSnowServer = sp != null && sp.getMainHandItem().is(net.minecraft.world.item.Items.SNOWBALL);
+                });
+                if (uiSnowServer) {
+                    check("server holds snowball", true);
+                    step = 10;
+                } else if (++waitTicks > 200) {
+                    uiSnowGiven = false;
+                    waitTicks = 0;
+                }
+            }
+            case 10 -> {
+                if (!uiSnowUsed) {
+                    uiSnowUsed = true;
+                    bot.getLocalPlayer().getInventory().setSelectedSlot(0);
+                    bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND);
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        // 服务端 + 主玩家视角：丢雪球对主玩家可见（雪球实体出现在主玩家 level）
+                        uiSnowballServer = !sp.level().getEntitiesOfClass(
+                                net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball.class,
+                                new net.minecraft.world.phys.AABB(sp.position().add(-16, -8, -16), sp.position().add(16, 8, 16))).isEmpty();
+                        uiSnowballVisibleToMain = !mc.level.getEntitiesOfClass(
+                                net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball.class,
+                                new net.minecraft.world.phys.AABB(sp.position().add(-16, -8, -16), sp.position().add(16, 8, 16))).isEmpty();
+                    }
+                });
+                if (uiSnowballServer) {
+                    check("snowball thrown (server)", true);
+                    check("snowball throw visible to main player", uiSnowballVisibleToMain);
+                    step = 11;
+                } else if (++waitTicks > 200) {
+                    fail("snowball not thrown timeout");
+                    step = 11;
+                }
+            }
+            // ===== 副手使用：副手持盾 useItem(OFF_HAND) → 服务端格挡（isUsingItem + offhand 盾） =====
+            case 11 -> {
+                if (!uiOffhandGiven) {
+                    uiOffhandGiven = true;
+                    server.execute(() -> {
+                        // 原版命令 item replace 给副手盾（setItem 会被假人客户端背包状态覆盖）
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " weapon.offhand with minecraft:shield");
+                    });
+                }
+                if (bot.getLocalPlayer().getOffhandItem().is(net.minecraft.world.item.Items.SHIELD)) {
+                    check("client holds offhand shield", true);
+                    step = 12;
+                } else if (++waitTicks > 200) {
+                    fail("offhand shield not given");
+                    step = 12;
+                }
+            }
+            case 12 -> {
+                if (!uiOffhandUsed) {
+                    uiOffhandUsed = true;
+                    bot.actions().useItem(net.minecraft.world.InteractionHand.OFF_HAND);
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiOffhandUsing = sp != null && sp.isUsingItem() && sp.getUseItem().is(net.minecraft.world.item.Items.SHIELD)
+                            && sp.getOffhandItem().is(net.minecraft.world.item.Items.SHIELD);
+                });
+                if (uiOffhandUsing) {
+                    check("offhand shield blocking (server)", true);
+                    bot.actions().releaseUsingItem();
+                    check("offhand released", true);
+                    step = 13;
+                } else if (++waitTicks > 200) {
+                    fail("offhand shield not blocking timeout");
+                    step = 13;
+                }
+            }
+            case 13 -> {
+                MockplayerApi.bots().removeBot(botName, "test");
                 finishSuite();
             }
         }
@@ -545,9 +1203,12 @@ public final class TestRunner {
 
     private static boolean stabSummoned;
     private static boolean stabSpearGiven;
+    private static volatile boolean stabSpearServer;
     private static boolean stabAttacked;
     private static boolean sprintSummoned;
+    private static boolean sprintCleared;
     private static boolean sprintSpearGiven;
+    private static volatile boolean sprintSpearServer;
     private static boolean sprintThrustIssued;
     private static volatile boolean combatLastDamageIsSpear;
     private static volatile float combatServerScale = -1;
@@ -570,8 +1231,14 @@ public final class TestRunner {
 
     /** 服务端给假人铁矛 + 客户端选快捷栏 0 */
     private static void giveSpear(MinecraftServer server) {
+        // 原版 item replace 精确替换主手槽为矛（不依赖 give 落位；selected 固定 0 防切换走）
         server.execute(() -> {
-            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "give " + botName + " minecraft:iron_spear 1");
+            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                    "item replace entity " + botName + " weapon.mainhand with minecraft:iron_spear");
+            net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+            if (sp != null) {
+                sp.getInventory().setSelectedSlot(0);
+            }
         });
         bot.getLocalPlayer().getInventory().setSelectedSlot(0);
     }
@@ -640,8 +1307,13 @@ public final class TestRunner {
                 step = 4;
             }
             case 4 -> {
-                if (bot.getLocalPlayer().getMainHandItem().is(net.minecraft.world.item.Items.IRON_SPEAR)) {
-                    check("client holds spear", true);
+                // 服务端强断言：主手确实拿到矛（give 竞态/客户端 selected 同步慢都逃不过服务端验证）
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    stabSpearServer = sp != null && sp.getMainHandItem().is(net.minecraft.world.item.Items.IRON_SPEAR);
+                });
+                if (stabSpearServer) {
+                    check("server holds spear", true);
                     step = 5;
                 } else if (++waitTicks > 200) {
                     stabSpearGiven = false; // give 竞态丢失 → 重试
@@ -664,6 +1336,7 @@ public final class TestRunner {
                             .filter(e -> e instanceof net.minecraft.world.entity.monster.zombie.Zombie)
                             .findFirst().orElse(null);
                     if (target != null) {
+                        bot.getLocalPlayer().getInventory().setSelectedSlot(0); // 固定主手（item replace 后 selected 可能被切换走）
                         bot.actions().lookAt(target);
                         bot.actions().stab();
                         stabAttacked = true;
@@ -699,7 +1372,27 @@ public final class TestRunner {
                 }
             }
             case 1 -> {
-                // Husk 前 6 格（留冲刺距离；冲刺时相对速度 ~5.6 >= KineticWeapon 条件 4.6）
+                // 清假人周围方块（连跑时 containers-all 残留方块会卡冲刺路径），再 summon Husk 前 6 格
+                if (!sprintCleared) {
+                    sprintCleared = true;
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            net.minecraft.server.level.ServerLevel level = server.getLevel(Level.OVERWORLD);
+                            BlockPos p = sp.blockPosition();
+                            for (int dx = -8; dx <= 8; dx++) {
+                                for (int dz = -8; dz <= 8; dz++) {
+                                    for (int dy = 0; dy <= 2; dy++) {
+                                        BlockPos q = p.offset(dx, dy, dz);
+                                        if (!level.getBlockState(q).isAir()) {
+                                            level.setBlock(q, Blocks.AIR.defaultBlockState(), 3);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
                 if (!sprintSummoned) {
                     sprintSummoned = true;
                     summonHusk(server, 6.0);
@@ -720,8 +1413,13 @@ public final class TestRunner {
                 step = 4;
             }
             case 4 -> {
-                if (bot.getLocalPlayer().getMainHandItem().is(net.minecraft.world.item.Items.IRON_SPEAR)) {
-                    check("client holds spear", true);
+                // 服务端强断言：主手确实拿到矛
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    sprintSpearServer = sp != null && sp.getMainHandItem().is(net.minecraft.world.item.Items.IRON_SPEAR);
+                });
+                if (sprintSpearServer) {
+                    check("server holds spear", true);
                     step = 5;
                 } else if (++waitTicks > 200) {
                     sprintSpearGiven = false; // give 竞态丢失 → 重试
@@ -738,6 +1436,7 @@ public final class TestRunner {
                     if (target != null) {
                         bot.actions().lookAt(target);
                     }
+                    bot.getLocalPlayer().getInventory().setSelectedSlot(0); // 固定主手矛（防切换走）
                     bot.actions().setForward(1.0F);
                     bot.actions().setSprint(true);
                     bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND);
@@ -769,6 +1468,17 @@ public final class TestRunner {
                     waitTicks = 0;
                     step = 7;
                 } else if (++waitTicks > 300) {
+                    // 诊断：超时打印假人移动/疾跑状态
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            System.out.println("[mocktest] diag sprint sp=" + sp.position()
+                                    + " onGround=" + sp.onGround()
+                                    + " sprinting=" + sp.isSprinting()
+                                    + " base=" + fakeMoveBaseX + "," + fakeMoveBaseZ
+                                    + " below=" + sp.level().getBlockState(sp.blockPosition().below()).getBlock());
+                        }
+                    });
                     fail("sprint movement timeout (fake didn't move)");
                     step = 7;
                 }
@@ -1152,7 +1862,8 @@ public final class TestRunner {
 
     private static BlockPos craftPos;
     private static boolean craftPlanksGiven;
-    private static boolean craftClicked;
+    private static boolean craftClickedPart1;
+    private static volatile boolean craftResultReady;
     private static volatile int craftSticksCount;
 
     private static void runCrafting(Minecraft mc) {
@@ -1223,20 +1934,35 @@ public final class TestRunner {
                 }
             }
             case 7 -> {
-                if (!craftClicked) {
-                    craftClicked = true;
+                if (!craftClickedPart1) {
+                    craftClickedPart1 = true;
                     // give 2 木板叠在快捷栏0 = CraftingMenu 槽37（0 结果 / 1-9 合成格 / 10-36 主背包 / 37-45 快捷栏）
                     // click(37) 一次拿走 2 个，PICKUP 放合成格每次 1 个；合成格1（左上）+4（左中）= 竖排 2 木板 → 4 木棍
                     bot.getContainer().ifPresent(c -> {
                         c.click(37, 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 左键拿 2 木板→鼠标
                         c.click(1, 1, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 右键放 1→合成格1
                         c.click(4, 1, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 右键放 1→合成格4（竖排）
-                        c.click(0, 0, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 左键取 4 木棍→鼠标
-                        c.click(37, 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 木棍放回快捷栏0
                     });
                     check("crafting clicks issued", true);
                 }
-                step = 8;
+                // 等结果槽0 出现 STICK（放木板后服务端合成结果），再取——真实玩家会等结果出现才取
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null && sp.containerMenu != null
+                            && sp.containerMenu.getSlot(0).getItem().is(net.minecraft.world.item.Items.STICK)) {
+                        craftResultReady = true;
+                    }
+                });
+                if (craftResultReady) {
+                    bot.getContainer().ifPresent(c -> {
+                        c.click(0, 0, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 左键取 4 木棍→鼠标
+                        c.click(37, 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 木棍放回快捷栏0
+                    });
+                    step = 8;
+                } else if (++waitTicks > 200) {
+                    fail("crafting result timeout (no stick in result)");
+                    step = 9;
+                }
             }
             case 8 -> {
                 server.execute(() -> {
@@ -1710,6 +2436,7 @@ public final class TestRunner {
         stabSpearGiven = false;
         stabAttacked = false;
         sprintSummoned = false;
+        sprintCleared = false;
         sprintSpearGiven = false;
         sprintThrustIssued = false;
         combatLastDamageIsSpear = false;
@@ -1725,7 +2452,8 @@ public final class TestRunner {
         sprintUsingOk = false;
         craftPos = null;
         craftPlanksGiven = false;
-        craftClicked = false;
+        craftClickedPart1 = false;
+        craftResultReady = false;
         craftSticksCount = 0;
         furnacePos = null;
         furnaceGiven = false;

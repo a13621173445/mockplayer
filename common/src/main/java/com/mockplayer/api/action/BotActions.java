@@ -168,6 +168,12 @@ public interface BotActions {
     void useItem(InteractionHand hand);
 
     /**
+     * 松开右键（结束使用物品）。长按场景：弓蓄满/提前放箭、投掷物抛出、盾牌解除格挡、
+     * 吃食物提前取消——原版 releaseUsingItem 链路（发 RELEASE_USE_ITEM 包 + player.releaseUsingItem）。
+     */
+    void releaseUsingItem();
+
+    /**
      * 右键交互方块（开箱/点门/放方块前的位置）。
      *
      * @param pos  方块位置

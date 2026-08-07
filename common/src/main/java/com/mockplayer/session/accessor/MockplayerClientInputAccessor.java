@@ -18,4 +18,7 @@ public interface MockplayerClientInputAccessor {
 
     @Accessor("moveVector")
     void mockplayer$setMoveVector(Vec2 moveVector);
+
+    @Accessor("moveVector")
+    Vec2 mockplayer$getMoveVector();
 }

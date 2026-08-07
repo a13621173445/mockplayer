@@ -40,6 +40,7 @@ public class BotActionsImpl implements BotActions {
     private boolean jumping;
     private Entity sustainedAttackTarget;
     private Entity sustainedUseTarget;
+    private BlockPos miningPos;
 
     public BotActionsImpl(BotImpl bot) {
         this.bot = bot;
@@ -146,20 +147,24 @@ public class BotActionsImpl implements BotActions {
         return this;
     }
 
-    /** 内部：每 tick 应用持续输入（BotImpl.tick 调用）。
-     *  26.2 输入模型：LocalPlayer.applyInput 用 input.getMoveVector()（moveVector）算移动（xxa/zza），
-     *  keyPresses 只管 sprint/jump。两个都要写——只写 keyPresses 假人不会移动（实测 bug）。 */
+    /** 内部：每 tick 应用持续输入 + 持续挖掘（BotImpl.tick 调用）。
+     *  26.2 输入模型：移动（xxa/zza）由 LocalPlayer.applyInput 从 input.getMoveVector() 读——
+     *  Bot 用抽象 moveVector（Vec2 左右/前后）驱动，不写 keyPresses 的移动按键位（解耦：setForward 是"前进"动作，
+     *  不是"按 W"）。jump/shift/sprint 原版从 keyPresses 位读（applyInput 的 jump / isSprintingDown / 潜行 shift），
+     *  Bot 抽象动作驱动这三个输入位。 */
     void applyInput() {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null) {
             return;
         }
-        player.input.keyPresses = new net.minecraft.world.entity.player.Input(
-                this.forward > 0, this.forward < 0, this.strafe < 0, this.strafe > 0,
-                this.jumping, this.sneaking, this.sprinting);
-        // moveVector (x=左右, y=前后) 是移动输入，LocalPlayer.applyInput 用它设 xxa/zza
+        // 移动：只用抽象 moveVector（x=左右=strafe, y=前后=forward），原版 applyInput 从它设 xxa/zza
         ((com.mockplayer.session.accessor.MockplayerClientInputAccessor) player.input)
                 .mockplayer$setMoveVector(new Vec2(this.strafe, this.forward));
+        // jump/shift/sprint：原版从 keyPresses 位读，Bot 抽象动作驱动输入位（不涉及移动按键）
+        player.input.keyPresses = new net.minecraft.world.entity.player.Input(
+                false, false, false, false, this.jumping, this.sneaking, this.sprinting);
+        // 持续挖掘（原版按住左键：每 tick continueDestroyBlock）
+        this.tickMining();
         // 持续攻击/使用：目标死亡/无效则自动停止
         if (this.sustainedAttackTarget != null) {
             if (this.sustainedAttackTarget.isAlive()) {
@@ -237,7 +242,36 @@ public class BotActionsImpl implements BotActions {
         if (player == null || pos == null || this.bot.getGameMode() == null) {
             return;
         }
+        // 复用原版挖掘驱动（Minecraft.continueAttack）：
+        // startDestroyBlock（按住第一帧，发 START_DESTROY_BLOCK）→ 之后由 tickMining 每 tick
+        // continueDestroyBlock（原版按住期间每 tick 持续发 START + 本地裂纹）→ 服务端进度推进到 1.0
+        // 破坏后假人 level 方块变 air → continueDestroyBlock 返回 false → stopDestroyBlock（松开）。
+        // MultiPlayerGameMode 内部 this.minecraft.player/level 已被 Mixin @Redirect 换成假人（隔离）。
+        this.miningPos = pos;
         this.bot.getGameMode().startDestroyBlock(pos, Direction.UP);
+        player.swing(InteractionHand.MAIN_HAND);
+    }
+
+    /** 内部：每 tick 持续挖掘（BotImpl.tick 调用）——复用原版 continueAttack 逐行逻辑：
+     *  continueDestroyBlock（持续挖）+ addBreakingBlockEffect（裂纹）+ swing（持续挥动），服务端挖掉自动松开。 */
+    void tickMining() {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null || this.miningPos == null || this.bot.getGameMode() == null) {
+            return;
+        }
+        BlockPos pos = this.miningPos;
+        // 原版 Minecraft.continueAttack：continueDestroyBlock → addBreakingBlockEffect（裂纹）→ swing（挥动）
+        if (this.bot.getGameMode().continueDestroyBlock(pos, Direction.UP)) {
+            if (player.level() instanceof net.minecraft.client.multiplayer.ClientLevel cl) {
+                cl.addBreakingBlockEffect(pos, Direction.UP);
+            }
+            player.swing(InteractionHand.MAIN_HAND);
+        } else {
+            // 方块已被挖掉（假人 level 该位置变 air → continueDestroyBlock 返回 false）：松开 + 触发事件
+            this.bot.getGameMode().stopDestroyBlock();
+            this.miningPos = null;
+            this.bot.fireOnBreakBlock(pos);
+        }
     }
 
     @Override
@@ -246,8 +280,20 @@ public class BotActionsImpl implements BotActions {
         if (player == null || this.bot.getGameMode() == null) {
             return;
         }
+        // 原版右键使用物品不挥动（swing 是左键攻击/挖掘的动作）：itemStack.use → player.startUsingItem（举起使用的动画）
         this.bot.getGameMode().useItem(player, hand);
         this.bot.fireOnUseItem(hand, player.getItemInHand(hand));
+    }
+
+    @Override
+    public void releaseUsingItem() {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null || this.bot.getGameMode() == null) {
+            return;
+        }
+        // 复用原版 MultiPlayerGameMode.releaseUsingItem：发 RELEASE_USE_ITEM 包 + player.releaseUsingItem
+        // （服务端触发弓放箭/投掷物抛出/盾牌解除格挡/食物提前取消）
+        this.bot.getGameMode().releaseUsingItem(player);
     }
 
     @Override

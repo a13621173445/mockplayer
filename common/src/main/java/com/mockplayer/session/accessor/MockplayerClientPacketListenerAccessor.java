@@ -59,6 +59,10 @@ public interface MockplayerClientPacketListenerAccessor {
     @Accessor("registryAccess")
     net.minecraft.core.RegistryAccess.Frozen mockplayer$getRegistryAccess();
 
+    /** 玩家信息表（tab list）——Bot.getOnlinePlayers() 读它，假人必须像原版一样填充 */
+    @Accessor("playerInfoMap")
+    java.util.Map<java.util.UUID, net.minecraft.client.multiplayer.PlayerInfo> mockplayer$getPlayerInfoMap();
+
     /**
      * 标记客户端已加载完成。LocalPlayer.tick() 开头检查 hasClientLoaded()，
      * 假人必须调用 setClientLoaded(true)，否则 fakePlayer.tick() 里的物理（super.tick）不执行。
