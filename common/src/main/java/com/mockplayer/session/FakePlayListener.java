@@ -249,6 +249,25 @@ public class FakePlayListener extends ClientPacketListener {
     }
 
     /**
+     * 伤害事件（含 DamageSource）：假人被实体攻击时触发 onEntityAttacked（onDamage 在 handleSetHealth 已触发）。
+     */
+    @Override
+    public void handleDamageEvent(net.minecraft.network.protocol.game.ClientboundDamageEventPacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
+        try {
+            if (this.fakePlayer != null && packet.entityId() == this.fakePlayer.getId()) {
+                net.minecraft.world.damagesource.DamageSource source = packet.getSource(this.fakePlayer.level());
+                if (source.getEntity() != null) {
+                    fire(b -> b.fireOnEntityAttacked(source, 0.0F));
+                }
+            }
+        } catch (Exception e) {
+            FakeSession.LOG.warn("[{}] handleDamageEvent 异常: {}", this.session.getName(), e.toString());
+        }
+        super.handleDamageEvent(packet);
+    }
+
+    /**
      * 经验：写到假人自己的 player。
      */
     @Override

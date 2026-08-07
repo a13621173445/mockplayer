@@ -311,8 +311,9 @@ public class BotActionsImpl implements BotActions {
 
     @Override
     public void placeBlock(BlockPos pos, Direction side) {
-        // 放置方块 = 手持方块对着 pos 的 side 面 useItemOn；独立语义原语，事件复用 onInteractBlock
+        // 放置方块 = 手持方块对着 pos 的 side 面 useItemOn；独立语义原语
         this.useItemOn(pos, side);
+        this.bot.fireOnPlaceBlock(pos);
     }
 
     @Override

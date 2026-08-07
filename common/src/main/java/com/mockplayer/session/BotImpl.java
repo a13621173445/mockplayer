@@ -236,12 +236,20 @@ public class BotImpl implements Bot {
         this.events.fire(this, l -> l.onAttackEntity(this, target));
     }
 
+    void fireOnEntityAttacked(net.minecraft.world.damagesource.DamageSource source, float amount) {
+        this.events.fire(this, l -> l.onEntityAttacked(this, source, amount));
+    }
+
     void fireOnInteractBlock(BlockPos pos, net.minecraft.core.Direction side) {
         this.events.fire(this, l -> l.onInteractBlock(this, pos, side));
     }
 
     void fireOnBreakBlock(BlockPos pos) {
         this.events.fire(this, l -> l.onBreakBlock(this, pos));
+    }
+
+    void fireOnPlaceBlock(BlockPos pos) {
+        this.events.fire(this, l -> l.onPlaceBlock(this, pos));
     }
 
     void fireOnUseItem(net.minecraft.world.InteractionHand hand, net.minecraft.world.item.ItemStack stack) {
