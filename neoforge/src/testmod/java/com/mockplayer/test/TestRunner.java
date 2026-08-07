@@ -1917,10 +1917,13 @@ public final class TestRunner {
                                         sp.getX(), sp.getY(), sp.getZ()));
                     }
                 }
+                bot.actions().setForward(0.1F); // 假人微动走过去拾取（掉落物可能在半格位置/浮空）
                 if (leCounts.getOrDefault("onPickupItem", 0) >= 1) {
+                    bot.actions().setForward(0);
                     check("onPickupItem", true);
                     step = 13;
                 } else if (++lePickupWait > 200) {
+                    bot.actions().setForward(0);
                     fail("onPickupItem timeout");
                     step = 13;
                 }
