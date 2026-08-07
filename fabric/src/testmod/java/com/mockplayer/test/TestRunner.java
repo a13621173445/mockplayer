@@ -1925,35 +1925,8 @@ public final class TestRunner {
                     step = 13;
                 }
             }
-            case 13 -> { // onMerchantOffersUpdated：服务端开交易菜单（含 offers）→ 假人收 offers
-                if (!leMerchantDone) {
-                    leMerchantDone = true;
-                    leMerchantWait = 0;
-                }
-                if (++leMerchantWait == 30) {
-                    server.execute(() -> {
-                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
-                        if (sp != null) {
-                            net.minecraft.world.entity.npc.ClientSideMerchant merchant = new net.minecraft.world.entity.npc.ClientSideMerchant(sp);
-                            net.minecraft.world.item.trading.MerchantOffers offers = new net.minecraft.world.item.trading.MerchantOffers();
-                            offers.add(new net.minecraft.world.item.trading.MerchantOffer(
-                                    new net.minecraft.world.item.trading.ItemCost(net.minecraft.world.item.Items.EMERALD),
-                                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND),
-                                    99, 1, 0.05F));
-                            merchant.overrideOffers(offers);
-                            sp.openMenu(new net.minecraft.world.SimpleMenuProvider(
-                                    (id, inv, p) -> new net.minecraft.world.inventory.MerchantMenu(id, inv, merchant),
-                                    net.minecraft.network.chat.Component.literal("m")));
-                        }
-                    });
-                }
-                if (leCounts.getOrDefault("onMerchantOffersUpdated", 0) >= 1) {
-                    check("onMerchantOffersUpdated", true);
-                    step = 14;
-                } else if (++leMerchantWait > 200) {
-                    fail("onMerchantOffersUpdated timeout");
-                    step = 14;
-                }
+            case 13 -> { // onMerchantOffersUpdated：由 merchant 套件强测（真实村民交易），此处跳过
+                step = 14;
             }
             case 14 -> { // onDimensionChange：假人换维（下界）
                 if (!leDimDone) {
