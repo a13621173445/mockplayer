@@ -1912,6 +1912,7 @@ public final class TestRunner {
             case 13 -> { // onDisconnected / onPlayerLeft（removeBot）
                 if (!leRemoveDone) {
                     leRemoveDone = true;
+                    leRemoveWait = 0;
                     MockplayerApi.bots().removeBot(botName, "test");
                 }
                 if (leCounts.getOrDefault("onDisconnected", 0) >= 1 && leCounts.getOrDefault("onPlayerLeft", 0) >= 1) {
