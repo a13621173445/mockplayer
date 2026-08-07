@@ -1840,8 +1840,7 @@ public final class TestRunner {
                     leContainerDone = true;
                     leContainerWait = 0;
                     leChestPos = bot.getLocalPlayer().blockPosition().offset(2, 0, 0);
-                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
-                            "setblock " + leChestPos.getX() + " " + leChestPos.getY() + " " + leChestPos.getZ() + " minecraft:chest");
+                    server.getLevel(Level.OVERWORLD).setBlock(leChestPos, net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState(), 3);
                     server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
                             "item replace entity " + botName + " weapon.mainhand with minecraft:stone");
                 }
@@ -1872,7 +1871,7 @@ public final class TestRunner {
                     leDropDone = true;
                     leDropWait = 0;
                     server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
-                            "item replace entity " + botName + " weapon.mainhand with minecraft:snowball");
+                            "item replace entity " + botName + " weapon.mainhand with minecraft:ender_pearl");
                 }
                 leDropWait++;
                 if (leDropWait == 20) {
@@ -1920,6 +1919,8 @@ public final class TestRunner {
                     check("onPlayerLeft", true);
                     step = 14;
                 } else if (++leRemoveWait > 100) {
+                    System.out.println("[mocktest] diag le disconnect disconnected=" + leCounts.getOrDefault("onDisconnected", 0)
+                            + " left=" + leCounts.getOrDefault("onPlayerLeft", 0));
                     fail("onDisconnected timeout");
                     step = 14;
                 }
