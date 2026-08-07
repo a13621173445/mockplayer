@@ -1659,6 +1659,12 @@ public final class TestRunner {
     private static boolean leRespawnKilled;
     private static boolean leRespawnDone;
     private static int leRespawnWait;
+    private static boolean lePickupDone;
+    private static int lePickupWait;
+    private static boolean leMerchantDone;
+    private static int leMerchantWait;
+    private static boolean leDimDone;
+    private static int leDimWait;
     private static boolean leRemoveDone;
     private static int leRemoveWait;
     private static Bot leBot2;
@@ -1900,7 +1906,71 @@ public final class TestRunner {
                     step = 12;
                 }
             }
-            case 12 -> { // onRespawn（kill → respawn）
+            case 12 -> { // onPickupItem：假人拾取掉落物
+                if (!lePickupDone) {
+                    lePickupDone = true;
+                    lePickupWait = 0;
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                String.format("summon minecraft:item %.2f %.2f %.2f {Item:{id:\"minecraft:diamond\",count:1}}",
+                                        sp.getX(), sp.getY(), sp.getZ()));
+                    }
+                }
+                if (leCounts.getOrDefault("onPickupItem", 0) >= 1) {
+                    check("onPickupItem", true);
+                    step = 13;
+                } else if (++lePickupWait > 200) {
+                    fail("onPickupItem timeout");
+                    step = 13;
+                }
+            }
+            case 13 -> { // onMerchantOffersUpdated：服务端开交易菜单（含 offers）→ 假人收 offers
+                if (!leMerchantDone) {
+                    leMerchantDone = true;
+                    leMerchantWait = 0;
+                }
+                if (++leMerchantWait == 30) {
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            net.minecraft.world.entity.npc.ClientSideMerchant merchant = new net.minecraft.world.entity.npc.ClientSideMerchant(sp);
+                            net.minecraft.world.item.trading.MerchantOffers offers = new net.minecraft.world.item.trading.MerchantOffers();
+                            offers.add(new net.minecraft.world.item.trading.MerchantOffer(
+                                    new net.minecraft.world.item.trading.ItemCost(net.minecraft.world.item.Items.EMERALD),
+                                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND),
+                                    99, 1, 0.05F));
+                            merchant.overrideOffers(offers);
+                            sp.openMenu(new net.minecraft.world.SimpleMenuProvider(
+                                    (id, inv, p) -> new net.minecraft.world.inventory.MerchantMenu(id, inv, merchant),
+                                    net.minecraft.network.chat.Component.literal("m")));
+                        }
+                    });
+                }
+                if (leCounts.getOrDefault("onMerchantOffersUpdated", 0) >= 1) {
+                    check("onMerchantOffersUpdated", true);
+                    step = 14;
+                } else if (++leMerchantWait > 200) {
+                    fail("onMerchantOffersUpdated timeout");
+                    step = 14;
+                }
+            }
+            case 14 -> { // onDimensionChange：假人换维（下界）
+                if (!leDimDone) {
+                    leDimDone = true;
+                    leDimWait = 0;
+                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                            "execute in minecraft:the_nether run tp " + botName + " 0 64 0");
+                }
+                if (leCounts.getOrDefault("onDimensionChange", 0) >= 1) {
+                    check("onDimensionChange", true);
+                    step = 15;
+                } else if (++leDimWait > 200) {
+                    fail("onDimensionChange timeout");
+                    step = 15;
+                }
+            }
+            case 15 -> { // onRespawn（kill → respawn）
                 if (!leRespawnKilled) {
                     leRespawnKilled = true;
                     server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill " + botName);
@@ -1912,13 +1982,13 @@ public final class TestRunner {
                 if (leRespawnDone && leCounts.getOrDefault("onRespawn", 0) >= 1) {
                     check("onDeath", true);
                     check("onRespawn", true);
-                    step = 13;
+                    step = 16;
                 } else if (++leRespawnWait > 200) {
                     fail("onRespawn timeout");
-                    step = 13;
+                    step = 16;
                 }
             }
-            case 13 -> { // onDisconnected（假人 removeBot 断开）/ onPlayerLeft（假人看到第二个假人离开）
+            case 16 -> { // onDisconnected（假人 removeBot 断开）/ onPlayerLeft（假人看到第二个假人离开）
                 if (!leRemoveDone) {
                     leRemoveDone = true;
                     leRemoveWait = 0;
@@ -1931,13 +2001,13 @@ public final class TestRunner {
                 if (leCounts.getOrDefault("onDisconnected", 0) >= 1 && leCounts.getOrDefault("onPlayerLeft", 0) >= 1) {
                     check("onDisconnected", true);
                     check("onPlayerLeft", true);
-                    step = 14;
+                    step = 17;
                 } else if (++leRemoveWait > 200) {
                     fail("onDisconnected timeout");
-                    step = 14;
+                    step = 17;
                 }
             }
-            case 14 -> {
+            case 17 -> {
                 finishSuite();
             }
         }

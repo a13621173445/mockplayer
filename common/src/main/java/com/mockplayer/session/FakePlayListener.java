@@ -864,6 +864,10 @@ public class FakePlayListener extends ClientPacketListener {
         // 不用 LevelLoadTracker——它依赖渲染线程编译回调（假人无渲染会等 30-40s 超时）。
         // 改为：setClientLoaded(false) 保持物理暂停，收到第一个 chunk 包（handleLevelChunkWithLight）
         // 时调用 notifyPlayerLoaded() 恢复物理 + 告知服务端已加载（见 handleLevelChunkWithLight override）。
+        // Bot 事件：换维（from != to 时）
+        if (dimensionChanged) {
+            fire(b -> b.fireOnDimensionChange(oldDimensionKey, dimensionKey));
+        }
         // Bot 事件：重生
         fire(b -> b.fireOnRespawn());
     }
