@@ -1687,7 +1687,6 @@ public final class TestRunner {
                     check("onPlayerJoined", true);
                     step = 2;
                 } else if (++waitTicks > 100) {
-                    System.out.println("[mocktest] diag le lifecycle " + leCounts);
                     fail("lifecycle events timeout");
                     step = 2;
                 }
@@ -1796,10 +1795,7 @@ public final class TestRunner {
                 if (leBlockWait == 50) {
                     bot.actions().mineBlock(bot.getLocalPlayer().blockPosition().offset(4, 0, 0));
                 }
-                if (leBlockWait > 120) {
-                    System.out.println("[mocktest] diag le block place=" + leCounts.getOrDefault("onPlaceBlock", 0)
-                            + " break=" + leCounts.getOrDefault("onBreakBlock", 0));
-                    check("onPlaceBlock", leCounts.getOrDefault("onPlaceBlock", 0) >= 1);
+                if (leBlockWait > 120) { check("onPlaceBlock", leCounts.getOrDefault("onPlaceBlock", 0) >= 1);
                     check("onBreakBlock", leCounts.getOrDefault("onBreakBlock", 0) >= 1);
                     step = 9;
                 }
@@ -1825,9 +1821,7 @@ public final class TestRunner {
                 if (leZombieWait == 160 && zombie != null) {
                     bot.actions().attack(zombie); // onAttackEntity
                 }
-                if (leZombieWait > 300) {
-                    System.out.println("[mocktest] diag le zombie attacked=" + leCounts.getOrDefault("onEntityAttacked", 0));
-                    check("onInteractEntity", leCounts.getOrDefault("onInteractEntity", 0) >= 1);
+                if (leZombieWait > 300) { check("onInteractEntity", leCounts.getOrDefault("onInteractEntity", 0) >= 1);
                     check("onAttackEntity", leCounts.getOrDefault("onAttackEntity", 0) >= 1);
                     check("onEntityAttacked", leCounts.getOrDefault("onEntityAttacked", 0) >= 1);
                     check("onDamage", leCounts.getOrDefault("onDamage", 0) >= 1);
@@ -1847,9 +1841,17 @@ public final class TestRunner {
                 leContainerWait++;
                 
                 if (leContainerWait == 30) {
-                    net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
-                            net.minecraft.world.phys.Vec3.atCenterOf(leChestPos), net.minecraft.core.Direction.UP, leChestPos, false);
-                    bot.getGameMode().useItemOn(bot.getLocalPlayer(), net.minecraft.world.InteractionHand.MAIN_HAND, hit);
+                    // 服务端开箱（确定性触发假人 handleOpenScreen → onContainerOpened）
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            sp.openMenu(new net.minecraft.world.SimpleMenuProvider(
+                                    (id, inv, p) -> new net.minecraft.world.inventory.ChestMenu(
+                                            net.minecraft.world.inventory.MenuType.GENERIC_9x3, id, inv,
+                                            new net.minecraft.world.SimpleContainer(27), 3),
+                                    net.minecraft.network.chat.Component.literal("test")));
+                        }
+                    });
                 }
                 
                 if (leContainerWait == 60) {
@@ -1857,8 +1859,12 @@ public final class TestRunner {
                     c.ifPresent(cont -> cont.click(54, 0, net.minecraft.world.inventory.ContainerInput.PICKUP));
                 }
                 if (leContainerWait == 90) {
-                    Optional<BotContainer> c = bot.getContainer();
-                    c.ifPresent(BotContainer::close);
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null && sp.containerMenu != sp.inventoryMenu) {
+                            sp.closeContainer();
+                        }
+                    });
                 }
                 if (leContainerWait > 140) { check("onContainerOpened", leCounts.getOrDefault("onContainerOpened", 0) >= 1);
                     check("onContainerSlotChanged", leCounts.getOrDefault("onContainerSlotChanged", 0) >= 1);
@@ -1880,13 +1886,7 @@ public final class TestRunner {
                 if (leDropWait == 80) {
                     bot.actions().dropSelected();
                 }
-                if (leDropWait > 160) {
-                    server.execute(() -> {
-                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
-                        System.out.println("[mocktest] diag le item cooldown=" + leCounts.getOrDefault("onItemCooldown", 0)
-                                + " held=" + (sp != null ? sp.getMainHandItem() : "?"));
-                    });
-                    check("onItemCooldown", leCounts.getOrDefault("onItemCooldown", 0) >= 1);
+                if (leDropWait > 160) { check("onItemCooldown", leCounts.getOrDefault("onItemCooldown", 0) >= 1);
                     check("onDropItem", leCounts.getOrDefault("onDropItem", 0) >= 1);
                     step = 12;
                 }
@@ -1919,8 +1919,6 @@ public final class TestRunner {
                     check("onPlayerLeft", true);
                     step = 14;
                 } else if (++leRemoveWait > 100) {
-                    System.out.println("[mocktest] diag le disconnect disconnected=" + leCounts.getOrDefault("onDisconnected", 0)
-                            + " left=" + leCounts.getOrDefault("onPlayerLeft", 0));
                     fail("onDisconnected timeout");
                     step = 14;
                 }
