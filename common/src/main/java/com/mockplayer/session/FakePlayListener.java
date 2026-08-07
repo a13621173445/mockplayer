@@ -361,6 +361,24 @@ public class FakePlayListener extends ClientPacketListener {
      * 供程序化 AI 感知周围玩家。新条目记录在线，动作更新游戏模式/名字。
      */
     @Override
+    public void handlePlayerInfoRemove(net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
+        try {
+            for (java.util.UUID profileId : packet.profileIds()) {
+                this.session.getState().removePlayerOnline(profileId);
+                MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
+                net.minecraft.client.multiplayer.PlayerInfo info = self.mockplayer$getPlayerInfoMap().get(profileId);
+                if (info != null) {
+                    fire(b -> b.fireOnPlayerLeft(info.getProfile()));
+                }
+            }
+        } catch (Exception e) {
+            FakeSession.LOG.warn("[{}] handlePlayerInfoRemove 异常: {}", this.session.getName(), e.toString());
+        }
+        super.handlePlayerInfoRemove(packet);
+    }
+
+    @Override
     public void handlePlayerInfoUpdate(net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket packet) {
         // 玩家列表更新：像原版一样填假人 playerInfoMap（否则 Bot.getOnlinePlayers() 读不到），
         // 同时完整记录到假人 state。跳过原版主玩家 playerSocialManager.addPlayer（不污染主玩家）。
@@ -381,14 +399,6 @@ public class FakePlayListener extends ClientPacketListener {
             // 已有玩家更新动作：记录 state（applyPlayerInfoUpdate 父类 private，假人不调；tab list 主体由 newEntries 填充）
             String name = entry.profile() != null ? entry.profile().name() : entry.profileId().toString();
             this.session.getState().recordPlayerOnline(entry.profileId(), name);
-        }
-    }
-
-    @Override
-    public void handlePlayerInfoRemove(net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket packet) {
-        // 玩家下线：从假人 state 的在线名单移除（不碰主玩家社交管理器）
-        for (java.util.UUID profileId : packet.profileIds()) {
-            this.session.getState().removePlayerOnline(profileId);
         }
     }
 

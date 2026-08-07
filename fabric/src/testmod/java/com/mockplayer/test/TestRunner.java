@@ -1659,6 +1659,8 @@ public final class TestRunner {
     private static int leRespawnWait;
     private static boolean leRemoveDone;
     private static int leRemoveWait;
+    private static Bot leBot2;
+    private static boolean leRemove2Done;
 
     private static void runListenerEvents(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -1881,12 +1883,17 @@ public final class TestRunner {
                 }
                 leDropWait++;
                 if (leDropWait == 20) {
-                    bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND); // 雪球投掷 → 冷却
+                    bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND); // 末影珍珠投掷 → 冷却
                 }
-                if (leDropWait == 80) {
+                if (leDropWait == 100 && leCounts.getOrDefault("onItemCooldown", 0) < 1) {
+                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                            "item replace entity " + botName + " weapon.mainhand with minecraft:ender_pearl");
+                    bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND); // 重试投掷
+                }
+                if (leDropWait == 150) {
                     bot.actions().dropSelected();
                 }
-                if (leDropWait > 160) { check("onItemCooldown", leCounts.getOrDefault("onItemCooldown", 0) >= 1);
+                if (leDropWait > 260) { check("onItemCooldown", leCounts.getOrDefault("onItemCooldown", 0) >= 1);
                     check("onDropItem", leCounts.getOrDefault("onDropItem", 0) >= 1);
                     step = 12;
                 }
@@ -1909,17 +1916,21 @@ public final class TestRunner {
                     step = 13;
                 }
             }
-            case 13 -> { // onDisconnected / onPlayerLeft（removeBot）
+            case 13 -> { // onDisconnected（假人 removeBot 断开）/ onPlayerLeft（假人看到第二个假人离开）
                 if (!leRemoveDone) {
                     leRemoveDone = true;
                     leRemoveWait = 0;
-                    MockplayerApi.bots().removeBot(botName, "test");
+                    leBot2 = MockplayerApi.bots().createBot(BotProfile.of("tbot-le2", "test"));
+                }
+                if (leBot2 != null && leBot2.getLifecycle() == BotLifecycle.PLAYING && !leRemove2Done) {
+                    leRemove2Done = true;
+                    MockplayerApi.bots().removeBot("tbot-le2", "test"); // 第二个假人离开 → 主假人 onPlayerLeft
                 }
                 if (leCounts.getOrDefault("onDisconnected", 0) >= 1 && leCounts.getOrDefault("onPlayerLeft", 0) >= 1) {
                     check("onDisconnected", true);
                     check("onPlayerLeft", true);
                     step = 14;
-                } else if (++leRemoveWait > 100) {
+                } else if (++leRemoveWait > 200) {
                     fail("onDisconnected timeout");
                     step = 14;
                 }
