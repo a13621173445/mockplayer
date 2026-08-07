@@ -79,11 +79,28 @@ public class FakePlayListener extends ClientPacketListener {
     }
 
     /**
+     * 假人分支 handleBlockUpdate：方块状态包。
+     *
+     * 显式 ensureRunningOnSameThread（主玩家渲染线程）再写假人 level——neoforge 版父类不走该检查，
+     * 包在 Netty IO 线程直接处理，setServerVerifiedBlockState 内部 requestModelData（渲染）崩
+     * `Cannot request ModelData refresh outside the owning thread`。双端统一走渲染线程。
+     */
+    @Override
+    public void handleBlockUpdate(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, this.minecraft.packetProcessor());
+        ((MockplayerClientPacketListenerAccessor) this).mockplayer$getLevel()
+                .setServerVerifiedBlockState(packet.getPos(), packet.getBlockState(), 19);
+    }
+
+    /**
      * 假人分支 handleLogin：只建假人自己的 world/player，不写主玩家全局。
      * 不调 minecraft.setLevel / setCameraEntity / startWaitingForNewLevel（不污染主玩家、不弹加载界面）。
      */
     @Override
     public void handleLogin(ClientboundLoginPacket packet) {
+        // 显式转渲染线程：假人 level/player 必须在渲染线程创建，否则 neoforge ModelDataManager
+        // 绑定 Netty 线程，后续渲染线程操作 level（如 setBlock 移除 BlockEntity → requestModelData）崩
+        PacketUtils.ensureRunningOnSameThread(packet, this, this.minecraft.packetProcessor());
         Minecraft mc = Minecraft.getInstance();
         MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
 

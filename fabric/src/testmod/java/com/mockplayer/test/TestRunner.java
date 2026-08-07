@@ -44,7 +44,7 @@ public final class TestRunner {
 
     /** 全部套件（suite=all / IDE 默认入口时按序连续跑） */
     private static final List<String> ALL_SUITES = List.of(
-            "api-smoke", "containers", "crafting", "furnace",
+            "api-smoke", "containers", "containers-all", "crafting", "furnace",
             "combat-stab", "combat-sprint", "enchanting", "merchant");
 
     private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }
@@ -66,6 +66,7 @@ public final class TestRunner {
         return switch (suite) {
             case "api-smoke" -> "tbot-smoke";
             case "containers" -> "tbot-cont";
+            case "containers-all" -> "tbot-call";
             case "crafting" -> "tbot-craft";
             case "furnace" -> "tbot-furn";
             case "combat-stab" -> "tbot-stab";
@@ -199,6 +200,7 @@ public final class TestRunner {
         switch (suite) {
             case "api-smoke" -> runApiSmoke(mc);
             case "containers" -> runContainers(mc);
+            case "containers-all" -> runContainersAll(mc);
             case "crafting" -> runCrafting(mc);
             case "furnace" -> runFurnace(mc);
             case "combat-stab" -> runCombatStab(mc);
@@ -830,6 +832,252 @@ public final class TestRunner {
         }
     }
 
+    // ===== containers-all：所有容器类型真实交互（放方块 → 假人打开 → give 物品 → click 放入 → 服务端验证 → 取回） =====
+
+    private record ContainerCase(String name, net.minecraft.world.level.block.Block block, String itemId,
+                                 net.minecraft.world.inventory.MenuType<?> menuType, int hotbarSlot, int containerSlot, int resultSlot) {
+    }
+
+    private static final List<ContainerCase> CONTAINER_CASES = List.of(
+            new ContainerCase("hopper", Blocks.HOPPER, "minecraft:stone", MenuType.HOPPER, 32, 0, -1),
+            new ContainerCase("dropper", Blocks.DROPPER, "minecraft:stone", MenuType.GENERIC_3x3, 36, 0, -1),
+            new ContainerCase("barrel", Blocks.BARREL, "minecraft:stone", MenuType.GENERIC_9x3, 54, 0, -1),
+            new ContainerCase("shulker_box", Blocks.SHULKER_BOX, "minecraft:stone", MenuType.SHULKER_BOX, 54, 0, -1),
+            new ContainerCase("ender_chest", Blocks.ENDER_CHEST, "minecraft:stone", MenuType.GENERIC_9x3, 54, 0, -1),
+            new ContainerCase("anvil", Blocks.ANVIL, "minecraft:stone", MenuType.ANVIL, 30, 0, 2),
+            new ContainerCase("grindstone", Blocks.GRINDSTONE, "minecraft:diamond_sword", MenuType.GRINDSTONE, 30, 0, 2),
+            new ContainerCase("stonecutter", Blocks.STONECUTTER, "minecraft:stone", MenuType.STONECUTTER, 29, 0, 1),
+            new ContainerCase("blast_furnace", Blocks.BLAST_FURNACE, "minecraft:coal", MenuType.BLAST_FURNACE, 30, 1, 2),
+            new ContainerCase("smoker", Blocks.SMOKER, "minecraft:coal", MenuType.SMOKER, 30, 1, 2),
+            new ContainerCase("brewing_stand", Blocks.BREWING_STAND, "minecraft:glass_bottle", MenuType.BREWING_STAND, 32, 0, -1),
+            new ContainerCase("lectern", Blocks.LECTERN, "minecraft:written_book", MenuType.LECTERN, 28, 0, -1),
+            new ContainerCase("loom", Blocks.LOOM, "minecraft:white_banner", MenuType.LOOM, 31, 0, 3),
+            new ContainerCase("cartography_table", Blocks.CARTOGRAPHY_TABLE, "minecraft:paper", MenuType.CARTOGRAPHY_TABLE, 30, 1, 2),
+            new ContainerCase("smithing_table", Blocks.SMITHING_TABLE, "minecraft:iron_ingot", MenuType.SMITHING, 31, 2, 3),
+            new ContainerCase("beacon", Blocks.BEACON, "minecraft:emerald", MenuType.BEACON, 28, 0, -1));
+
+    private static int containerAllCaseIndex;
+    private static BlockPos containerAllPos;
+    private static boolean containerAllOpened;
+    private static boolean containerAllGiven;
+    private static boolean containerAllPut;
+    private static boolean containerAllTaken;
+    private static volatile boolean containerAllServerPut;
+    private static volatile boolean containerAllServerEmpty;
+    private static boolean lecternBookGiven;
+    private static boolean lecternBookPlaced;
+    private static int lecternOpenWait;
+
+    private static void runContainersAll(Minecraft mc) {
+        MinecraftServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            fail("no singleplayer server");
+            finishSuite();
+            return;
+        }
+        switch (step) {
+            case 0 -> {
+                prepareBot(server);
+                if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
+                    check("containers-all start (" + CONTAINER_CASES.size() + " types)", true);
+                    step = 1;
+                }
+            }
+            case 1 -> {
+                // 放当前容器方块 + 假人打开
+                if (containerAllPos == null) {
+                    containerAllPos = bot.getLocalPlayer().blockPosition().offset(3, 0, 0);
+                    BlockPos p = containerAllPos;
+                    ContainerCase c = CONTAINER_CASES.get(containerAllCaseIndex);
+                    server.execute(() -> server.getLevel(Level.OVERWORLD).setBlock(p, c.block().defaultBlockState(), 3));
+                }
+                ContainerCase c0 = CONTAINER_CASES.get(containerAllCaseIndex);
+                if (bot.getBlockState(containerAllPos).is(c0.block())) {
+                    if ("lectern".equals(c0.name())) {
+                        // 讲台特殊：空讲台右键不开菜单，服务端直接放书（setBook + HAS_BOOK）再打开
+                        if (!lecternBookPlaced) {
+                            lecternBookPlaced = true;
+                            server.execute(() -> {
+                                net.minecraft.world.level.block.entity.BlockEntity be = server.getLevel(Level.OVERWORLD).getBlockEntity(containerAllPos);
+                                if (be instanceof net.minecraft.world.level.block.entity.LecternBlockEntity le) {
+                                    le.setBook(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WRITABLE_BOOK));
+                                }
+                                net.minecraft.world.level.block.state.BlockState bs = server.getLevel(Level.OVERWORLD).getBlockState(containerAllPos);
+                                server.getLevel(Level.OVERWORLD).setBlock(containerAllPos,
+                                        bs.setValue(net.minecraft.world.level.block.LecternBlock.HAS_BOOK, true), 3);
+                            });
+                        }
+                        if (!containerAllOpened) {
+                            if (bot.getBlockState(containerAllPos).hasProperty(net.minecraft.world.level.block.LecternBlock.HAS_BOOK)
+                                    && bot.getBlockState(containerAllPos).getValue(net.minecraft.world.level.block.LecternBlock.HAS_BOOK)) {
+                                containerAllOpened = true;
+                                bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(containerAllPos));
+                                net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
+                                        net.minecraft.world.phys.Vec3.atCenterOf(containerAllPos), Direction.WEST, containerAllPos, false);
+                                bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit); // 打开菜单
+                                step = 2;
+                            }
+                        }
+                    } else {
+                        if (!containerAllOpened) {
+                            containerAllOpened = true;
+                            bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(containerAllPos));
+                            net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
+                                    net.minecraft.world.phys.Vec3.atCenterOf(containerAllPos), Direction.WEST, containerAllPos, false);
+                            bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
+                        }
+                        step = 2;
+                    }
+                }
+            }
+            case 2 -> {
+                // 断言 getContainer + menuType（真实打开该容器）
+                ContainerCase c = CONTAINER_CASES.get(containerAllCaseIndex);
+                Optional<BotContainer> container = bot.getContainer();
+                if (container.isPresent()) {
+                    check("open " + c.name(), true);
+                    check("menuType " + c.name() + " correct", container.get().getMenuType() == c.menuType());
+                    step = 3;
+                }
+            }
+            case 3 -> {
+                // 清空背包（保证 give 落快捷栏0）+ give 物品（讲台菜单无背包槽，跳过直接翻页）
+                if ("lectern".equals(CONTAINER_CASES.get(containerAllCaseIndex).name())) {
+                    step = 5;
+                } else {
+                    if (!containerAllGiven) {
+                        containerAllGiven = true;
+                        server.execute(() -> {
+                            net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                            if (sp != null) {
+                                sp.getInventory().clearContent();
+                            }
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    "give " + botName + " " + CONTAINER_CASES.get(containerAllCaseIndex).itemId() + " 1");
+                        });
+                    }
+                    step = 4;
+                }
+            }
+            case 4 -> {
+                // 等假人背包有物品
+                ContainerCase c = CONTAINER_CASES.get(containerAllCaseIndex);
+                String itemId = c.itemId();
+                net.minecraft.world.item.Item item = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                        .get(net.minecraft.resources.Identifier.tryParse(itemId)).get().value();
+                if (bot.getLocalPlayer().getInventory().countItem(item) > 0) {
+                    check("client has " + c.name() + " item", true);
+                    step = 5;
+                } else if (++waitTicks > 200) {
+                    containerAllGiven = false; // give 竞态丢失 → 重试
+                    waitTicks = 0;
+                    step = 3;
+                }
+            }
+            case 5 -> {
+                // click 放入容器槽 → 等服务端菜单槽验证（讲台：翻页交互）
+                if (!containerAllPut) {
+                    containerAllPut = true;
+                    ContainerCase c = CONTAINER_CASES.get(containerAllCaseIndex);
+                    if ("lectern".equals(c.name())) {
+                        bot.getContainer().ifPresent(cont -> cont.clickButton(3)); // 取书（讲台唯一交互，菜单仅书槽）
+                    } else {
+                        bot.getContainer().ifPresent(cont -> {
+                            cont.click(c.hotbarSlot(), 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 快捷栏0→鼠标
+                            cont.click(c.containerSlot(), 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 放入容器槽
+                        });
+                    }
+                }
+                server.execute(() -> {
+                    final int idx = containerAllCaseIndex;
+                    ContainerCase c = CONTAINER_CASES.get(idx);
+                    if ("lectern".equals(c.name())) {
+                        containerAllServerPut = !server.getLevel(Level.OVERWORLD).getBlockState(containerAllPos)
+                                .getValue(net.minecraft.world.level.block.LecternBlock.HAS_BOOK); // 书被取走
+                    } else {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            // 部分容器（砂轮/切石机等）放入即处理到结果槽，验证容器槽或结果槽有物品
+                            boolean inContainer = !sp.containerMenu.getSlot(c.containerSlot()).getItem().isEmpty();
+                            boolean inResult = c.resultSlot() >= 0 && !sp.containerMenu.getSlot(c.resultSlot()).getItem().isEmpty();
+                            containerAllServerPut = inContainer || inResult;
+                        }
+                    }
+                });
+                if (containerAllServerPut) {
+                    check("put into " + CONTAINER_CASES.get(containerAllCaseIndex).name() + " (server)", true);
+                    step = 6;
+                } else if (++waitTicks > 200) {
+                    fail("put into " + CONTAINER_CASES.get(containerAllCaseIndex).name() + " timeout");
+                    step = 6;
+                }
+            }
+            case 6 -> {
+                // 取回（容器槽→鼠标→快捷栏）→ 服务端验证容器槽空 → 下一个容器或收尾
+                if (!containerAllTaken) {
+                    containerAllTaken = true;
+                    ContainerCase c = CONTAINER_CASES.get(containerAllCaseIndex);
+                    if ("lectern".equals(c.name())) {
+                        bot.getContainer().ifPresent(cont -> cont.clickButton(3)); // 取书
+                    } else {
+                        bot.getContainer().ifPresent(cont -> {
+                            if (!cont.getSlot(c.containerSlot()).isEmpty()) {
+                                cont.click(c.containerSlot(), 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 容器槽→鼠标
+                            }
+                            if (c.resultSlot() >= 0 && c.resultSlot() != c.containerSlot() && !cont.getSlot(c.resultSlot()).isEmpty()) {
+                                cont.click(c.resultSlot(), 0, net.minecraft.world.inventory.ContainerInput.PICKUP);    // 结果槽→鼠标
+                            }
+                            cont.click(c.hotbarSlot(), 0, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 鼠标→快捷栏
+                        });
+                    }
+                }
+                server.execute(() -> {
+                    final int idx = containerAllCaseIndex;
+                    ContainerCase c = CONTAINER_CASES.get(idx);
+                    if ("lectern".equals(c.name())) {
+                        containerAllServerEmpty = bot.getLocalPlayer().getInventory()
+                                .countItem(net.minecraft.world.item.Items.WRITABLE_BOOK) > 0; // 书取回到背包
+                    } else {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            boolean cEmpty = sp.containerMenu.getSlot(c.containerSlot()).getItem().isEmpty();
+                            boolean rEmpty = c.resultSlot() < 0 || sp.containerMenu.getSlot(c.resultSlot()).getItem().isEmpty();
+                            containerAllServerEmpty = cEmpty && rEmpty;
+                        }
+                    }
+                });
+                if (containerAllServerEmpty) {
+                    check("take back from " + CONTAINER_CASES.get(containerAllCaseIndex).name() + " (server)", true);
+                    bot.getContainer().ifPresent(cont -> cont.close());
+                    containerAllCaseIndex++;
+                    if (containerAllCaseIndex < CONTAINER_CASES.size()) {
+                        containerAllPos = null;
+                        containerAllOpened = false;
+                        containerAllGiven = false;
+                        containerAllPut = false;
+                        containerAllTaken = false;
+                        containerAllServerPut = false;
+                        containerAllServerEmpty = false;
+                        lecternBookGiven = false;
+                        lecternBookPlaced = false;
+                        waitTicks = 0;
+                        step = 1;
+                    } else {
+                        step = 7;
+                    }
+                } else if (++waitTicks > 200) {
+                    fail("take back from " + CONTAINER_CASES.get(containerAllCaseIndex).name() + " timeout");
+                    containerAllCaseIndex++;
+                    step = (containerAllCaseIndex < CONTAINER_CASES.size()) ? 1 : 7;
+                }
+            }
+            case 7 -> {
+                MockplayerApi.bots().removeBot(botName, "test");
+                finishSuite();
+            }
+        }
+    }
+
     // ===== crafting：工作台合成（give 木板 → 放合成格 → 取 4 木棍，服务端验证） =====
 
     private static BlockPos craftPos;
@@ -1370,6 +1618,14 @@ public final class TestRunner {
         }
         bot = null;
         containerPos = null;
+        containerAllCaseIndex = 0;
+        containerAllPos = null;
+        containerAllOpened = false;
+        containerAllGiven = false;
+        containerAllPut = false;
+        containerAllTaken = false;
+        containerAllServerPut = false;
+        containerAllServerEmpty = false;
         openIssued = false;
         openIssued2 = false;
         chestGiveDone = false;
