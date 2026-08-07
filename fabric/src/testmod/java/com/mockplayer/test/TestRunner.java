@@ -1653,6 +1653,8 @@ public final class TestRunner {
     private static int leContainerWait;
     private static net.minecraft.core.BlockPos leChestPos;
     private static boolean leDropDone;
+    private static boolean leDropUsed;
+    private static boolean leDropChecked;
     private static int leDropWait;
     private static boolean leRespawnKilled;
     private static boolean leRespawnDone;
@@ -1881,20 +1883,20 @@ public final class TestRunner {
                     server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
                             "item replace entity " + botName + " weapon.mainhand with minecraft:ender_pearl");
                 }
-                leDropWait++;
-                if (leDropWait == 20) {
+                if (!leDropUsed) {
+                    leDropUsed = true;
                     bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND); // 末影珍珠投掷 → 冷却
                 }
-                if (leDropWait == 100 && leCounts.getOrDefault("onItemCooldown", 0) < 1) {
-                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
-                            "item replace entity " + botName + " weapon.mainhand with minecraft:ender_pearl");
-                    bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND); // 重试投掷
-                }
-                if (leDropWait == 150) {
+                if (leCounts.getOrDefault("onItemCooldown", 0) >= 1 && !leDropChecked) {
+                    leDropChecked = true;
+                    check("onItemCooldown", true);
                     bot.actions().dropSelected();
                 }
-                if (leDropWait > 260) { check("onItemCooldown", leCounts.getOrDefault("onItemCooldown", 0) >= 1);
-                    check("onDropItem", leCounts.getOrDefault("onDropItem", 0) >= 1);
+                if (leDropChecked && leCounts.getOrDefault("onDropItem", 0) >= 1) {
+                    check("onDropItem", true);
+                    step = 12;
+                } else if (++leDropWait > 200) {
+                    fail("onItemCooldown timeout");
                     step = 12;
                 }
             }
