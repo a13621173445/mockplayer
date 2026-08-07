@@ -45,7 +45,7 @@ public final class TestRunner {
     /** 全部套件（suite=all / IDE 默认入口时按序连续跑） */
     private static final List<String> ALL_SUITES = List.of(
             "api-smoke", "api-full", "use-items", "containers", "containers-all", "crafting", "furnace",
-            "combat-stab", "combat-sprint", "enchanting", "merchant");
+            "combat-stab", "combat-sprint", "enchanting", "merchant", "gui-actions");
 
     private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }
 
@@ -1357,12 +1357,23 @@ public final class TestRunner {
     private static boolean guiBookDone;
     private static volatile boolean guiBookVerified;
     private static BlockPos guiSignPos;
+    private static boolean guiSignRightClicked;
+    private static int guiSignWait2;
     private static boolean guiSignDone;
     private static volatile boolean guiSignVerified;
     private static BlockPos guiBeaconPos;
     private static boolean guiBeaconDone;
+    private static boolean guiBeaconDone2;
+    private static boolean guiBeaconDone3;
+    private static int guiBeaconWait2;
+    private static int guiBeaconWait3;
     private static volatile boolean guiBeaconVerified;
     private static boolean guiPickDone;
+    private static boolean guiPickGiven;
+    private static int guiBookWait;
+    private static int guiSignWait;
+    private static int guiBeaconWait;
+    private static int guiPickWait;
     private static volatile boolean guiPickVerified;
 
     private static void runGuiActions(Minecraft mc) {
@@ -1408,7 +1419,149 @@ public final class TestRunner {
                     step = 3;
                 }
             }
-            case 3 -> { // respawn：/kill → respawn() → 复活
+            case 3 -> { // editBook：书与笔 → 写书
+                if (!guiBookGiven) {
+                    guiBookGiven = true;
+                    guiBookWait = 0;
+                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                            "item replace entity " + botName + " weapon.mainhand with minecraft:writable_book");
+                }
+                if (guiBookGiven && ++guiBookWait > 20 && !guiBookDone) {
+                    guiBookDone = true;
+                    // 书与笔在假人当前选中槽（weapon.mainhand = selectedSlot）——editBook 必须用同一槽位
+                    bot.actions().editBook(bot.getLocalPlayer().getInventory().getSelectedSlot(),
+                            java.util.List.of("mockplayer page one", "second line"),
+                            java.util.Optional.of("Mockplayer Book"));
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    guiBookVerified = sp != null && sp.getMainHandItem().is(net.minecraft.world.item.Items.WRITTEN_BOOK);
+                });
+                if (guiBookVerified) {
+                    check("editBook wrote written book", true);
+                    step = 4;
+                } else if (guiBookDone && ++waitTicks > 300) {
+                    fail("editBook timeout");
+                    step = 4;
+                }
+            }
+            case 4 -> { // editSign：告示牌 → 写文本
+                if (guiSignPos == null) {
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            guiSignPos = sp.blockPosition().offset(3, 0, 0);
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    "setblock " + guiSignPos.getX() + " " + guiSignPos.getY() + " " + guiSignPos.getZ()
+                                            + " minecraft:oak_sign");
+                        }
+                    });
+                }
+                if (guiSignPos != null && ++guiSignWait > 20 && !guiSignRightClicked) {
+                    guiSignRightClicked = true;
+                    // 先右键告示牌打开编辑（服务端设置 allowedPlayerEditor），editSign 才被接受
+                    net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
+                            net.minecraft.world.phys.Vec3.atCenterOf(guiSignPos), Direction.UP, guiSignPos, false);
+                    bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
+                }
+                if (guiSignRightClicked && ++guiSignWait2 > 20 && !guiSignDone) {
+                    guiSignDone = true;
+                    bot.actions().editSign(guiSignPos, true, new String[]{"mock", "player", "sign", "line4"});
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerLevel lv = server.getLevel(Level.OVERWORLD);
+                    if (guiSignPos != null && lv.getBlockEntity(guiSignPos) instanceof net.minecraft.world.level.block.entity.SignBlockEntity sign) {
+                        guiSignVerified = "mock".equals(sign.getFrontText().getMessage(0, false).getString());
+                    }
+                });
+                if (guiSignVerified) {
+                    check("editSign updated block entity", true);
+                    step = 5;
+                } else if (guiSignDone && ++waitTicks > 300) {
+                    fail("editSign timeout");
+                    step = 5;
+                }
+            }
+            case 5 -> { // setBeacon：信标 + 3x3 底座金字塔 → 交互开菜单 → setBeacon 效果
+                if (guiBeaconPos == null) {
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            guiBeaconPos = sp.blockPosition().offset(3, 0, 0);
+                            int x = guiBeaconPos.getX(), y = guiBeaconPos.getY(), z = guiBeaconPos.getZ();
+                            for (int dx = -1; dx <= 1; dx++) {
+                                for (int dz = -1; dz <= 1; dz++) {
+                                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                            "setblock " + (x + dx) + " " + (y - 1) + " " + (z + dz) + " minecraft:iron_block");
+                                }
+                            }
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    "setblock " + x + " " + y + " " + z + " minecraft:beacon");
+                        }
+                    });
+                }
+                if (guiBeaconPos != null && ++guiBeaconWait > 100 && !guiBeaconDone) {
+                    guiBeaconDone = true;
+                    guiBeaconWait2 = 0;
+                    // 等 >80 tick（信标每 80 tick 更新 levels）后开菜单
+                    net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
+                            net.minecraft.world.phys.Vec3.atCenterOf(guiBeaconPos), Direction.UP, guiBeaconPos, false);
+                    bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit); // 开 BeaconMenu
+                }
+                if (guiBeaconDone && ++guiBeaconWait2 > 20 && !guiBeaconDone2) {
+                    guiBeaconDone2 = true;
+                    guiBeaconWait3 = 0;
+                    // BeaconMenu.updateEffects 要求付款槽（菜单槽 0）有物品——等菜单打开后放铁锭
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null && sp.containerMenu instanceof net.minecraft.world.inventory.BeaconMenu menu) {
+                            menu.getSlot(0).set(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_INGOT));
+                        }
+                    });
+                }
+                if (guiBeaconDone2 && ++guiBeaconWait3 > 10 && !guiBeaconDone3) {
+                    guiBeaconDone3 = true;
+                    bot.actions().setBeacon(
+                            java.util.Optional.of(net.minecraft.world.effect.MobEffects.SPEED),
+                            java.util.Optional.empty());
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    // 真正激活：信标 levels>=1（底座）+ 付款槽有材料 → setBeacon 应用 SPEED 到假人
+                    guiBeaconVerified = sp != null && sp.hasEffect(net.minecraft.world.effect.MobEffects.SPEED);
+                });
+                if (guiBeaconVerified) {
+                    check("setBeacon applied speed", true);
+                    step = 6;
+                } else if (guiBeaconDone3 && ++waitTicks > 300) {
+                    fail("setBeacon timeout");
+                    step = 6;
+                }
+            }
+            case 6 -> { // pickItemFromBlock：创造中键取脚下方块
+                if (!guiPickGiven) {
+                    guiPickGiven = true;
+                    guiPickWait = 0;
+                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "gamemode creative " + botName);
+                }
+                if (guiPickGiven && ++guiPickWait > 20 && !guiPickDone) {
+                    guiPickDone = true;
+                    net.minecraft.core.BlockPos target = bot.getLocalPlayer().blockPosition().below();
+                    bot.actions().pickItemFromBlock(target, false);
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    guiPickVerified = sp != null && !sp.getMainHandItem().isEmpty();
+                });
+                if (guiPickVerified) {
+                    check("pickItemFromBlock changed held item", true);
+                    step = 7;
+                } else if (guiPickDone && ++waitTicks > 300) {
+                    fail("pickItemFromBlock timeout");
+                    step = 7;
+                }
+            }
+            case 7 -> { // respawn：/kill → respawn() → 复活（放最后，respawn 改变假人位置/引用）
                 if (!guiRespawnKilled) {
                     guiRespawnKilled = true;
                     server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill " + botName);
@@ -1427,118 +1580,13 @@ public final class TestRunner {
                 });
                 if (guiRespawnVerified) {
                     check("respawn revived", true);
-                    step = 5;
+                    step = 8;
                 } else if (++waitTicks > 200) {
                     fail("respawn timeout");
-                    step = 5;
-                }
-            }
-            case 5 -> { // editBook：书与笔 → 写书
-                if (!guiBookGiven) {
-                    guiBookGiven = true;
-                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
-                            "item replace entity " + botName + " weapon.mainhand with minecraft:book_and_quill");
-                }
-                if (!guiBookDone) {
-                    guiBookDone = true;
-                    // 书与笔在假人当前选中槽（weapon.mainhand = selectedSlot）——editBook 必须用同一槽位
-                    bot.actions().editBook(bot.getLocalPlayer().getInventory().getSelectedSlot(),
-                            java.util.List.of("mockplayer page one", "second line"),
-                            java.util.Optional.of("Mockplayer Book"));
-                }
-                server.execute(() -> {
-                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
-                    guiBookVerified = sp != null && sp.getMainHandItem().is(net.minecraft.world.item.Items.WRITTEN_BOOK);
-                });
-                if (guiBookVerified) {
-                    check("editBook wrote written book", true);
-                    step = 6;
-                } else if (++waitTicks > 200) {
-                    fail("editBook timeout");
-                    step = 6;
-                }
-            }
-            case 6 -> { // editSign：告示牌 → 写文本
-                if (guiSignPos == null) {
-                    guiSignPos = bot.getLocalPlayer().blockPosition().offset(1, 0, 0);
-                    server.execute(() -> server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
-                            "setblock " + guiSignPos.getX() + " " + guiSignPos.getY() + " " + guiSignPos.getZ()
-                                    + " minecraft:oak_sign[facing=south]"));
-                }
-                if (!guiSignDone) {
-                    guiSignDone = true;
-                    bot.actions().editSign(guiSignPos, true, new String[]{"mock", "player", "sign", "line4"});
-                }
-                server.execute(() -> {
-                    net.minecraft.server.level.ServerLevel lv = server.getLevel(Level.OVERWORLD);
-                    if (lv.getBlockEntity(guiSignPos) instanceof net.minecraft.world.level.block.entity.SignBlockEntity sign) {
-                        guiSignVerified = "mock".equals(sign.getFrontText().getMessage(0, false).getString());
-                    }
-                });
-                if (guiSignVerified) {
-                    check("editSign updated block entity", true);
-                    step = 7;
-                } else if (++waitTicks > 200) {
-                    fail("editSign timeout");
-                    step = 7;
-                }
-            }
-            case 7 -> { // setBeacon：信标 + 3x3 底座金字塔 → 交互开菜单 → setBeacon 效果
-                if (guiBeaconPos == null) {
-                    guiBeaconPos = bot.getLocalPlayer().blockPosition().offset(2, 0, 0);
-                    server.execute(() -> {
-                        int x = guiBeaconPos.getX(), y = guiBeaconPos.getY(), z = guiBeaconPos.getZ();
-                        for (int dx = -1; dx <= 1; dx++) {
-                            for (int dz = -1; dz <= 1; dz++) {
-                                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
-                                        "setblock " + (x + dx) + " " + (y - 1) + " " + (z + dz) + " minecraft:iron_block");
-                            }
-                        }
-                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
-                                "setblock " + x + " " + y + " " + z + " minecraft:beacon");
-                    });
-                }
-                if (!guiBeaconDone) {
-                    guiBeaconDone = true;
-                    net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
-                            net.minecraft.world.phys.Vec3.atCenterOf(guiBeaconPos), Direction.UP, guiBeaconPos, false);
-                    bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit); // 开 BeaconMenu
-                    bot.actions().setBeacon(
-                            java.util.Optional.of(net.minecraft.world.effect.MobEffects.SPEED),
-                            java.util.Optional.empty());
-                }
-                server.execute(() -> {
-                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
-                    guiBeaconVerified = sp != null && sp.hasEffect(net.minecraft.world.effect.MobEffects.SPEED);
-                });
-                if (guiBeaconVerified) {
-                    check("setBeacon applied speed", true);
-                    step = 8;
-                } else if (++waitTicks > 300) {
-                    fail("setBeacon timeout");
                     step = 8;
                 }
             }
-            case 8 -> { // pickItemFromBlock：创造中键取脚下方块
-                if (!guiPickDone) {
-                    guiPickDone = true;
-                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "gamemode creative " + botName);
-                    net.minecraft.core.BlockPos target = bot.getLocalPlayer().blockPosition().below();
-                    bot.actions().pickItemFromBlock(target, false);
-                }
-                server.execute(() -> {
-                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
-                    guiPickVerified = sp != null && !sp.getMainHandItem().isEmpty();
-                });
-                if (guiPickVerified) {
-                    check("pickItemFromBlock changed held item", true);
-                    step = 9;
-                } else if (++waitTicks > 200) {
-                    fail("pickItemFromBlock timeout");
-                    step = 9;
-                }
-            }
-            case 9 -> {
+            case 8 -> {
                 MockplayerApi.bots().removeBot(botName, "test");
                 finishSuite();
             }

@@ -430,12 +430,17 @@ public class FakePlayListener extends ClientPacketListener {
      */
     @Override
     public void handleContainerContent(net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket packet) {
-        if (this.fakePlayer != null) {
-            if (packet.containerId() == 0) {
-                this.fakePlayer.inventoryMenu.initializeContents(packet.stateId(), packet.items(), packet.carriedItem());
-            } else if (packet.containerId() == this.fakePlayer.containerMenu.containerId) {
-                this.fakePlayer.containerMenu.initializeContents(packet.stateId(), packet.items(), packet.carriedItem());
+        try {
+            if (this.fakePlayer != null) {
+                if (packet.containerId() == 0) {
+                    this.fakePlayer.inventoryMenu.initializeContents(packet.stateId(), packet.items(), packet.carriedItem());
+                } else if (packet.containerId() == this.fakePlayer.containerMenu.containerId) {
+                    this.fakePlayer.containerMenu.initializeContents(packet.stateId(), packet.items(), packet.carriedItem());
+                }
             }
+        } catch (Exception e) {
+            // 某些菜单（如 BeaconMenu）槽位/状态初始化可能抛——记录不崩连接（假人仍保持容器会话）
+            FakeSession.LOG.warn("[{}] handleContainerContent 异常: {}", this.session.getName(), e.toString());
         }
     }
 
@@ -445,22 +450,26 @@ public class FakePlayListener extends ClientPacketListener {
     @Override
     public void handleContainerSetSlot(net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket packet) {
         PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
-        if (this.fakePlayer != null) {
-            net.minecraft.world.item.ItemStack itemStack = packet.getItem();
-            int slot = packet.getSlot();
-            if (packet.getContainerId() == 0) {
-                // 与原版一致：快捷栏新物品动画（假人无渲染动画，仅维护计数逻辑等价）
-                if (net.minecraft.world.inventory.InventoryMenu.isHotbarSlot(slot) && !itemStack.isEmpty()) {
-                    net.minecraft.world.item.ItemStack lastItemStack = this.fakePlayer.inventoryMenu.getSlot(slot).getItem();
-                    if (lastItemStack.isEmpty() || lastItemStack.getCount() < itemStack.getCount()) {
-                        itemStack.setPopTime(5);
+        try {
+            if (this.fakePlayer != null) {
+                net.minecraft.world.item.ItemStack itemStack = packet.getItem();
+                int slot = packet.getSlot();
+                if (packet.getContainerId() == 0) {
+                    // 与原版一致：快捷栏新物品动画（假人无渲染动画，仅维护计数逻辑等价）
+                    if (net.minecraft.world.inventory.InventoryMenu.isHotbarSlot(slot) && !itemStack.isEmpty()) {
+                        net.minecraft.world.item.ItemStack lastItemStack = this.fakePlayer.inventoryMenu.getSlot(slot).getItem();
+                        if (lastItemStack.isEmpty() || lastItemStack.getCount() < itemStack.getCount()) {
+                            itemStack.setPopTime(5);
+                        }
                     }
+                    this.fakePlayer.inventoryMenu.setItem(slot, packet.getStateId(), itemStack);
+                } else if (packet.getContainerId() == this.fakePlayer.containerMenu.containerId) {
+                    this.fakePlayer.containerMenu.setItem(slot, packet.getStateId(), itemStack);
                 }
-                this.fakePlayer.inventoryMenu.setItem(slot, packet.getStateId(), itemStack);
-            } else if (packet.getContainerId() == this.fakePlayer.containerMenu.containerId) {
-                this.fakePlayer.containerMenu.setItem(slot, packet.getStateId(), itemStack);
+                fire(b -> b.fireOnContainerSlotChanged(packet.getContainerId(), slot, itemStack));
             }
-            fire(b -> b.fireOnContainerSlotChanged(packet.getContainerId(), slot, itemStack));
+        } catch (Exception e) {
+            FakeSession.LOG.warn("[{}] handleContainerSetSlot 异常: {}", this.session.getName(), e.toString());
         }
     }
 
