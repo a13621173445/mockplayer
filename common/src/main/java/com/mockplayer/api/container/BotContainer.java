@@ -63,12 +63,35 @@ public interface BotContainer {
     void click(int slot, int button, ContainerInput input);
 
     /**
+     * 点击菜单按钮（附魔台选附魔、酿造台选配方等通用按钮能力）。
+     * 走 ServerboundContainerButtonClickPacket，服务端按菜单类型处理；非按钮菜单无害。
+     *
+     * @param buttonId 按钮 id（附魔台 0-2 = 三个附魔槽）
+     */
+    void clickButton(int buttonId);
+
+    /**
      * 用指定物品覆盖槽位（服务端校验后回包确认）。
      *
      * @param slot  槽位索引
      * @param stack 物品
      */
     void setSlot(int slot, ItemStack stack);
+
+    /**
+     * 当前鼠标携带的物品（点击取起后未放下）。
+     *
+     * @return ItemStack
+     */
+    ItemStack getCarried();
+
+    /**
+     * 选择交易菜单中的一笔交易（交易菜单有效，其他菜单无害）。
+     * 走 ServerboundSelectTradePacket；选中后点交易结果槽完成交易。
+     *
+     * @param index 交易报价索引（0 起）
+     */
+    void selectTrade(int index);
 
     /**
      * 关闭容器菜单。

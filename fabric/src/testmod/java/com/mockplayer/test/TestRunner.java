@@ -6,7 +6,6 @@ import com.mockplayer.api.BotProfile;
 import com.mockplayer.api.MockplayerApi;
 import com.mockplayer.api.RemoveResult;
 import com.mockplayer.api.container.BotContainer;
-import com.mockplayer.api.container.BotMerchantMenu;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -1101,10 +1100,10 @@ public final class TestRunner {
                 step = 4;
             }
             case 4 -> {
-                Optional<com.mockplayer.api.container.BotEnchantmentMenu> enc = bot.getEnchantment();
+                Optional<BotContainer> enc = bot.getContainer();
                 if (enc.isPresent()) {
                     check("getScreen present", bot.getScreen().isPresent());
-                    check("getEnchantment present", true);
+                    check("getContainer present (enchanting)", true);
                     check("menuType is enchanting", enc.get().getMenuType() == MenuType.ENCHANTMENT);
                     step = 5;
                 }
@@ -1136,7 +1135,7 @@ public final class TestRunner {
                 if (!encLoaded) {
                     encLoaded = true;
                     // give 的剑/青金石在快捷栏0/1 = EnchantmentMenu 槽29/30（0 物品 / 1 青金石 / 2-28 主背包 / 29-37 快捷栏）
-                    bot.getEnchantment().ifPresent(c -> {
+                    bot.getContainer().ifPresent(c -> {
                         c.click(29, 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 剑→鼠标
                         c.click(0, 0, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 剑→附魔槽0
                         c.click(30, 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 青金石→鼠标
@@ -1147,8 +1146,12 @@ public final class TestRunner {
                 step = 8;
             }
             case 8 -> {
-                // 等服务端算出附魔成本（物品+青金石放入后 slotsChanged 更新 costs）
-                bot.getEnchantment().ifPresent(c -> encCost0 = c.getCosts()[0]);
+                // 等服务端算出附魔成本（物品+青金石放入后 slotsChanged 更新 costs；raw() cast 原版菜单读）
+                bot.getContainer().ifPresent(c -> {
+                    if (c.getMenuType() == MenuType.ENCHANTMENT) {
+                        encCost0 = ((net.minecraft.world.inventory.EnchantmentMenu) c.raw()).costs[0];
+                    }
+                });
                 if (encCost0 > 0) {
                     check("enchantment costs available (cost0=" + encCost0 + ")", true);
                     step = 9;
@@ -1158,8 +1161,8 @@ public final class TestRunner {
                 }
             }
             case 9 -> {
-                // 执行附魔（服务端校验材料/经验 + 给物品附魔）→ 断言附魔槽0 的剑有 ENCHANTMENTS
-                bot.getEnchantment().ifPresent(c -> c.enchant(0));
+                // 执行附魔（通用 clickButton，服务端校验材料/经验）→ 断言附魔槽0 的剑有 ENCHANTMENTS
+                bot.getContainer().ifPresent(c -> c.clickButton(0));
                 server.execute(() -> {
                     net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
                     if (sp != null) {
@@ -1185,7 +1188,11 @@ public final class TestRunner {
 
     // ===== merchant：服务端开交易菜单（ClientSideMerchant，无实体依赖）→ 假人交易会话断言 =====
 
-    private static boolean merchantOpened;
+    private static boolean merchantSummoned;
+    private static boolean merchantInteracted;
+    private static boolean merchantGiveDone;
+    private static boolean merchantTraded;
+    private static volatile boolean merchantGotDiamond;
 
     private static void runMerchant(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -1202,49 +1209,106 @@ public final class TestRunner {
                 }
             }
             case 1 -> {
-                // 服务端线程开交易菜单：用 ClientSideMerchant（内存 merchant，stillValid 恒 true，
-                // 无实体/无 AI/无距离问题——村民实体会走开导致 MerchantMenu.stillValid=false 服务端关菜单）
-                if (!merchantOpened) {
-                    merchantOpened = true;
+                // /summon 无 AI 村民（NoAI 不走动，交易菜单 stillValid 恒 true）+ 特殊交易覆盖原版报价
+                // 26.2 交易 NBT：MerchantOffers.CODEC = MerchantOffer.CODEC.listOf().optionalFieldOf("Recipes") →
+                // Offers 是 map（带 Recipes 键），Recipes 是 list（实测 "Not a map" 后确认格式）
+                if (!merchantSummoned) {
+                    merchantSummoned = true;
                     server.execute(() -> {
                         net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
                         if (sp != null) {
-                            try {
-                                net.minecraft.world.entity.npc.ClientSideMerchant clientMerchant = new net.minecraft.world.entity.npc.ClientSideMerchant(sp);
-                                net.minecraft.world.item.trading.MerchantOffers offers = new net.minecraft.world.item.trading.MerchantOffers();
-                                offers.add(new net.minecraft.world.item.trading.MerchantOffer(
-                                        new net.minecraft.world.item.trading.ItemCost(net.minecraft.world.item.Items.EMERALD, 1),
-                                        new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, 2),
-                                        12, 5, 0.05F));
-                                clientMerchant.overrideOffers(offers);
-                                net.minecraft.world.SimpleMenuProvider provider = new net.minecraft.world.SimpleMenuProvider(
-                                        (id, inv, p) -> new net.minecraft.world.inventory.MerchantMenu(id, inv, clientMerchant),
-                                        net.minecraft.network.chat.Component.literal("Villager"));
-                                java.util.OptionalInt r = sp.openMenu(provider);
-                                // 26.2 openMenu 不自动发 offers 包（sendMerchantOffers 是村民交互流程单独调用）
-                                if (r.isPresent()) {
-                                    sp.sendMerchantOffers(r.getAsInt(), clientMerchant.getOffers(), 0, 1, true, true);
-                                }
-                            } catch (Exception ex) {
-                                System.out.println("[mocktest] open merchant err " + ex);
-                            }
+                            String cmd = String.format(
+                                    "summon minecraft:villager %.2f %.2f %.2f {NoAI:1b,Offers:{Recipes:[{buy:{id:\"minecraft:emerald\",count:1},sell:{id:\"minecraft:diamond\",count:1},maxUses:99,xp:1}]}}",
+                                    sp.getX() + 3.0, sp.getY(), sp.getZ());
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), cmd);
                         }
                     });
                 }
                 step = 2;
             }
             case 2 -> {
-                Optional<BotMerchantMenu> merchant = bot.getMerchant();
-                if (merchant.isPresent()) {
-                    check("getMerchant present", true);
-                    MerchantOffers offers = merchant.get().getOffers();
-                    check("offers non-empty", offers != null && !offers.isEmpty());
-                    merchant.get().selectOffer(0);
-                    check("selectOffer issued", true);
+                if (bot.getEntitiesNear(64).stream().anyMatch(e -> e instanceof net.minecraft.world.entity.npc.villager.Villager)) {
+                    check("client sees villager", true);
                     step = 3;
                 }
             }
             case 3 -> {
+                if (!merchantInteracted) {
+                    merchantInteracted = true;
+                    net.minecraft.world.entity.Entity villager = bot.getEntitiesNear(64).stream()
+                            .filter(e -> e instanceof net.minecraft.world.entity.npc.villager.Villager)
+                            .findFirst().orElse(null);
+                    if (villager != null) {
+                        bot.actions().lookAt(villager);
+                        bot.actions().interact(villager);
+                        check("interact villager issued", true);
+                    }
+                }
+                step = 4;
+            }
+            case 4 -> {
+                Optional<BotContainer> merchant = bot.getContainer();
+                if (merchant.isPresent() && merchant.get().getMenuType() == MenuType.MERCHANT) {
+                    check("getContainer present (real villager merchant)", true);
+                    check("menuType is merchant", true);
+                    step = 5;
+                }
+            }
+            case 5 -> {
+                if (!merchantGiveDone) {
+                    merchantGiveDone = true;
+                    server.execute(() -> {
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "give " + botName + " minecraft:emerald 1");
+                    });
+                }
+                step = 6;
+            }
+            case 6 -> {
+                if (bot.getLocalPlayer().getInventory().countItem(net.minecraft.world.item.Items.EMERALD) > 0) {
+                    check("client has emerald", true);
+                    step = 7;
+                } else if (++waitTicks > 200) {
+                    merchantGiveDone = false; // give 竞态丢失 → 重试
+                    waitTicks = 0;
+                    step = 5;
+                }
+            }
+            case 7 -> {
+                if (!merchantTraded) {
+                    merchantTraded = true;
+                    // give 的 emerald 在快捷栏0 = MerchantMenu 槽30（0/1 买入 / 2 结果 / 3-29 主背包 / 30-38 快捷栏）
+                    bot.getContainer().ifPresent(c -> {
+                        c.click(30, 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // emerald→鼠标
+                        c.click(0, 0, net.minecraft.world.inventory.ContainerInput.PICKUP);  // emerald→交易槽0
+                        c.selectTrade(0);                                                    // 选中特殊交易
+                        c.click(2, 0, net.minecraft.world.inventory.ContainerInput.PICKUP);  // 点结果槽交易 → 钻石到鼠标
+                        c.click(30, 0, net.minecraft.world.inventory.ContainerInput.PICKUP); // 钻石放回快捷栏0
+                    });
+                    check("merchant trade clicks issued", true);
+                }
+                step = 8;
+            }
+            case 8 -> {
+                // 服务端验证：假人背包出现钻石（交易真的执行）
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        merchantGotDiamond = sp.getInventory().countItem(net.minecraft.world.item.Items.DIAMOND) > 0;
+                    }
+                });
+                if (merchantGotDiamond) {
+                    check("traded emerald → diamond (server)", true);
+                    step = 9;
+                } else if (++waitTicks > 300) {
+                    fail("merchant trade timeout (no diamond)");
+                    step = 9;
+                }
+            }
+            case 9 -> {
+                // 清理村民（避免残留干扰后续套件）
+                server.execute(() -> {
+                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill @e[type=minecraft:villager]");
+                });
                 MockplayerApi.bots().removeBot(botName, "test");
                 finishSuite();
             }
@@ -1311,7 +1375,11 @@ public final class TestRunner {
         chestGiveDone = false;
         chestSlotHasStone = false;
         chestSlotEmpty = false;
-        merchantOpened = false;
+        merchantSummoned = false;
+        merchantInteracted = false;
+        merchantGiveDone = false;
+        merchantTraded = false;
+        merchantGotDiamond = false;
         stabSummoned = false;
         stabSpearGiven = false;
         stabAttacked = false;

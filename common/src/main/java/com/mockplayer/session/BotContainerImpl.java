@@ -73,6 +73,31 @@ public class BotContainerImpl implements BotContainer {
     }
 
     @Override
+    public void clickButton(int buttonId) {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null) {
+            return;
+        }
+        // 菜单按钮点击（附魔选附魔等）：发 ServerboundContainerButtonClickPacket，服务端按菜单类型处理
+        player.connection.send(new net.minecraft.network.protocol.game.ServerboundContainerButtonClickPacket(this.menu.containerId, buttonId));
+    }
+
+    @Override
+    public ItemStack getCarried() {
+        return this.menu.getCarried();
+    }
+
+    @Override
+    public void selectTrade(int index) {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null) {
+            return;
+        }
+        // 交易选择：发 ServerboundSelectTradePacket，服务端选中报价（交易菜单有效，其他菜单无害）
+        player.connection.send(new net.minecraft.network.protocol.game.ServerboundSelectTradePacket(index));
+    }
+
+    @Override
     public void setSlot(int slot, ItemStack stack) {
         // 本地乐观写入（服务端会以回包为准修正）；完整拖拽/移动请用 click。
         this.menu.setItem(slot, 0, stack);
