@@ -1116,10 +1116,13 @@ public class FakePlayListener extends ClientPacketListener {
             net.minecraft.world.inventory.HorseInventoryMenu menu = new net.minecraft.world.inventory.HorseInventoryMenu(
                     packet.getContainerId(), player.getInventory(), container, horse, inventoryColumns);
             player.containerMenu = menu;
+            // 同步 Bot.openMenu（马菜单也要能被 Bot.getContainer() 读到）
+            this.fire(b -> b.setOpenMenu(player.containerMenu, net.minecraft.network.chat.Component.translatable("container.horse")));
         } else if (entity instanceof net.minecraft.world.entity.animal.nautilus.AbstractNautilus nautilus) {
             net.minecraft.world.inventory.NautilusInventoryMenu menu = new net.minecraft.world.inventory.NautilusInventoryMenu(
                     packet.getContainerId(), player.getInventory(), container, nautilus, inventoryColumns);
             player.containerMenu = menu;
+            this.fire(b -> b.setOpenMenu(player.containerMenu, net.minecraft.network.chat.Component.translatable("container.horse")));
         }
     }
 

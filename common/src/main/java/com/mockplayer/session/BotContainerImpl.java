@@ -34,7 +34,13 @@ public class BotContainerImpl implements BotContainer {
 
     @Override
     public MenuType<?> getMenuType() {
-        return this.menu.getType();
+        // 骑乘类菜单（HorseInventoryMenu/NautilusInventoryMenu）MenuType 为 null，
+        // 原版 AbstractContainerMenu.getType() 此时抛 UnsupportedOperationException，这里归一为 null
+        try {
+            return this.menu.getType();
+        } catch (UnsupportedOperationException e) {
+            return null;
+        }
     }
 
     @Override

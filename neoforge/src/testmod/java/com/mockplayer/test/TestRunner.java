@@ -854,7 +854,11 @@ public final class TestRunner {
             new ContainerCase("loom", Blocks.LOOM, "minecraft:white_banner", MenuType.LOOM, 31, 0, 3),
             new ContainerCase("cartography_table", Blocks.CARTOGRAPHY_TABLE, "minecraft:paper", MenuType.CARTOGRAPHY_TABLE, 30, 1, 2),
             new ContainerCase("smithing_table", Blocks.SMITHING_TABLE, "minecraft:iron_ingot", MenuType.SMITHING, 31, 2, 3),
-            new ContainerCase("beacon", Blocks.BEACON, "minecraft:emerald", MenuType.BEACON, 28, 0, -1));
+            new ContainerCase("beacon", Blocks.BEACON, "minecraft:emerald", MenuType.BEACON, 28, 0, -1),
+            new ContainerCase("crafter", Blocks.CRAFTER, "minecraft:stone", MenuType.CRAFTER_3x3, 36, 0, 45),
+            new ContainerCase("trapped_chest", Blocks.TRAPPED_CHEST, "minecraft:stone", MenuType.GENERIC_9x3, 54, 0, -1),
+            new ContainerCase("large_chest", Blocks.CHEST, "minecraft:stone", MenuType.GENERIC_9x6, 81, 0, -1),
+            new ContainerCase("horse", null, "minecraft:saddle", null, 29, 0, -1));
 
     private static int containerAllCaseIndex;
     private static BlockPos containerAllPos;
@@ -867,6 +871,8 @@ public final class TestRunner {
     private static boolean lecternBookGiven;
     private static boolean lecternBookPlaced;
     private static int lecternOpenWait;
+    private static boolean horseSummoned;
+    private static boolean horseInteracted;
 
     private static void runContainersAll(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -889,10 +895,67 @@ public final class TestRunner {
                     containerAllPos = bot.getLocalPlayer().blockPosition().offset(3, 0, 0);
                     BlockPos p = containerAllPos;
                     ContainerCase c = CONTAINER_CASES.get(containerAllCaseIndex);
-                    server.execute(() -> server.getLevel(Level.OVERWORLD).setBlock(p, c.block().defaultBlockState(), 3));
+                    if (c.block() != null) {
+                        server.execute(() -> {
+                        if ("large_chest".equals(c.name())) {
+                            // 大箱：ChestBlock.updateShape 合并需邻居已非 SINGLE，手动放 LEFT + RIGHT（getConnectedDirection 匹配）
+                            net.minecraft.world.level.block.state.BlockState cl = Blocks.CHEST.defaultBlockState()
+                                    .setValue(net.minecraft.world.level.block.ChestBlock.FACING, Direction.NORTH)
+                                    .setValue(net.minecraft.world.level.block.ChestBlock.TYPE,
+                                            net.minecraft.world.level.block.state.properties.ChestType.LEFT);
+                            net.minecraft.world.level.block.state.BlockState cr = Blocks.CHEST.defaultBlockState()
+                                    .setValue(net.minecraft.world.level.block.ChestBlock.FACING, Direction.NORTH)
+                                    .setValue(net.minecraft.world.level.block.ChestBlock.TYPE,
+                                            net.minecraft.world.level.block.state.properties.ChestType.RIGHT);
+                            server.getLevel(Level.OVERWORLD).setBlock(p, cl, 3);
+                            server.getLevel(Level.OVERWORLD).setBlock(p.east(), cr, 3);
+                        } else {
+                            server.getLevel(Level.OVERWORLD).setBlock(p, c.block().defaultBlockState(), 3);
+                        }
+                    });
+                    }
                 }
                 ContainerCase c0 = CONTAINER_CASES.get(containerAllCaseIndex);
-                if (bot.getBlockState(containerAllPos).is(c0.block())) {
+                if ("horse".equals(c0.name())) {
+                    // 马特殊：服务端 spawn 无 AI 驯服马（地面），假人潜行右键马真实触发马背包（mobInteract 潜行分支）
+                    if (!horseSummoned) {
+                        horseSummoned = true;
+                        server.execute(() -> {
+                            // 马 spawn 在地面 1 格内（isWithinEntityInteractionRange 3 格），NoAI 驯服不走动
+                            net.minecraft.world.phys.Vec3 hp = bot.getLocalPlayer().position().add(1.0, 0.0, 0.0);
+                            net.minecraft.world.entity.animal.equine.Horse horse = new net.minecraft.world.entity.animal.equine.Horse(
+                                    net.minecraft.world.entity.EntityTypes.HORSE, server.getLevel(Level.OVERWORLD));
+                            horse.setPos(hp);
+                            horse.setTamed(true);
+                            horse.setNoAi(true);
+                            server.getLevel(Level.OVERWORLD).addFreshEntity(horse);
+                        });
+                    }
+                    if (!containerAllOpened) {
+                        var clientHorses = bot.getLocalPlayer().level().getEntitiesOfClass(
+                                net.minecraft.world.entity.animal.equine.AbstractHorse.class,
+                                new net.minecraft.world.phys.AABB(bot.getLocalPlayer().position().add(-8.0, -8.0, -8.0),
+                                        bot.getLocalPlayer().position().add(8.0, 12.0, 8.0)));
+                        if (!clientHorses.isEmpty() && !horseInteracted) {
+                            horseInteracted = true;
+                            // 选距假人最近的马（世界持久化可能残留旧马），潜行右键已驯服马真实触发马背包
+                            net.minecraft.world.entity.animal.equine.AbstractHorse horse = clientHorses.stream()
+                                    .min(java.util.Comparator.comparingDouble(
+                                            h -> h.distanceToSqr(bot.getLocalPlayer())))
+                                    .orElse(null);
+                            if (horse != null) {
+                                // 手动发包 secondaryAction=true（setShiftKeyDown 的共享标志会被假人实体数据同步覆盖），
+                                // 等价假人潜行右键：服务端 handleInteract setShiftKeyDown(true) → mobInteract 潜行分支开马背包
+                                bot.getLocalPlayer().connection.send(new net.minecraft.network.protocol.game.ServerboundInteractPacket(
+                                        horse.getId(), InteractionHand.MAIN_HAND, net.minecraft.world.phys.Vec3.ZERO, true));
+                            }
+                        }
+                        if (horseInteracted && bot.getContainer().isPresent()) {
+                            containerAllOpened = true;
+                            step = 2;
+                        }
+                    }
+                } else if (bot.getBlockState(containerAllPos).is(c0.block())) {
                     if ("lectern".equals(c0.name())) {
                         // 讲台特殊：空讲台右键不开菜单，服务端直接放书（setBook + HAS_BOOK）再打开
                         if (!lecternBookPlaced) {
@@ -919,19 +982,24 @@ public final class TestRunner {
                             }
                         }
                     } else {
-                        if (!containerAllOpened) {
+                        // 大箱：等服务端合并完成（type 变 LEFT/RIGHT，非 SINGLE）再打开
+                        boolean largeReady = !"large_chest".equals(c0.name())
+                                || (bot.getBlockState(containerAllPos).hasProperty(net.minecraft.world.level.block.ChestBlock.TYPE)
+                                    && bot.getBlockState(containerAllPos).getValue(net.minecraft.world.level.block.ChestBlock.TYPE)
+                                        != net.minecraft.world.level.block.state.properties.ChestType.SINGLE);
+                        if (largeReady && !containerAllOpened) {
                             containerAllOpened = true;
                             bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(containerAllPos));
                             net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
                                     net.minecraft.world.phys.Vec3.atCenterOf(containerAllPos), Direction.WEST, containerAllPos, false);
                             bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
+                            step = 2;
                         }
-                        step = 2;
                     }
                 }
             }
             case 2 -> {
-                // 断言 getContainer + menuType（真实打开该容器）
+                // 断言 getContainer + menuType（真实打开该容器；马菜单 MenuType=null）
                 ContainerCase c = CONTAINER_CASES.get(containerAllCaseIndex);
                 Optional<BotContainer> container = bot.getContainer();
                 if (container.isPresent()) {
@@ -1060,6 +1128,8 @@ public final class TestRunner {
                         containerAllServerEmpty = false;
                         lecternBookGiven = false;
                         lecternBookPlaced = false;
+                        horseSummoned = false;
+                        horseInteracted = false;
                         waitTicks = 0;
                         step = 1;
                     } else {
