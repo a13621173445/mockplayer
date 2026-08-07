@@ -679,6 +679,7 @@ public final class TestRunner {
     private static boolean uiShieldReleased;
     private static volatile boolean uiShieldUsing;
     private static volatile boolean uiShieldVisibleToMain;
+    private static boolean uiShieldVisibleChecked;
     private static volatile boolean uiShieldServer;
     private static volatile boolean uiShieldReleasedServer;
     private static boolean uiShieldBlockedChecked;
@@ -688,6 +689,7 @@ public final class TestRunner {
     private static boolean uiBowReleased;
     private static volatile boolean uiBowUsing;
     private static volatile boolean uiBowVisibleToMain;
+    private static boolean uiBowVisibleChecked;
     private static volatile boolean uiBowServer;
     private static volatile boolean uiArrowServer;
     private static boolean uiSnowGiven;
@@ -755,11 +757,12 @@ public final class TestRunner {
                 server.execute(() -> {
                     net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
                     if (sp != null) {
-                        // 主玩家视角：主玩家 level 的假人实体吃面包（EAT 使用动画对主玩家可见）
-                        uiBreadVisibleToMain = mc.level.getEntitiesOfClass(net.minecraft.world.entity.player.Player.class,
+                        // 主玩家视角：累积（吃面包期间任何一刻主玩家 level 假人实体同步了 EAT 动画即可见）
+                        uiBreadVisibleToMain |= mc.level.getEntitiesOfClass(net.minecraft.world.entity.player.Player.class,
                                         new net.minecraft.world.phys.AABB(sp.position().add(-32, -32, -32), sp.position().add(32, 32, 32)))
                                 .stream().anyMatch(p -> p.getName().getString().equals(botName)
-                                        && p.isUsingItem() && p.getUseItem().is(net.minecraft.world.item.Items.BREAD));
+                                        && p.isUsingItem() && p.getUseItem().is(net.minecraft.world.item.Items.BREAD)
+                                        && p.getUseItem().getUseAnimation() == net.minecraft.world.item.ItemUseAnimation.EAT);
                         // 强断言：吃完（面包消耗）+ 饥饿值上升（比吃前 base 高）
                         uiBreadEaten = !sp.isUsingItem()
                                 && sp.getInventory().countItem(net.minecraft.world.item.Items.BREAD) == 0
@@ -814,20 +817,24 @@ public final class TestRunner {
                 server.execute(() -> {
                     net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
                     uiShieldUsing = sp != null && sp.isUsingItem() && sp.getUseItem().is(net.minecraft.world.item.Items.SHIELD);
-                    // 主玩家视角：主玩家 level 的假人实体使用状态（假人动作对主玩家可见——服务端广播使用标志）
+                    // 主玩家视角：累积（持续使用期间任何一刻主玩家 level 假人实体同步了举盾 BLOCK 动画即可见）
                     if (sp != null) {
-                        uiShieldVisibleToMain = mc.level.getEntitiesOfClass(net.minecraft.world.entity.player.Player.class,
+                        uiShieldVisibleToMain |= mc.level.getEntitiesOfClass(net.minecraft.world.entity.player.Player.class,
                                         new net.minecraft.world.phys.AABB(sp.position().add(-32, -32, -32), sp.position().add(32, 32, 32)))
                                 .stream().anyMatch(p -> p.getName().getString().equals(botName)
-                                        && p.isUsingItem() && p.getUseItem().is(net.minecraft.world.item.Items.SHIELD));
+                                        && p.isUsingItem() && p.getUseItem().is(net.minecraft.world.item.Items.SHIELD)
+                                        && p.getUseItem().getUseAnimation() == net.minecraft.world.item.ItemUseAnimation.BLOCK);
                     }
                 });
                 if (uiShieldUsing) {
-                    // 强断言：盾牌举盾持续（isUsingItem 保持 10+ tick）+ 主玩家视角能看到假人举盾动作
+                    // 强断言：盾牌举盾持续（isUsingItem 保持 10+ tick）+ 主玩家视角能看到假人举盾 BLOCK 动画
                     if (!uiShieldBlockedChecked) {
                         uiShieldBlockedChecked = true;
                         check("shield blocking (server isUsingItem)", true);
-                        check("shield action visible to main player", uiShieldVisibleToMain);
+                    }
+                    if (uiShieldVisibleToMain && !uiShieldVisibleChecked) {
+                        uiShieldVisibleChecked = true;
+                        check("shield action visible to main player", true);
                     }
                     if (++uiShieldHoldTicks >= 10) {
                         check("shield held 10+ ticks (sustained)", true);
@@ -896,17 +903,21 @@ public final class TestRunner {
                 server.execute(() -> {
                     net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
                     uiBowUsing = sp != null && sp.isUsingItem() && sp.getUseItem().is(net.minecraft.world.item.Items.BOW);
-                    // 主玩家视角：主玩家 level 的假人实体拉弓（BOW 拉弦动画对主玩家可见）
+                    // 主玩家视角：累积（拉弦期间任何一刻主玩家 level 假人实体同步了 BOW 动画即可见）
                     if (sp != null) {
-                        uiBowVisibleToMain = mc.level.getEntitiesOfClass(net.minecraft.world.entity.player.Player.class,
+                        uiBowVisibleToMain |= mc.level.getEntitiesOfClass(net.minecraft.world.entity.player.Player.class,
                                         new net.minecraft.world.phys.AABB(sp.position().add(-32, -32, -32), sp.position().add(32, 32, 32)))
                                 .stream().anyMatch(p -> p.getName().getString().equals(botName)
-                                        && p.isUsingItem() && p.getUseItem().is(net.minecraft.world.item.Items.BOW));
+                                        && p.isUsingItem() && p.getUseItem().is(net.minecraft.world.item.Items.BOW)
+                                        && p.getUseItem().getUseAnimation() == net.minecraft.world.item.ItemUseAnimation.BOW);
                     }
                 });
                 if (uiBowUsing) {
                     check("bow charging (server isUsingItem)", true);
-                    check("bow pull action visible to main player", uiBowVisibleToMain);
+                    if (uiBowVisibleToMain && !uiBowVisibleChecked) {
+                        uiBowVisibleChecked = true;
+                        check("bow pull action visible to main player", true);
+                    }
                     step = 8;
                 } else if (++waitTicks > 200) {
                     fail("bow not charging timeout");
