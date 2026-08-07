@@ -45,7 +45,7 @@ public final class TestRunner {
     /** 全部套件（suite=all / IDE 默认入口时按序连续跑） */
     private static final List<String> ALL_SUITES = List.of(
             "api-smoke", "api-full", "use-items", "containers", "containers-all", "crafting", "furnace",
-            "combat-stab", "combat-sprint", "enchanting", "merchant", "gui-actions");
+            "combat-stab", "combat-sprint", "enchanting", "merchant", "gui-actions", "listener-events");
 
     private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }
 
@@ -1683,8 +1683,8 @@ public final class TestRunner {
                     leCase0Done = true;
                     leCounts.clear();
                     MockplayerApi.listen(leListener); // 先注册，捕获 onSpawned/onPlayReady/onPlayerJoined
-                    prepareBot(server);
                 }
+                prepareBot(server); // 每次调用（套件冷却后 createBot），不能一次性
                 if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
                     step = 1;
                 }
