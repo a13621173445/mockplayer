@@ -208,6 +208,11 @@ public interface BotActions {
     void swapHands();
 
     /**
+     * 物品栏选中槽位（原版快捷栏 0-8 切换）。
+     */
+    BotActions setSelectedSlot(int slot);
+
+    /**
      * 骑乘附近最近的坐骑（马/船/矿车；可选的只骑可骑乘实体）。
      *
      * @param onlyRideables true 只骑 Minecart/Boat/AbstractHorse，false 附近任意实体
@@ -223,4 +228,62 @@ public interface BotActions {
      * 下马。
      */
     void dismount();
+
+    // ===== GUI 操作直接发包（不走 Screen 按钮，包路由到假人 connection，零主玩家污染） =====
+
+    /**
+     * 发聊天消息（等价 ChatScreen 回车发送）。
+     *
+     * @param message 消息内容；以 "/" 开头会自动走命令包路径
+     */
+    BotActions chat(String message);
+
+    /**
+     * 执行服务端命令（等价 ChatScreen 输入 "/命令" 回车）。
+     */
+    BotActions sendCommand(String command);
+
+    /**
+     * 起床（等价 InBedChatScreen 起床按钮：发 STOP_SLEEPING）。
+     */
+    BotActions wakeUp();
+
+    /**
+     * 重生（等价 DeathScreen 重生按钮：发 PERFORM_RESPAWN）。
+     */
+    BotActions respawn();
+
+    /**
+     * 写书（等价 BookEditScreen 保存：发 EditBookPacket）。
+     *
+     * @param slot  书与笔所在快捷栏槽位
+     * @param pages 各页内容
+     * @param title 成书标题（写书并署名时为 present）
+     */
+    BotActions editBook(int slot, java.util.List<String> pages, java.util.Optional<String> title);
+
+    /**
+     * 写告示牌（等价 SignEditScreen 完成：发 SignUpdatePacket）。
+     *
+     * @param pos         告示牌方块位置
+     * @param isFrontText 正面/背面文本
+     * @param lines       4 行文本
+     */
+    BotActions editSign(net.minecraft.core.BlockPos pos, boolean isFrontText, String[] lines);
+
+    /**
+     * 设置信标效果（等价 BeaconScreen 确认：发 SetBeaconPacket）。
+     */
+    BotActions setBeacon(java.util.Optional<net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect>> primary,
+            java.util.Optional<net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect>> secondary);
+
+    /**
+     * 铁砧改名（等价 AnvilScreen 输入名字：发 RenameItemPacket）。
+     */
+    BotActions renameItem(String name);
+
+    /**
+     * 中键取方块到主手（等价创造模式 pick block：发 PickItemFromBlockPacket）。
+     */
+    BotActions pickItemFromBlock(net.minecraft.core.BlockPos pos, boolean includeData);
 }

@@ -39,7 +39,7 @@ public abstract class MixinMultiPlayerGameMode {
 
     @Redirect(
             method = {
-                    "continueDestroyBlock", "destroyBlock", "handleCreativeModeItemAdd",
+                    "continueDestroyBlock", "destroyBlock", "ensureHasSentCarriedItem", "handleCreativeModeItemAdd",
                     "handleCreativeModeItemDrop", "isServerControlledInventory", "piercingAttack",
                     "setLocalMode", "startDestroyBlock", "stopDestroyBlock", "tick"
             },

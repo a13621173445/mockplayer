@@ -75,6 +75,7 @@ public final class TestRunner {
             case "combat-sprint" -> "tbot-spr";
             case "enchanting" -> "tbot-enc";
             case "merchant" -> "tbot-merk";
+            case "gui-actions" -> "tbot-gui";
             default -> "tbot";
         };
     }
@@ -211,6 +212,7 @@ public final class TestRunner {
             case "combat-sprint" -> runCombatSprint(mc);
             case "enchanting" -> runEnchanting(mc);
             case "merchant" -> runMerchant(mc);
+            case "gui-actions" -> runGuiActions(mc);
             default -> {
                 fail("unknown suite: " + suite);
                 finishSuite();
@@ -687,6 +689,8 @@ public final class TestRunner {
     private static boolean uiBowGiven;
     private static boolean uiBowUsed;
     private static boolean uiBowReleased;
+    private static int uiBowHoldTicks;
+    private static boolean uiArrowChecked;
     private static volatile boolean uiBowUsing;
     private static volatile boolean uiBowVisibleToMain;
     private static boolean uiBowVisibleChecked;
@@ -700,6 +704,30 @@ public final class TestRunner {
     private static boolean uiOffhandGiven;
     private static boolean uiOffhandUsed;
     private static volatile boolean uiOffhandUsing;
+    private static boolean uiTridentGiven;
+    private static boolean uiTridentUsed;
+    private static boolean uiTridentReleased;
+    private static boolean uiTridentChecked;
+    private static int uiTridentHoldTicks;
+    private static volatile boolean uiTridentCharging;
+    private static volatile boolean uiTridentServer;
+    private static volatile boolean uiTridentVisibleToMain;
+    private static boolean uiCrossbowGiven;
+    private static boolean uiCrossbowUsed;
+    private static boolean uiCrossbowReleased;
+    private static volatile boolean uiCrossbowServer;
+    private static volatile boolean uiCrossbowUsing;
+    private static boolean uiPotionGiven;
+    private static boolean uiPotionUsed;
+    private static volatile boolean uiPotionServer;
+    private static volatile boolean uiPotionVisibleToMain;
+    private static BlockPos uiBedPos;
+    private static boolean uiBedUsed;
+    private static boolean uiBedLookedAt;
+    private static int uiBedLookTicks;
+    private static boolean uiBedClicked;
+    private static volatile boolean uiBedSleeping;
+    private static volatile boolean uiBedAwake;
 
     private static void runUseItems(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -712,7 +740,6 @@ public final class TestRunner {
             case 0 -> {
                 prepareBot(server);
                 if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
-                    check("createBot PLAYING", true);
                     step = 1;
                 }
             }
@@ -925,20 +952,24 @@ public final class TestRunner {
                 }
             }
             case 8 -> {
-                if (!uiBowReleased) {
+                // 弓也需蓄力（拉满再松开才射箭），case 7 蓄力后等 15 tick 再 release
+                if (!uiBowReleased && ++uiBowHoldTicks >= 15) {
                     uiBowReleased = true;
                     bot.actions().releaseUsingItem();
                 }
                 server.execute(() -> {
                     net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
                     if (sp != null) {
-                        uiArrowServer = !sp.level().getEntitiesOfClass(
+                        uiArrowServer |= !sp.level().getEntitiesOfClass(
                                 net.minecraft.world.entity.projectile.arrow.AbstractArrow.class,
-                                new net.minecraft.world.phys.AABB(sp.position().add(-16, -8, -16), sp.position().add(16, 8, 16))).isEmpty();
+                                new net.minecraft.world.phys.AABB(sp.position().add(-24, -12, -24), sp.position().add(24, 12, 24))).isEmpty();
                     }
                 });
                 if (uiArrowServer) {
-                    check("bow released arrow (server)", true);
+                    if (!uiArrowChecked) {
+                        uiArrowChecked = true;
+                        check("bow released arrow (server)", true);
+                    }
                     step = 9;
                 } else if (++waitTicks > 200) {
                     fail("bow no arrow timeout");
@@ -1031,13 +1062,483 @@ public final class TestRunner {
                     check("offhand shield blocking (server)", true);
                     bot.actions().releaseUsingItem();
                     check("offhand released", true);
-                    step = 13;
+                    step = 14;
                 } else if (++waitTicks > 200) {
                     fail("offhand shield not blocking timeout");
-                    step = 13;
+                    step = 14;
                 }
             }
-            case 13 -> {
+            // ===== 三叉戟投掷：item replace → useItem → 服务端 ThrownTrident 实体（主玩家可见） =====
+            case 14 -> {
+                if (!uiTridentGiven) {
+                    uiTridentGiven = true;
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            sp.getInventory().clearContent();
+                        }
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " weapon.mainhand with minecraft:trident");
+                        if (sp != null) {
+                            sp.getInventory().setSelectedSlot(0);
+                        }
+                    });
+                    bot.getLocalPlayer().getInventory().setSelectedSlot(0);
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiTridentServer = sp != null && sp.getMainHandItem().is(net.minecraft.world.item.Items.TRIDENT);
+                });
+                if (uiTridentServer) {
+                    check("server holds trident", true);
+                    step = 15;
+                } else if (++waitTicks > 200) {
+                    uiTridentGiven = false;
+                    waitTicks = 0;
+                }
+            }
+            case 15 -> {
+                if (!uiTridentUsed) {
+                    uiTridentUsed = true;
+                    bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND); // 举着蓄力
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiTridentCharging = sp != null && sp.isUsingItem() && sp.getUseItem().is(net.minecraft.world.item.Items.TRIDENT);
+                });
+                if (uiTridentCharging && !uiTridentReleased && ++uiTridentHoldTicks >= 15) {
+                    // 三叉戟需蓄力满（TridentItem.releaseUsing 要求蓄力 >= 10 tick 才投掷），蓄力后松开
+                    uiTridentReleased = true;
+                    check("trident charging (server isUsingItem)", true);
+                    bot.actions().releaseUsingItem();
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        // 累积：投掷后几 tick 内服务端 + 主玩家 level 出现 ThrownTrident
+                        uiTridentServer |= !sp.level().getEntitiesOfClass(
+                                net.minecraft.world.entity.projectile.arrow.ThrownTrident.class,
+                                new net.minecraft.world.phys.AABB(sp.position().add(-24, -12, -24), sp.position().add(24, 12, 24))).isEmpty();
+                        uiTridentVisibleToMain |= !mc.level.getEntitiesOfClass(
+                                net.minecraft.world.entity.projectile.arrow.ThrownTrident.class,
+                                new net.minecraft.world.phys.AABB(sp.position().add(-24, -12, -24), sp.position().add(24, 12, 24))).isEmpty();
+                    }
+                });
+                if (uiTridentServer) {
+                    if (!uiTridentChecked) {
+                        uiTridentChecked = true;
+                        check("trident thrown (server)", true);
+                    }
+                    if (uiTridentVisibleToMain) {
+                        check("trident throw visible to main player", true);
+                        step = 16;
+                    }
+                } else if (++waitTicks > 200) {
+                    fail("trident not thrown timeout");
+                    step = 16;
+                }
+            }
+            // ===== 弩装填发射：item replace → useItem（装填）→ releaseUsingItem → 服务端箭 =====
+            case 16 -> {
+                if (!uiCrossbowGiven) {
+                    uiCrossbowGiven = true;
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            sp.getInventory().clearContent();
+                        }
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " weapon.mainhand with minecraft:crossbow");
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "give " + botName + " minecraft:arrow 64");
+                        if (sp != null) {
+                            sp.getInventory().setSelectedSlot(0);
+                        }
+                    });
+                    bot.getLocalPlayer().getInventory().setSelectedSlot(0);
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiCrossbowServer = sp != null && sp.getMainHandItem().is(net.minecraft.world.item.Items.CROSSBOW);
+                });
+                if (uiCrossbowServer) {
+                    check("server holds crossbow", true);
+                    step = 17;
+                } else if (++waitTicks > 200) {
+                    uiCrossbowGiven = false;
+                    waitTicks = 0;
+                }
+            }
+            case 17 -> {
+                if (!uiCrossbowUsed) {
+                    uiCrossbowUsed = true;
+                    bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND); // 装填
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiCrossbowUsing = sp != null && sp.isUsingItem() && sp.getUseItem().is(net.minecraft.world.item.Items.CROSSBOW);
+                });
+                if (uiCrossbowUsing) {
+                    check("crossbow charging (server isUsingItem)", true);
+                    step = 18;
+                } else if (++waitTicks > 200) {
+                    fail("crossbow not charging timeout");
+                    step = 18;
+                }
+            }
+            case 18 -> {
+                if (!uiCrossbowReleased) {
+                    uiCrossbowReleased = true;
+                    bot.actions().releaseUsingItem(); // 发射
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        uiCrossbowServer = !sp.level().getEntitiesOfClass(
+                                net.minecraft.world.entity.projectile.arrow.AbstractArrow.class,
+                                new net.minecraft.world.phys.AABB(sp.position().add(-16, -8, -16), sp.position().add(16, 8, 16))).isEmpty();
+                    }
+                });
+                if (uiCrossbowServer) {
+                    check("crossbow fired arrow (server)", true);
+                    step = 19;
+                } else if (++waitTicks > 200) {
+                    fail("crossbow no arrow timeout");
+                    step = 19;
+                }
+            }
+            // ===== 药水投掷：item replace → useItem → 服务端 ThrownSplashPotion 实体 =====
+            case 19 -> {
+                if (!uiPotionGiven) {
+                    uiPotionGiven = true;
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            sp.getInventory().clearContent();
+                        }
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " weapon.mainhand with minecraft:splash_potion");
+                        if (sp != null) {
+                            sp.getInventory().setSelectedSlot(0);
+                        }
+                    });
+                    bot.getLocalPlayer().getInventory().setSelectedSlot(0);
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiPotionServer = sp != null && sp.getMainHandItem().is(net.minecraft.world.item.Items.SPLASH_POTION);
+                });
+                if (uiPotionServer) {
+                    check("server holds splash potion", true);
+                    step = 20;
+                } else if (++waitTicks > 200) {
+                    uiPotionGiven = false;
+                    waitTicks = 0;
+                }
+            }
+            case 20 -> {
+                if (!uiPotionUsed) {
+                    uiPotionUsed = true;
+                    bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND);
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        // 累积：投掷后几 tick 内服务端 + 主玩家 level 出现 ThrownSplashPotion
+                        uiPotionServer |= !sp.level().getEntitiesOfClass(
+                                net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownSplashPotion.class,
+                                new net.minecraft.world.phys.AABB(sp.position().add(-24, -12, -24), sp.position().add(24, 12, 24))).isEmpty();
+                        uiPotionVisibleToMain |= !mc.level.getEntitiesOfClass(
+                                net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownSplashPotion.class,
+                                new net.minecraft.world.phys.AABB(sp.position().add(-24, -12, -24), sp.position().add(24, 12, 24))).isEmpty();
+                    }
+                });
+                if (uiPotionServer) {
+                    check("splash potion thrown (server)", true);
+                    if (uiPotionVisibleToMain) {
+                        check("potion throw visible to main player", true);
+                        step = 21;
+                    }
+                } else if (++waitTicks > 200) {
+                    fail("potion not thrown timeout");
+                    step = 21;
+                }
+            }
+            // ===== 睡觉/起床：useItemOn 床 → isSleeping → wakeUp() 发包起床 =====
+            case 21 -> {
+                if (uiBedPos == null) {
+                    uiBedPos = bot.getLocalPlayer().blockPosition().offset(1, 0, 0);
+                    server.execute(() -> {
+                        // 原版命令放完整床（head+foot 双格，只放一半睡不了）+ 设夜晚（白天不能睡）
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "time set night");
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "setblock " + uiBedPos.getX() + " " + uiBedPos.getY() + " " + uiBedPos.getZ()
+                                        + " minecraft:red_bed[facing=south,part=head]");
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "setblock " + uiBedPos.getX() + " " + uiBedPos.getY() + " " + (uiBedPos.getZ() - 1)
+                                        + " minecraft:red_bed[facing=south,part=foot]");
+                    });
+                }
+                if (!uiBedUsed && !uiBedLookedAt) {
+                    uiBedLookedAt = true;
+                    uiBedLookTicks = 0;
+                    bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(uiBedPos));
+                }
+                if (uiBedLookedAt && !uiBedUsed && ++uiBedLookTicks > 40) {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null && !isAwaitingPosition(sp)) {
+                        uiBedUsed = true;
+                        // 空手右键床才触发 useWithoutItem（服务端 useItemOn 内部用 player.getItemInHand(hand)）
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " weapon.mainhand with air");
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " weapon.offhand with air");
+                        net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
+                                net.minecraft.world.phys.Vec3.atCenterOf(uiBedPos), Direction.UP, uiBedPos, false);
+                        bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
+                    }
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiBedSleeping = sp != null && sp.isSleeping();
+                });
+                if (uiBedSleeping) {
+                    check("fake sleeping (server isSleeping)", true);
+                    step = 22;
+                } else if (uiBedUsed && ++waitTicks > 200) {
+                    fail("sleep not started timeout");
+                    step = 22;
+                }
+            }
+            case 22 -> {
+                if (!uiBedClicked) {
+                    uiBedClicked = true;
+                    waitTicks = 0;
+                    // 起床 = 直接发包 STOP_SLEEPING（等价 InBedChatScreen 起床按钮，包路由到假人 connection）
+                    bot.actions().wakeUp();
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    uiBedAwake = sp != null && !sp.isSleeping();
+                });
+                if (uiBedAwake) {
+                    check("stopSleeping woke up (server)", true);
+                    step = 23;
+                } else if (++waitTicks > 200) {
+                    fail("wake up timeout");
+                    step = 23;
+                }
+            }
+            case 23 -> {
+                MockplayerApi.bots().removeBot(botName, "test");
+                finishSuite();
+            }
+        }
+    }
+
+    // ===== gui-actions：GUI 操作直接发包（chat/sendCommand/respawn/editBook/editSign/setBeacon/pickItemFromBlock，服务端强断言） =====
+
+    /** 聊天广播断言：假人 chat/sendCommand 后服务端广播，假人自己收到 → onChat 记录 */
+    private static volatile String guiChatMsg = "";
+    private static final com.mockplayer.api.event.BotListener guiListener = new com.mockplayer.api.event.BotListener() {
+        @Override
+        public void onChat(com.mockplayer.api.Bot b, net.minecraft.network.chat.Component message) {
+            guiChatMsg = message.getString();
+        }
+    };
+    private static boolean guiChatCmdDone;
+    private static boolean guiCmdDone;
+    private static boolean guiRespawnKilled;
+    private static boolean guiRespawnDone;
+    private static volatile boolean guiRespawnDead;
+    private static volatile boolean guiRespawnVerified;
+    private static boolean guiBookGiven;
+    private static boolean guiBookDone;
+    private static volatile boolean guiBookVerified;
+    private static BlockPos guiSignPos;
+    private static boolean guiSignDone;
+    private static volatile boolean guiSignVerified;
+    private static BlockPos guiBeaconPos;
+    private static boolean guiBeaconDone;
+    private static volatile boolean guiBeaconVerified;
+    private static boolean guiPickDone;
+    private static volatile boolean guiPickVerified;
+
+    private static void runGuiActions(Minecraft mc) {
+        MinecraftServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            fail("no singleplayer server");
+            finishSuite();
+            return;
+        }
+        switch (step) {
+            case 0 -> {
+                prepareBot(server);
+                if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
+                    MockplayerApi.listen(guiListener);
+                    step = 1;
+                }
+            }
+            case 1 -> { // chat 纯消息：服务端广播 → 假人自己收到 → onChat 断言
+                if (!guiChatCmdDone) {
+                    guiChatCmdDone = true;
+                    guiChatMsg = "";
+                    bot.actions().chat("mockplayer-gui-test");
+                }
+                if (guiChatMsg.contains("mockplayer-gui-test")) {
+                    check("chat message broadcast to fake", true);
+                    step = 2;
+                } else if (++waitTicks > 200) {
+                    fail("chat message timeout");
+                    step = 2;
+                }
+            }
+            case 2 -> { // sendCommand("me ...")：命令执行 → 服务端广播 → onChat 断言
+                if (!guiCmdDone) {
+                    guiCmdDone = true;
+                    guiChatMsg = "";
+                    bot.actions().sendCommand("me mockplayer-gui-cmd");
+                }
+                if (guiChatMsg.contains("mockplayer-gui-cmd")) {
+                    check("sendCommand me executed", true);
+                    step = 3;
+                } else if (++waitTicks > 200) {
+                    fail("sendCommand timeout");
+                    step = 3;
+                }
+            }
+            case 3 -> { // respawn：/kill → respawn() → 复活
+                if (!guiRespawnKilled) {
+                    guiRespawnKilled = true;
+                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill " + botName);
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    guiRespawnDead = sp != null && sp.isDeadOrDying();
+                });
+                if (guiRespawnDead && !guiRespawnDone) {
+                    guiRespawnDone = true;
+                    bot.actions().respawn();
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    guiRespawnVerified = sp != null && !sp.isDeadOrDying();
+                });
+                if (guiRespawnVerified) {
+                    check("respawn revived", true);
+                    step = 5;
+                } else if (++waitTicks > 200) {
+                    fail("respawn timeout");
+                    step = 5;
+                }
+            }
+            case 5 -> { // editBook：书与笔 → 写书
+                if (!guiBookGiven) {
+                    guiBookGiven = true;
+                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                            "item replace entity " + botName + " weapon.mainhand with minecraft:book_and_quill");
+                }
+                if (!guiBookDone) {
+                    guiBookDone = true;
+                    // 书与笔在假人当前选中槽（weapon.mainhand = selectedSlot）——editBook 必须用同一槽位
+                    bot.actions().editBook(bot.getLocalPlayer().getInventory().getSelectedSlot(),
+                            java.util.List.of("mockplayer page one", "second line"),
+                            java.util.Optional.of("Mockplayer Book"));
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    guiBookVerified = sp != null && sp.getMainHandItem().is(net.minecraft.world.item.Items.WRITTEN_BOOK);
+                });
+                if (guiBookVerified) {
+                    check("editBook wrote written book", true);
+                    step = 6;
+                } else if (++waitTicks > 200) {
+                    fail("editBook timeout");
+                    step = 6;
+                }
+            }
+            case 6 -> { // editSign：告示牌 → 写文本
+                if (guiSignPos == null) {
+                    guiSignPos = bot.getLocalPlayer().blockPosition().offset(1, 0, 0);
+                    server.execute(() -> server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                            "setblock " + guiSignPos.getX() + " " + guiSignPos.getY() + " " + guiSignPos.getZ()
+                                    + " minecraft:oak_sign[facing=south]"));
+                }
+                if (!guiSignDone) {
+                    guiSignDone = true;
+                    bot.actions().editSign(guiSignPos, true, new String[]{"mock", "player", "sign", "line4"});
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerLevel lv = server.getLevel(Level.OVERWORLD);
+                    if (lv.getBlockEntity(guiSignPos) instanceof net.minecraft.world.level.block.entity.SignBlockEntity sign) {
+                        guiSignVerified = "mock".equals(sign.getFrontText().getMessage(0, false).getString());
+                    }
+                });
+                if (guiSignVerified) {
+                    check("editSign updated block entity", true);
+                    step = 7;
+                } else if (++waitTicks > 200) {
+                    fail("editSign timeout");
+                    step = 7;
+                }
+            }
+            case 7 -> { // setBeacon：信标 + 3x3 底座金字塔 → 交互开菜单 → setBeacon 效果
+                if (guiBeaconPos == null) {
+                    guiBeaconPos = bot.getLocalPlayer().blockPosition().offset(2, 0, 0);
+                    server.execute(() -> {
+                        int x = guiBeaconPos.getX(), y = guiBeaconPos.getY(), z = guiBeaconPos.getZ();
+                        for (int dx = -1; dx <= 1; dx++) {
+                            for (int dz = -1; dz <= 1; dz++) {
+                                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                        "setblock " + (x + dx) + " " + (y - 1) + " " + (z + dz) + " minecraft:iron_block");
+                            }
+                        }
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "setblock " + x + " " + y + " " + z + " minecraft:beacon");
+                    });
+                }
+                if (!guiBeaconDone) {
+                    guiBeaconDone = true;
+                    net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
+                            net.minecraft.world.phys.Vec3.atCenterOf(guiBeaconPos), Direction.UP, guiBeaconPos, false);
+                    bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit); // 开 BeaconMenu
+                    bot.actions().setBeacon(
+                            java.util.Optional.of(net.minecraft.world.effect.MobEffects.SPEED),
+                            java.util.Optional.empty());
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    guiBeaconVerified = sp != null && sp.hasEffect(net.minecraft.world.effect.MobEffects.SPEED);
+                });
+                if (guiBeaconVerified) {
+                    check("setBeacon applied speed", true);
+                    step = 8;
+                } else if (++waitTicks > 300) {
+                    fail("setBeacon timeout");
+                    step = 8;
+                }
+            }
+            case 8 -> { // pickItemFromBlock：创造中键取脚下方块
+                if (!guiPickDone) {
+                    guiPickDone = true;
+                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "gamemode creative " + botName);
+                    net.minecraft.core.BlockPos target = bot.getLocalPlayer().blockPosition().below();
+                    bot.actions().pickItemFromBlock(target, false);
+                }
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    guiPickVerified = sp != null && !sp.getMainHandItem().isEmpty();
+                });
+                if (guiPickVerified) {
+                    check("pickItemFromBlock changed held item", true);
+                    step = 9;
+                } else if (++waitTicks > 200) {
+                    fail("pickItemFromBlock timeout");
+                    step = 9;
+                }
+            }
+            case 9 -> {
                 MockplayerApi.bots().removeBot(botName, "test");
                 finishSuite();
             }
@@ -1144,8 +1645,8 @@ public final class TestRunner {
                     bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(containerPos));
                     net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
                             net.minecraft.world.phys.Vec3.atCenterOf(containerPos), Direction.WEST, containerPos, false);
-                    bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
-                }
+                        bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
+                    }
                 step = 10;
             }
             case 10 -> {

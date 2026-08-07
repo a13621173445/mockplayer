@@ -351,6 +351,17 @@ public class BotActionsImpl implements BotActions {
     }
 
     @Override
+    public BotActions setSelectedSlot(int slot) {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null) {
+            return this;
+        }
+        player.getInventory().setSelectedSlot(Mth.clamp(slot, 0, net.minecraft.world.entity.player.Inventory.getSelectionSize() - 1));
+        this.bot.fireOnHeldSlotChanged(player.getInventory().getSelectedSlot());
+        return this;
+    }
+
+    @Override
     public void mount(boolean onlyRideables) {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null || this.bot.getGameMode() == null || this.bot.getLevel() == null) {
@@ -387,5 +398,115 @@ public class BotActionsImpl implements BotActions {
         }
         // 客户端下马：removeVehicle 会发 ServerboundPlayerInputPacket 通知服务端
         player.removeVehicle();
+    }
+
+    // ===== GUI 操作直接发包（不走 Screen 按钮，包路由到假人 connection，零主玩家污染） =====
+
+    /** 假人 connection 发包（FakeLocalPlayer.connection = 假人 ClientPacketListener → 假人 TCP） */
+    private net.minecraft.client.multiplayer.ClientPacketListener conn() {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        return player != null ? player.connection : null;
+    }
+
+    @Override
+    public BotActions chat(String message) {
+        net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
+        if (c == null) {
+            return this;
+        }
+        if (message.startsWith("/")) {
+            return this.sendCommand(message.substring(1));
+        }
+        // offline 服务器不要求签名（signature=null）+ 空 lastSeen（原版无历史消息时等同）
+        c.send(new net.minecraft.network.protocol.game.ServerboundChatPacket(
+                message, java.time.Instant.now(), net.minecraft.util.Crypt.SaltSupplier.getLong(), null,
+                new net.minecraft.network.chat.LastSeenMessages.Update(0, new java.util.BitSet(), (byte) 0)));
+        return this;
+    }
+
+    @Override
+    public BotActions sendCommand(String command) {
+        net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
+        if (c == null) {
+            return this;
+        }
+        c.send(new net.minecraft.network.protocol.game.ServerboundChatCommandPacket(command));
+        return this;
+    }
+
+    @Override
+    public BotActions wakeUp() {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
+        if (player == null || c == null) {
+            return this;
+        }
+        c.send(new net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket(
+                player, net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket.Action.STOP_SLEEPING));
+        return this;
+    }
+
+    @Override
+    public BotActions respawn() {
+        net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
+        if (c == null) {
+            return this;
+        }
+        c.send(new net.minecraft.network.protocol.game.ServerboundClientCommandPacket(
+                net.minecraft.network.protocol.game.ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
+        return this;
+    }
+
+    @Override
+    public BotActions editBook(int slot, java.util.List<String> pages, java.util.Optional<String> title) {
+        net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
+        if (c == null) {
+            return this;
+        }
+        c.send(new net.minecraft.network.protocol.game.ServerboundEditBookPacket(slot, pages, title));
+        return this;
+    }
+
+    @Override
+    public BotActions editSign(net.minecraft.core.BlockPos pos, boolean isFrontText, String[] lines) {
+        net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
+        if (c == null || lines == null || lines.length < 4) {
+            return this;
+        }
+        c.send(new net.minecraft.network.protocol.game.ServerboundSignUpdatePacket(
+                pos, isFrontText, lines[0], lines[1], lines[2], lines[3]));
+        return this;
+    }
+
+    @Override
+    public BotActions setBeacon(
+            java.util.Optional<net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect>> primary,
+            java.util.Optional<net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect>> secondary) {
+        net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
+        if (c == null) {
+            return this;
+        }
+        c.send(new net.minecraft.network.protocol.game.ServerboundSetBeaconPacket(primary, secondary));
+        return this;
+    }
+
+    @Override
+    public BotActions renameItem(String name) {
+        net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
+        if (c == null) {
+            return this;
+        }
+        c.send(new net.minecraft.network.protocol.game.ServerboundRenameItemPacket(name));
+        return this;
+    }
+
+    @Override
+    public BotActions pickItemFromBlock(net.minecraft.core.BlockPos pos, boolean includeData) {
+        net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
+        if (c == null) {
+            return this;
+        }
+        c.send(new net.minecraft.network.protocol.game.ServerboundPickItemFromBlockPacket(pos, includeData));
+        return this;
     }
 }
