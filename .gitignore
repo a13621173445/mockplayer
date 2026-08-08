@@ -35,3 +35,37 @@ progress.md
 # javap 反编译临时产物（查字节码用，勿提交）
 net/
 TEST_PLAN*.md
+
+# 日志 / 崩溃 / 存档（runs 已覆盖，这里兜底根目录或平台目录）
+logs/
+crash-reports/
+saves/
+test-results/
+*.log
+
+# 敏感信息 / 凭据（永不提交）
+.env
+*.env
+*.pem
+*.key
+*.jks
+secrets.*
+credentials.*
+
+# 系统 / 编辑器杂项
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.vs/
+*.swp
+*~
+*.tmp
+*.bak
+*.hprof
+hs_err_pid*
+
+# 本地打包产物
+*.zip
+*.7z
+*.rar
