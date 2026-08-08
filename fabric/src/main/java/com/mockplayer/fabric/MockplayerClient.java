@@ -7,11 +7,13 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.SessionManager;
+import com.mockplayer.session.ControlCommands;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.minecraft.commands.CommandBuildContext;
 
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument;
@@ -31,6 +33,23 @@ public class MockplayerClient implements ClientModInitializer {
 
     private void registerCommands() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+            dispatcher.register(ControlCommands.buildCommandTree(new ControlCommands.CommandFactory<FabricClientCommandSource>() {
+                @Override
+                public com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource> literal(String name) {
+                    return ClientCommands.literal(name);
+                }
+
+                @Override
+                public com.mojang.brigadier.builder.RequiredArgumentBuilder<FabricClientCommandSource, ?> argument(
+                        String name, com.mojang.brigadier.arguments.ArgumentType<?> type) {
+                    return ClientCommands.argument(name, type);
+                }
+
+                @Override
+                public void sendFeedback(FabricClientCommandSource source, net.minecraft.network.chat.Component message) {
+                    source.sendFeedback(message);
+                }
+            }));
             dispatcher.register(literal("newplayer")
                     .then(argument("name", FakePlayerNameArgument.fakePlayerName())
                             .executes(ctx -> {
@@ -44,14 +63,6 @@ public class MockplayerClient implements ClientModInitializer {
                             .executes(ctx -> {
                                 String name = StringArgumentType.getString(ctx, "name");
                                 ctx.getSource().sendFeedback(FakePlayerCommands.delPlayer(name));
-                                return 1;
-                            })));
-            dispatcher.register(literal("control")
-                    .then(argument("name", FakePlayerNameArgument.fakePlayerName())
-                            .suggests(FakePlayerCommands.controlTargets())
-                            .executes(ctx -> {
-                                String name = StringArgumentType.getString(ctx, "name");
-                                ctx.getSource().sendFeedback(FakePlayerCommands.control(name));
                                 return 1;
                             })));
             dispatcher.register(literal("connect")

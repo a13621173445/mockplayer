@@ -29,6 +29,9 @@ HANDOFF.md
 CLAUDE.md
 PLAN*.md
 tmp/
+task_plan.md
+findings.md
+progress.md
 # javap 反编译临时产物（查字节码用，勿提交）
 net/
 TEST_PLAN*.md

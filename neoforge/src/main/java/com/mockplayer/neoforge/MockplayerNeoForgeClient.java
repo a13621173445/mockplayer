@@ -7,6 +7,7 @@ import com.mockplayer.Constants;
 import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.SessionManager;
+import com.mockplayer.session.ControlCommands;
 
 import net.minecraft.commands.Commands;
 
@@ -37,6 +38,23 @@ public class MockplayerNeoForgeClient {
     private static void registerCommands(RegisterClientCommandsEvent event) {
         var dispatcher = event.getDispatcher();
 
+        dispatcher.register(ControlCommands.buildCommandTree(new ControlCommands.CommandFactory<net.minecraft.commands.CommandSourceStack>() {
+            @Override
+            public com.mojang.brigadier.builder.LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> literal(String name) {
+                return Commands.literal(name);
+            }
+
+            @Override
+            public com.mojang.brigadier.builder.RequiredArgumentBuilder<net.minecraft.commands.CommandSourceStack, ?> argument(
+                    String name, com.mojang.brigadier.arguments.ArgumentType<?> type) {
+                return Commands.argument(name, type);
+            }
+
+            @Override
+            public void sendFeedback(net.minecraft.commands.CommandSourceStack source, net.minecraft.network.chat.Component message) {
+                source.sendSuccess(() -> message, false);
+            }
+        }));
         dispatcher.register(Commands.literal("newplayer")
                 .then(Commands.argument("name", FakePlayerNameArgument.fakePlayerName())
                         .executes(ctx -> {
@@ -50,14 +68,6 @@ public class MockplayerNeoForgeClient {
                         .executes(ctx -> {
                             String name = StringArgumentType.getString(ctx, "name");
                             ctx.getSource().sendSuccess(() -> FakePlayerCommands.delPlayer(name), false);
-                            return 1;
-                        })));
-        dispatcher.register(Commands.literal("control")
-                .then(Commands.argument("name", FakePlayerNameArgument.fakePlayerName())
-                        .suggests(FakePlayerCommands.controlTargets())
-                        .executes(ctx -> {
-                            String name = StringArgumentType.getString(ctx, "name");
-                            ctx.getSource().sendSuccess(() -> FakePlayerCommands.control(name), false);
                             return 1;
                         })));
         dispatcher.register(Commands.literal("connect")

@@ -93,36 +93,11 @@ public class FakePlayerCommands {
     }
 
     /**
-     * 执行 /control 命令（P1 实现切换）。
-     */
-    public static Component control(String name) {
-        // P1: 切换控制权到该假人
-        return Component.translatable("commands.mockplayer.control.not_implemented")
-                .withStyle(ChatFormatting.YELLOW);
-    }
-
-    /**
      * Tab 补全：当前所有假人名字（用于 /delplayer）。
      */
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> fakePlayerNames() {
         return (ctx, builder) -> SharedSuggestionProvider.suggest(
                 SessionManager.getInstance().getFakePlayerNames(), builder);
-    }
-
-    /**
-     * Tab 补全：主玩家名字 + 当前所有假人名字（用于 /control）。
-     * 玩家本体在前，假人名字在后。
-     */
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> controlTargets() {
-        return (ctx, builder) -> {
-            List<String> names = new ArrayList<>();
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null) {
-                names.add(mc.player.getGameProfile().name());
-            }
-            names.addAll(SessionManager.getInstance().getFakePlayerNames());
-            return SharedSuggestionProvider.suggest(names, builder);
-        };
     }
 
     /**
