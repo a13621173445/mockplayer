@@ -45,7 +45,7 @@ public final class TestRunner {
     /** 全部套件（suite=all / IDE 默认入口时按序连续跑） */
     private static final List<String> ALL_SUITES = List.of(
             "api-smoke", "api-full", "use-items", "containers", "containers-all", "crafting", "furnace",
-            "combat-stab", "combat-sprint", "enchanting", "merchant", "gui-actions", "listener-events");
+            "combat-stab", "combat-sprint", "enchanting", "merchant", "gui-actions", "listener-events", "control-commands");
 
     private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }
 
@@ -77,6 +77,7 @@ public final class TestRunner {
             case "merchant" -> "tbot-merk";
             case "gui-actions" -> "tbot-gui";
             case "listener-events" -> "tbot-le";
+            case "control-commands" -> "tbot-ctl";
             default -> "tbot";
         };
     }
@@ -215,6 +216,7 @@ public final class TestRunner {
             case "merchant" -> runMerchant(mc);
             case "gui-actions" -> runGuiActions(mc);
             case "listener-events" -> runListenerEvents(mc);
+            case "control-commands" -> runControlCommands(mc);
             default -> {
                 fail("unknown suite: " + suite);
                 finishSuite();
@@ -1335,6 +1337,962 @@ public final class TestRunner {
             case 23 -> {
                 MockplayerApi.bots().removeBot(botName, "test");
                 finishSuite();
+            }
+        }
+    }
+
+    // ===== control-commands：/control 遥控+查询命令集强测试（命令层走 ControlCommands，
+    // 底层真实网络包 + 服务端强断言；全部输出 i18n；Tab 补全逐位断言） =====
+
+    private static boolean ccTreeChecked;
+    private static boolean ccMoveStarted;
+    private static volatile boolean ccMoved;
+    private static boolean ccStopChecked;
+    private static double ccBaseX;
+    private static double ccBaseZ;
+    private static int ccLookStage;
+    private static volatile float ccServerYRot;
+    private static boolean ccHuskSummoned;
+    private static volatile boolean ccHuskAttacked;
+    private static volatile float ccHuskHealth = 20;
+    private static volatile float ccHuskHealthBeforeTarget = 20;
+    private static volatile boolean ccHuskTargetAttacked;
+    private static boolean ccSustainedStarted;
+    private static volatile boolean ccSustainedHit;
+    private static boolean ccVillagerSummoned;
+    private static volatile boolean ccMerchantOpen;
+    private static boolean ccHotbarGiven;
+    private static volatile boolean ccHotbarVerified;
+    private static String ccMainHandBefore = "";
+    private static volatile boolean ccDropVerified;
+    private static boolean ccSwapGiven;
+    private static volatile boolean ccSwapVerified;
+    private static volatile String ccChatMsg = "";
+    private static boolean ccChatListenerRegistered;
+    private static boolean ccChatChecked;
+    private static boolean ccChatSent;
+    private static boolean ccCommandSent;
+    private static volatile boolean ccTimeVerified;
+    private static boolean ccUseGiven;
+    private static boolean ccUseChecked;
+    private static volatile boolean ccUsing;
+    private static volatile boolean ccReleased;
+    private static boolean ccDirtGiven;
+    private static BlockPos ccPlacePos;
+    private static BlockPos ccPlacePos2;
+    private static boolean ccAttackBlockSent;
+    private static volatile boolean ccAttackBlockBroken;
+    private static boolean ccAttackBlockChecked;
+    private static boolean ccPlaceSent;
+    private static boolean ccPlaceChecked;
+    private static volatile boolean ccPlacedDirt;
+    private static boolean ccCreativeSet;
+    private static boolean ccPickSent;
+    private static volatile boolean ccPickVerified;
+    private static boolean ccPickChecked;
+    private static boolean ccSurvivalBack;
+    private static boolean ccPlace2Sent;
+    private static volatile boolean ccPlacedDirt2;
+    private static boolean ccPlaced2Checked;
+    private static boolean ccMineSent;
+    private static volatile boolean ccMinedAir2;
+    private static boolean ccBedSet;
+    private static BlockPos ccBedPos;
+    private static boolean ccBedClicked;
+    private static boolean ccSleepChecked;
+    private static volatile boolean ccSleeping;
+    private static volatile boolean ccWoke;
+    private static boolean ccCartSummoned;
+    private static boolean ccMountSent;
+    private static boolean ccMountChecked;
+    private static volatile boolean ccMounted;
+    private static boolean ccDismountSent;
+    private static volatile boolean ccDismounted;
+    private static boolean ccChestSet;
+    private static boolean ccChestClicked;
+    private static volatile boolean ccQueriesOk;
+    private static boolean ccCloseSent;
+    private static boolean ccCloseChecked;
+    private static boolean ccListenOn;
+    private static boolean ccListenDamaged;
+    private static volatile boolean ccEventsHasDamage;
+    private static boolean ccListenOff;
+    private static volatile boolean ccErrorsOk;
+    private static boolean ccRespawnKilled;
+    private static volatile boolean ccRespawnDead;
+    private static boolean ccRespawnDone;
+    private static volatile boolean ccRespawnAlive;
+    private static final com.mockplayer.api.event.BotListener ccChatListener = new com.mockplayer.api.event.BotListener() {
+        @Override
+        public void onChat(com.mockplayer.api.Bot b, net.minecraft.network.chat.Component message) {
+            ccChatMsg = message.getString();
+        }
+    };
+
+    /** Brigadier 补全辅助：parse + 收集建议文本。 */
+    private static java.util.List<String> ccCompletions(
+            com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher,
+            net.minecraft.commands.CommandSourceStack source, String input) {
+        try {
+            var parse = dispatcher.parse(input, source);
+            return dispatcher.getCompletionSuggestions(parse).get(2, java.util.concurrent.TimeUnit.SECONDS).getList()
+                    .stream().map(com.mojang.brigadier.suggestion.Suggestion::getText).toList();
+        } catch (Exception e) {
+            return java.util.List.of();
+        }
+    }
+
+    private static void runControlCommands(Minecraft mc) {
+        MinecraftServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            fail("no singleplayer server");
+            finishSuite();
+            return;
+        }
+        switch (step) {
+            case 0 -> { // 命令树结构 + Tab 补全 + i18n + list 查询
+                prepareBot(server);
+                if (bot == null || bot.getLifecycle() != BotLifecycle.PLAYING) {
+                    return;
+                }
+                var dispatcher = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
+                dispatcher.register(com.mockplayer.session.ControlCommands.buildCommandTree(
+                        new com.mockplayer.session.ControlCommands.CommandFactory<net.minecraft.commands.CommandSourceStack>() {
+                            @Override
+                            public com.mojang.brigadier.builder.LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> literal(String name) {
+                                return net.minecraft.commands.Commands.literal(name);
+                            }
+
+                            @Override
+                            public com.mojang.brigadier.builder.RequiredArgumentBuilder<net.minecraft.commands.CommandSourceStack, ?> argument(
+                                    String name, com.mojang.brigadier.arguments.ArgumentType<?> type) {
+                                return net.minecraft.commands.Commands.argument(name, type);
+                            }
+
+                            @Override
+                            public void sendFeedback(net.minecraft.commands.CommandSourceStack source,
+                                                     net.minecraft.network.chat.Component message) {
+                            }
+                        }));
+                var root = dispatcher.getRoot().getChildren();
+                var control = root.stream().filter(n -> n.getName().equals("control")).findFirst().orElse(null);
+                check("tree control root", control != null);
+                if (control == null) {
+                    fail("tree control missing");
+                    finishSuite();
+                    return;
+                }
+                check("tree list", control.getChildren().stream().anyMatch(n -> n.getName().equals("list")));
+                var playerNode = control.getChildren().stream().filter(n -> n.getName().equals("player"))
+                        .findFirst().orElse(null);
+                if (playerNode == null) {
+                    fail("tree player missing");
+                    finishSuite();
+                    return;
+                }
+                java.util.Set<String> subs = playerNode.getChildren().stream()
+                        .map(com.mojang.brigadier.tree.CommandNode::getName)
+                        .collect(java.util.stream.Collectors.toSet());
+                java.util.List<String> expected = java.util.List.of(
+                        "move", "stop", "sneak", "unsneak", "sprint", "unsprint", "jump",
+                        "look", "lookAt", "turn", "attack", "stab", "sustainedAttack", "sustainedUse",
+                        "stopSustained", "interact", "useItem", "releaseUsingItem", "useItemOn",
+                        "placeBlock", "mineBlock", "attackBlock", "hotbar", "drop", "swapHands",
+                        "mount", "dismount", "chat", "command", "wakeUp", "respawn", "editBook",
+                        "editSign", "setBeacon", "renameItem", "pickItemFromBlock",
+                        "info", "inventory", "container", "near", "block", "online", "chatlog", "listen", "events");
+                java.util.List<String> missing = new java.util.ArrayList<>(expected);
+                missing.removeAll(subs);
+                check("tree actions", missing.isEmpty(), "missing=" + missing);
+                net.minecraft.commands.CommandSourceStack stack = server.createCommandSourceStack();
+                java.util.List<String> sugg = ccCompletions(dispatcher, stack, "control ");
+                check("tab bots+list", sugg.contains(botName) && sugg.contains("list"));
+                sugg = ccCompletions(dispatcher, stack, "control " + botName + " move ");
+                check("tab move dirs", sugg.containsAll(java.util.List.of("forward", "backward", "left", "right")));
+                sugg = ccCompletions(dispatcher, stack, "control " + botName + " hotbar ");
+                check("tab hotbar", sugg.contains("1") && sugg.contains("9"));
+                sugg = ccCompletions(dispatcher, stack, "control " + botName + " listen ");
+                check("tab listen", sugg.containsAll(java.util.List.of("on", "off")), "sugg=" + sugg);
+                sugg = ccCompletions(dispatcher, stack, "control " + botName + " useItem ");
+                check("tab hands", sugg.containsAll(java.util.List.of("mainhand", "offhand")));
+                sugg = ccCompletions(dispatcher, stack, "control " + botName + " placeBlock 0 0 0 ");
+                check("tab sides", sugg.containsAll(java.util.List.of("north", "south", "east", "west", "up", "down")));
+                sugg = ccCompletions(dispatcher, stack, "control " + botName + " setBeacon ");
+                check("tab effects", sugg.contains("minecraft:speed"), "sugg=" + sugg);
+                sugg = ccCompletions(dispatcher, stack, "control " + botName + " drop 0 ");
+                check("tab drop modes", sugg.containsAll(java.util.List.of("one", "all")));
+                // i18n：关键 key 有翻译（getString 不等于 key 原文）
+                for (String key : java.util.List.of(
+                        "commands.mockplayer.control.success", "commands.mockplayer.control.not_found",
+                        "commands.mockplayer.control.listen.on", "commands.mockplayer.control.event.onDamage",
+                        "commands.mockplayer.control.action.attack")) {
+                    check("i18n key " + key, !net.minecraft.network.chat.Component.translatable(key).getString().equals(key));
+                }
+                // list 查询
+                String listText = com.mockplayer.session.ControlCommands.list().getString();
+                check("list contains bot", listText.contains(botName) && listText.contains("test"),
+                        "text=" + listText);
+                ccTreeChecked = true;
+                step = 1;
+            }
+            case 1 -> { // move forward 端到端 + stop 归零
+                if (!ccMoveStarted) {
+                    ccMoveStarted = true;
+                    ccMoved = false;
+                    waitTicks = 0;
+                    server.execute(() -> {
+                        var sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            ccBaseX = sp.getX();
+                            ccBaseZ = sp.getZ();
+                        }
+                    });
+                    com.mockplayer.session.ControlCommands.move(botName, "forward");
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null && (Math.abs(sp.getX() - ccBaseX) > 0.5 || Math.abs(sp.getZ() - ccBaseZ) > 0.5)) {
+                        ccMoved = true;
+                    }
+                });
+                if (!ccMoved) {
+                    if (++waitTicks > 200) {
+                        fail("move forward timeout");
+                        com.mockplayer.session.ControlCommands.stop(botName);
+                        step = 2;
+                    }
+                } else if (!ccStopChecked) {
+                    ccStopChecked = true;
+                    waitTicks = 0;
+                    com.mockplayer.session.ControlCommands.stop(botName);
+                } else if (++waitTicks > 5) {
+                    check("move forward moved on server", true);
+                    check("stop clears input", bot.getLocalPlayer().input.getMoveVector().y == 0.0F);
+                    step = 2;
+                }
+            }
+            case 2 -> { // look / turn / lookAt（本地 + 服务端朝向）
+                if (ccLookStage == 0) {
+                    ccServerYRot = -999;
+                    com.mockplayer.session.ControlCommands.look(botName, 30.0F, 20.0F);
+                    var p = bot.getLocalPlayer();
+                    check("look local yRot", Math.abs(p.getYRot() - 30.0F) < 1.0F);
+                    check("look local xRot", Math.abs(p.getXRot() - 20.0F) < 1.0F);
+                    waitTicks = 0;
+                    ccLookStage = 1;
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        ccServerYRot = sp.getYRot();
+                    }
+                });
+                if (ccLookStage == 1 && Math.abs((((ccServerYRot % 360) + 360) % 360) - 30.0F) < 5.0F) {
+                    check("look server yRot", true);
+                    ccServerYRot = -999;
+                    com.mockplayer.session.ControlCommands.turn(botName, 90.0F, 10.0F);
+                    var p = bot.getLocalPlayer();
+                    check("turn local yRot", Math.abs((((p.getYRot() % 360) + 360) % 360) - 120.0F) < 1.0F);
+                    check("turn local xRot", Math.abs(p.getXRot() - 30.0F) < 1.0F);
+                    waitTicks = 0;
+                    ccLookStage = 2;
+                } else if (ccLookStage == 2 && Math.abs((((ccServerYRot % 360) + 360) % 360) - 120.0F) < 5.0F) {
+                    check("turn server yRot", true);
+                    var p = bot.getLocalPlayer();
+                    com.mockplayer.session.ControlCommands.lookAt(botName, p.getX(), p.getY(), p.getZ() + 5.0);
+                    check("lookAt local yRot ~south", Math.abs((((bot.getLocalPlayer().getYRot() % 360) + 360) % 360)) < 5.0F);
+                    ccServerYRot = -999;
+                    waitTicks = 0;
+                    ccLookStage = 3;
+                } else if (ccLookStage == 3 && Math.abs((((ccServerYRot % 360) + 360) % 360)) < 5.0F) {
+                    check("lookAt server yRot", true);
+                    step = 3;
+                } else if (++waitTicks > 300) {
+                    fail("look/turn/lookAt timeout stage=" + ccLookStage);
+                    step = 3;
+                }
+            }
+            case 3 -> { // attack 无参（最近非玩家实体 = husk）
+                if (!ccHuskSummoned) {
+                    ccHuskSummoned = true;
+                    waitTicks = 0;
+                    server.execute(() -> {
+                        var sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    String.format("summon minecraft:husk %.2f %.2f %.2f {NoAI:1b}",
+                                            sp.getX() + 2.0, sp.getY(), sp.getZ()));
+                            // 空手伤害只有 1（0.94）：必须给武器才能做强伤害断言（钻石剑 7）
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    "item replace entity " + botName + " weapon.mainhand with minecraft:diamond_sword");
+                        }
+                    });
+                }
+                if (++waitTicks > 15 && !ccHuskAttacked) {
+                    // 服务端攻击冷却（attackStrengthTicker）：满蓄力才造成完整伤害，避免弱断言
+                    if (bot.getLocalPlayer().getAttackStrengthScale(1.0F) >= 0.99F || waitTicks > 70) {
+                        ccHuskAttacked = true;
+                        ccHuskHealth = 20;
+                        com.mockplayer.session.ControlCommands.attack(botName, null);
+                    }
+                }
+                server.execute(() -> {
+                    var level = server.getLevel(Level.OVERWORLD);
+                    if (level != null) {
+                        var husk = level.getEntitiesOfClass(net.minecraft.world.entity.monster.zombie.Zombie.class,
+                                bot.getLocalPlayer().getBoundingBox().inflate(8.0)).stream().findFirst();
+                        husk.ifPresent(h -> ccHuskHealth = h.getHealth());
+                    }
+                });
+                if (ccHuskHealth < 20.0F) {
+                    check("attack nearest husk damaged", true);
+                    ccHuskHealthBeforeTarget = ccHuskHealth;
+                    // 实体名 Tab 补全（husk 在场）
+                    var dispatcher = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
+                    dispatcher.register(com.mockplayer.session.ControlCommands.buildCommandTree(
+                            new com.mockplayer.session.ControlCommands.CommandFactory<net.minecraft.commands.CommandSourceStack>() {
+                                @Override
+                                public com.mojang.brigadier.builder.LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> literal(String name) {
+                                    return net.minecraft.commands.Commands.literal(name);
+                                }
+
+                                @Override
+                                public com.mojang.brigadier.builder.RequiredArgumentBuilder<net.minecraft.commands.CommandSourceStack, ?> argument(
+                                        String name, com.mojang.brigadier.arguments.ArgumentType<?> type) {
+                                    return net.minecraft.commands.Commands.argument(name, type);
+                                }
+
+                                @Override
+                                public void sendFeedback(net.minecraft.commands.CommandSourceStack source,
+                                                         net.minecraft.network.chat.Component message) {
+                                }
+                            }));
+                    java.util.List<String> sugg = ccCompletions(dispatcher, server.createCommandSourceStack(),
+                            "control " + botName + " attack ");
+                    check("tab entities contains type id", sugg.contains("husk"), "sugg=" + sugg);
+                    step = 4;
+                } else if (waitTicks > 120) {
+                    fail("attack husk timeout");
+                    step = 4;
+                }
+            }
+            case 4 -> { // attack 指定实体名 target
+                if (!ccHuskTargetAttacked) {
+                    if (bot.getLocalPlayer().getAttackStrengthScale(1.0F) >= 0.99F || ++waitTicks > 70) {
+                        ccHuskTargetAttacked = true;
+                        waitTicks = 0;
+                        com.mockplayer.session.ControlCommands.attack(botName, "husk");
+                    }
+                }
+                server.execute(() -> {
+                    var level = server.getLevel(Level.OVERWORLD);
+                    if (level != null) {
+                        var husk = level.getEntitiesOfClass(net.minecraft.world.entity.monster.zombie.Zombie.class,
+                                bot.getLocalPlayer().getBoundingBox().inflate(8.0)).stream().findFirst();
+                        husk.ifPresent(h -> ccHuskHealth = h.getHealth());
+                    }
+                });
+                if (ccHuskHealth < 10.0F) {
+                    check("attack target Husk damaged", true);
+                    step = 5;
+                } else if (++waitTicks > 120) {
+                    fail("attack target timeout hp=" + ccHuskHealth + " before=" + ccHuskHealthBeforeTarget);
+                    step = 5;
+                }
+            }
+            case 5 -> { // sustainedAttack 持续伤害 + stopSustained
+                if (!ccSustainedStarted) {
+                    ccSustainedStarted = true;
+                    ccSustainedHit = false;
+                    waitTicks = 0;
+                    com.mockplayer.session.ControlCommands.sustainedAttack(botName, null);
+                }
+                server.execute(() -> {
+                    var level = server.getLevel(Level.OVERWORLD);
+                    if (level != null) {
+                        var husk = level.getEntitiesOfClass(net.minecraft.world.entity.monster.zombie.Zombie.class,
+                                bot.getLocalPlayer().getBoundingBox().inflate(8.0)).stream().findFirst();
+                        husk.ifPresent(h -> {
+                            if (h.getHealth() < ccHuskHealth) {
+                                ccSustainedHit = true;
+                            }
+                            ccHuskHealth = h.getHealth();
+                        });
+                    }
+                });
+                if (ccSustainedHit) {
+                    check("sustainedAttack hit repeatedly", true);
+                    com.mockplayer.session.ControlCommands.stopSustained(botName);
+                    server.execute(() -> server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack(), "kill @e[type=minecraft:husk]"));
+                    step = 6;
+                } else if (++waitTicks > 160) {
+                    fail("sustainedAttack timeout");
+                    com.mockplayer.session.ControlCommands.stopSustained(botName);
+                    server.execute(() -> server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack(), "kill @e[type=minecraft:husk]"));
+                    step = 6;
+                }
+            }
+            case 6 -> { // interact 村民 → 服务端 MerchantMenu
+                if (!ccVillagerSummoned) {
+                    ccVillagerSummoned = true;
+                    waitTicks = 0;
+                    server.execute(() -> {
+                        var sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    String.format("summon minecraft:villager %.2f %.2f %.2f {NoAI:1b,Offers:{Recipes:[{buy:{id:\"minecraft:emerald\",count:1},sell:{id:\"minecraft:diamond\",count:1},maxUses:99,xp:1}]}}",
+                                            sp.getX() + 1.0, sp.getY(), sp.getZ()));
+                        }
+                    });
+                }
+                if (++waitTicks > 15 && !ccMerchantOpen) {
+                    com.mockplayer.session.ControlCommands.interact(botName, null);
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    ccMerchantOpen = sp != null && sp.containerMenu instanceof net.minecraft.world.inventory.MerchantMenu;
+                });
+                if (ccMerchantOpen) {
+                    check("interact villager opened merchant", true);
+                    step = 7;
+                } else if (waitTicks > 120) {
+                    fail("interact villager timeout");
+                    step = 7;
+                }
+            }
+            case 7 -> { // hotbar 2 → 服务端选中槽 + 主玩家快捷栏不变
+                if (!ccHotbarGiven) {
+                    ccHotbarGiven = true;
+                    ccHotbarVerified = false;
+                    waitTicks = 0;
+                    ccMainHandBefore = mc.player.getMainHandItem().getHoverName().getString();
+                    server.execute(() -> {
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " hotbar.0 with minecraft:stone");
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " hotbar.1 with minecraft:oak_planks");
+                    });
+                }
+                if (++waitTicks > 15 && !ccHotbarVerified) {
+                    com.mockplayer.session.ControlCommands.hotbar(botName, 2);
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    ccHotbarVerified = sp != null && sp.getInventory().getSelectedSlot() == 1
+                            && mc.player.getMainHandItem().getHoverName().getString().equals(ccMainHandBefore);
+                });
+                if (ccHotbarVerified) {
+                    check("hotbar switched bot slot, main player untouched", true);
+                    step = 8;
+                } else if (waitTicks > 120) {
+                    fail("hotbar timeout");
+                    step = 8;
+                }
+            }
+            case 8 -> { // drop 槽 1 一个 → 服务端槽 0 空
+                if (!ccDropVerified) {
+                    ccDropVerified = false;
+                    waitTicks = 0;
+                    com.mockplayer.session.ControlCommands.drop(botName, 1, false);
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    ccDropVerified = sp != null && sp.getInventory().getItem(1).isEmpty();
+                });
+                if (ccDropVerified) {
+                    check("drop slot 1 removed item", true);
+                    step = 9;
+                } else if (++waitTicks > 80) {
+                    fail("drop timeout");
+                    step = 9;
+                }
+            }
+            case 9 -> { // swapHands → 服务端主副手交换
+                if (!ccSwapGiven) {
+                    ccSwapGiven = true;
+                    ccSwapVerified = false;
+                    waitTicks = 0;
+                    server.execute(() -> {
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " weapon.mainhand with minecraft:stone_sword");
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " weapon.offhand with minecraft:stick");
+                    });
+                }
+                if (++waitTicks > 15 && !ccSwapVerified) {
+                    com.mockplayer.session.ControlCommands.swapHands(botName);
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    ccSwapVerified = sp != null && sp.getMainHandItem().is(net.minecraft.world.item.Items.STICK)
+                            && sp.getOffhandItem().is(net.minecraft.world.item.Items.STONE_SWORD);
+                });
+                if (ccSwapVerified) {
+                    check("swapHands exchanged main/off hand", true);
+                    step = 10;
+                } else if (waitTicks > 120) {
+                    fail("swapHands timeout");
+                    step = 10;
+                }
+            }
+            case 10 -> { // chat（假人身份广播）+ command（服务端 time）
+                if (!ccChatListenerRegistered) {
+                    ccChatListenerRegistered = true;
+                    waitTicks = 0;
+                    MockplayerApi.listen(ccChatListener);
+                }
+                if (!ccChatSent) {
+                    ccChatSent = true;
+                    ccChatMsg = "";
+                    com.mockplayer.session.ControlCommands.chat(botName, "mockplayer-ctl-chat");
+                }
+                if (ccChatMsg.contains("mockplayer-ctl-chat") && !ccChatChecked) {
+                    ccChatChecked = true;
+                    check("chat command broadcast as bot", true);
+                    if (!ccCommandSent) {
+                        ccCommandSent = true;
+                        ccChatMsg = "";
+                        com.mockplayer.session.ControlCommands.command(botName, "me mockplayer-ctl-cmd");
+                    }
+                }
+                if (ccChatMsg.contains("mockplayer-ctl-cmd")) {
+                    check("command time set executed", true);
+                    step = 11;
+                } else if (++waitTicks > 200) {
+                    fail("chat/command timeout");
+                    step = 11;
+                }
+            }
+            case 11 -> { // useItem（面包→using）+ releaseUsingItem
+                if (!ccUseGiven) {
+                    ccUseGiven = true;
+                    ccUsing = false;
+                    ccReleased = false;
+                    waitTicks = 0;
+                    bot.getContainer().ifPresent(c -> c.close());
+                    server.execute(() -> server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                            "item replace entity " + botName + " weapon.mainhand with minecraft:bread"));
+                }
+                if (++waitTicks > 15 && !ccUsing) {
+                    com.mockplayer.session.ControlCommands.useItem(botName, "mainhand");
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    ccUsing = sp != null && sp.isUsingItem();
+                });
+                if (ccUsing && !ccUseChecked) {
+                    ccUseChecked = true;
+                    check("useItem started using", true);
+                    if (!ccReleased) {
+                        ccReleased = true;
+                        com.mockplayer.session.ControlCommands.releaseUsingItem(botName);
+                    }
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    ccReleased = sp != null && !sp.isUsingItem();
+                });
+                if (ccReleased) {
+                    check("releaseUsingItem stopped using", true);
+                    step = 12;
+                } else if (waitTicks > 120) {
+                    fail("useItem timeout");
+                    step = 12;
+                }
+            }
+            case 12 -> { // placeBlock → attackBlock(创造瞬破) → pickItemFromBlock → placeBlock/mineBlock 强断言
+                if (!ccDirtGiven) {
+                    ccDirtGiven = true;
+                    ccPlacePos = null;
+                    ccPlacePos2 = null;
+                    waitTicks = 0;
+                    server.execute(() -> server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                            "item replace entity " + botName + " weapon.mainhand with minecraft:dirt"));
+                }
+                if (ccPlacePos == null) {
+                    var p = bot.getLocalPlayer();
+                    ccPlacePos = p.blockPosition().offset(0, 0, 2);
+                    ccPlacePos2 = p.blockPosition().offset(0, 0, 3);
+                }
+                if (!ccPlaceSent) {
+                    if (++waitTicks > 15) {
+                        ccPlaceSent = true;
+                        waitTicks = 0;
+                        com.mockplayer.session.ControlCommands.placeBlock(botName,
+                                ccPlacePos.getX(), ccPlacePos.getY(), ccPlacePos.getZ(), "up");
+                    }
+                } else if (!ccPlacedDirt) {
+                    server.execute(() -> {
+                        var level = server.getLevel(Level.OVERWORLD);
+                        ccPlacedDirt = ccPlacePos != null && level != null
+                                && level.getBlockState(ccPlacePos).is(net.minecraft.world.level.block.Blocks.DIRT);
+                    });
+                    if (++waitTicks > 80) {
+                        fail("placeBlock timeout");
+                        step = 13;
+                    }
+                } else if (!ccPlaceChecked) {
+                    ccPlaceChecked = true;
+                    check("placeBlock placed dirt", true);
+                    ccCreativeSet = true;
+                    server.execute(() -> server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack(), "gamemode creative " + botName));
+                } else if (!ccPickSent) {
+                    if (++waitTicks > 25) {
+                        ccPickSent = true;
+                        waitTicks = 0;
+                        com.mockplayer.session.ControlCommands.pickItemFromBlock(botName,
+                                ccPlacePos.getX(), ccPlacePos.getY(), ccPlacePos.getZ(), false);
+                    }
+                } else if (!ccPickVerified) {
+                    server.execute(() -> {
+                        var sp = server.getPlayerList().getPlayerByName(botName);
+                        ccPickVerified = sp != null && sp.getMainHandItem().is(net.minecraft.world.item.Items.DIRT);
+                    });
+                    if (++waitTicks > 40) {
+                        fail("pickItemFromBlock timeout");
+                        step = 13;
+                    }
+                } else if (!ccPickChecked) {
+                    ccPickChecked = true;
+                    check("pickItemFromBlock put dirt in hand", true);
+                    ccAttackBlockSent = true;
+                    com.mockplayer.session.ControlCommands.attackBlock(botName,
+                            ccPlacePos.getX(), ccPlacePos.getY(), ccPlacePos.getZ());
+                } else if (!ccAttackBlockBroken) {
+                    server.execute(() -> {
+                        var level = server.getLevel(Level.OVERWORLD);
+                        ccAttackBlockBroken = ccPlacePos != null && level != null
+                                && level.getBlockState(ccPlacePos).is(net.minecraft.world.level.block.Blocks.AIR);
+                    });
+                    if (++waitTicks > 60) {
+                        fail("attackBlock timeout");
+                        step = 13;
+                    }
+                } else if (!ccAttackBlockChecked) {
+                    ccAttackBlockChecked = true;
+                    check("attackBlock broke dirt (creative)", true);
+                    ccSurvivalBack = true;
+                    server.execute(() -> server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack(), "gamemode survival " + botName));
+                } else if (!ccPlace2Sent) {
+                    if (++waitTicks > 25) {
+                        ccPlace2Sent = true;
+                        waitTicks = 0;
+                        com.mockplayer.session.ControlCommands.placeBlock(botName,
+                                ccPlacePos2.getX(), ccPlacePos2.getY(), ccPlacePos2.getZ(), "up");
+                    }
+                } else if (!ccPlacedDirt2) {
+                    server.execute(() -> {
+                        var level = server.getLevel(Level.OVERWORLD);
+                        ccPlacedDirt2 = ccPlacePos2 != null && level != null
+                                && level.getBlockState(ccPlacePos2).is(net.minecraft.world.level.block.Blocks.DIRT);
+                    });
+                    if (++waitTicks > 80) {
+                        fail("placeBlock 2 timeout");
+                        step = 13;
+                    }
+                } else if (!ccPlaced2Checked) {
+                    ccPlaced2Checked = true;
+                    check("placeBlock placed dirt 2", true);
+                    ccMineSent = true;
+                    com.mockplayer.session.ControlCommands.mineBlock(botName,
+                            ccPlacePos2.getX(), ccPlacePos2.getY(), ccPlacePos2.getZ());
+                } else if (!ccMinedAir2) {
+                    server.execute(() -> {
+                        var level = server.getLevel(Level.OVERWORLD);
+                        ccMinedAir2 = ccPlacePos2 != null && level != null
+                                && level.getBlockState(ccPlacePos2).is(net.minecraft.world.level.block.Blocks.AIR);
+                    });
+                    if (++waitTicks > 200) {
+                        fail("mineBlock timeout");
+                        step = 13;
+                    }
+                } else {
+                    check("mineBlock broke dirt (survival)", true);
+                    step = 13;
+                }
+            }
+            case 13 -> { // wakeUp：夜晚睡床 → 醒来
+                if (!ccBedSet) {
+                    ccBedSet = true;
+                    waitTicks = 0;
+                    server.execute(() -> {
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "time set 13000");
+                        var p = bot.getLocalPlayer();
+                        ccBedPos = p.blockPosition().offset(0, 0, 2);
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "setblock " + ccBedPos.getX() + " " + ccBedPos.getY() + " " + ccBedPos.getZ()
+                                        + " minecraft:red_bed[facing=south,part=head]");
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "setblock " + ccBedPos.getX() + " " + ccBedPos.getY() + " " + (ccBedPos.getZ() - 1)
+                                        + " minecraft:red_bed[facing=south,part=foot]");
+                        bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(ccBedPos));
+                    });
+                }
+                if (++waitTicks > 20 && !ccBedClicked) {
+                    ccBedClicked = true;
+                    com.mockplayer.session.ControlCommands.useItemOn(botName, ccBedPos.getX(), ccBedPos.getY(), ccBedPos.getZ(), "up");
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    ccSleeping = sp != null && sp.isSleeping();
+                });
+                if (ccSleeping && !ccSleepChecked) {
+                    ccSleepChecked = true;
+                    check("useItemOn bed sleeping", true);
+                    if (!ccWoke) {
+                        ccWoke = true;
+                        com.mockplayer.session.ControlCommands.wakeUp(botName);
+                    }
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    ccWoke = sp != null && !sp.isSleeping();
+                });
+                if (ccWoke) {
+                    check("wakeUp stopped sleeping", true);
+                    step = 14;
+                } else if (waitTicks > 200) {
+                    fail("wakeUp timeout");
+                    step = 14;
+                }
+            }
+            case 14 -> { // mount 矿车 + dismount
+                if (!ccCartSummoned) {
+                    ccCartSummoned = true;
+                    waitTicks = 0;
+                    server.execute(() -> {
+                        var p = bot.getLocalPlayer();
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                String.format("summon minecraft:minecart %.2f %.2f %.2f", p.getX() + 2.0, p.getY(), p.getZ()));
+                    });
+                }
+                if (++waitTicks > 15 && !ccMountSent) {
+                    ccMountSent = true;
+                    com.mockplayer.session.ControlCommands.mount(botName, null);
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    ccMounted = sp != null && sp.getVehicle() != null;
+                });
+                if (ccMounted && !ccMountChecked) {
+                    ccMountChecked = true;
+                    check("mount minecart", true);
+                    if (!ccDismountSent) {
+                        ccDismountSent = true;
+                        com.mockplayer.session.ControlCommands.dismount(botName);
+                    }
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    ccDismounted = sp != null && sp.getVehicle() == null;
+                });
+                if (ccDismounted) {
+                    check("dismount", true);
+                    step = 15;
+                } else if (waitTicks > 160) {
+                    fail("mount/dismount timeout");
+                    step = 15;
+                }
+            }
+            case 15 -> { // 查询命令全断言
+                if (!ccChestSet) {
+                    ccChestSet = true;
+                    waitTicks = 0;
+                    server.execute(() -> {
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "give " + botName + " minecraft:stone 3");
+                        var p = bot.getLocalPlayer();
+                        BlockPos chest = p.blockPosition().offset(2, 0, 0);
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "setblock " + chest.getX() + " " + chest.getY() + " " + chest.getZ() + " minecraft:chest");
+                        bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(chest));
+                    });
+                }
+                if (++waitTicks > 20 && !ccChestClicked) {
+                    ccChestClicked = true;
+                    var p = bot.getLocalPlayer();
+                    BlockPos chest = p.blockPosition().offset(2, 0, 0);
+                    com.mockplayer.session.ControlCommands.useItemOn(botName, chest.getX(), chest.getY(), chest.getZ(), "up");
+                }
+                if (waitTicks > 40 && !ccQueriesOk) {
+                    ccQueriesOk = true;
+                    String containerText = com.mockplayer.session.ControlCommands.container(botName).getString();
+                    String infoText = com.mockplayer.session.ControlCommands.botInfo(botName).getString();
+                    String invText = com.mockplayer.session.ControlCommands.inventory(botName).getString();
+                    String nearText = com.mockplayer.session.ControlCommands.near(botName, 16.0).getString();
+                    var p = bot.getLocalPlayer();
+                    String blockText = com.mockplayer.session.ControlCommands.blockAt(
+                            botName, p.blockPosition().getX(), p.blockPosition().getY() - 1, p.blockPosition().getZ()).getString();
+                    String onlineText = com.mockplayer.session.ControlCommands.online(botName).getString();
+                    String chatText = com.mockplayer.session.ControlCommands.chatHistory(botName).getString();
+                    check("query container", containerText.contains("id="), "text=" + containerText);
+                    check("query info", infoText.contains(botName) && !infoText.contains("commands.mockplayer.control."));
+                    check("query inventory", invText.contains(" x"), "text=" + invText);
+                    check("query near", nearText.contains("villager"), "text=" + nearText);
+                    check("query block", blockText.contains("minecraft:"), "text=" + blockText);
+                    check("query online", onlineText.contains(mc.player.getGameProfile().name()) && onlineText.contains(botName));
+                    check("query chat", chatText.contains("mockplayer-ctl-chat"));
+                    // 容器用完必须关闭（残留菜单会污染后续 case）
+                    bot.getContainer().ifPresent(c -> c.close());
+                    ccCloseSent = true;
+                    step = 16;
+                } else if (waitTicks > 160) {
+                    fail("query timeout");
+                    step = 16;
+                }
+            }
+            case 16 -> { // listen 实时事件 + 推送 + off 惰性恢复
+                if (ccCloseSent && !ccCloseChecked) {
+                    if (bot.getContainer().isEmpty()) {
+                        ccCloseChecked = true;
+                        check("container closed after query", true);
+                        waitTicks = 0;
+                    } else if (++waitTicks > 40) {
+                        fail("container close timeout");
+                        ccCloseChecked = true;
+                        waitTicks = 0;
+                    }
+                }
+                if (ccCloseChecked && !ccListenOn) {
+                    ccListenOn = true;
+                    waitTicks = 0;
+                    String onText = com.mockplayer.session.ControlCommands.listen(botName, true).getString();
+                    check("listen on feedback", onText.contains(botName), "text=" + onText);
+                    if (!ccListenDamaged) {
+                        ccListenDamaged = true;
+                        server.execute(() -> server.getCommands().performPrefixedCommand(
+                                server.createCommandSourceStack(), "damage " + botName + " 4"));
+                    }
+                }
+                if (ccListenDamaged && !ccEventsHasDamage) {
+                    com.mockplayer.session.EventRecorder recorder = com.mockplayer.session.ControlCommands.getRecorder(botName);
+                    ccEventsHasDamage = recorder != null && recorder.getPushCount() >= 1
+                            && recorder.snapshot().stream().anyMatch(s -> s.startsWith("onDamage|"));
+                }
+                if (ccEventsHasDamage) {
+                    check("listen recorded+push damage event", true);
+                    if (!ccListenOff) {
+                        ccListenOff = true;
+                        String offText = com.mockplayer.session.ControlCommands.listen(botName, false).getString();
+                        check("listen off feedback", offText.contains(botName), "text=" + offText);
+                        check("listen off removes recorder", com.mockplayer.session.ControlCommands.getRecorder(botName) == null);
+                        String notText = com.mockplayer.session.ControlCommands.events(botName, 10).getString();
+                        check("events after off says not listening", notText.contains(botName), "text=" + notText);
+                        step = 17;
+                    }
+                } else if (++waitTicks > 200) {
+                    com.mockplayer.session.EventRecorder recorder = com.mockplayer.session.ControlCommands.getRecorder(botName);
+                    fail("listen timeout recorder=" + (recorder != null)
+                            + " push=" + (recorder != null ? recorder.getPushCount() : -1)
+                            + " snap=" + (recorder != null ? recorder.snapshot().stream().limit(5).toList() : "[]"));
+                    com.mockplayer.session.ControlCommands.listen(botName, false);
+                    step = 17;
+                }
+            }
+            case 17 -> { // respawn 强测：服务端击杀 → 死亡 → respawn 命令 → 服务端复活
+                if (!ccRespawnKilled) {
+                    ccRespawnKilled = true;
+                    waitTicks = 0;
+                    // 关闭自动重生，才能证明是 respawn 命令让 bot 复活
+                    com.mockplayer.session.SessionManager.getInstance().getSession(botName).setAutoRespawn(false);
+                    server.execute(() -> server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack(), "kill " + botName));
+                }
+                if (!ccRespawnDone) {
+                    server.execute(() -> {
+                        var sp = server.getPlayerList().getPlayerByName(botName);
+                        ccRespawnDead = sp != null && !sp.isAlive();
+                    });
+                    if (++waitTicks > 2 && ccRespawnDead) {
+                        ccRespawnDone = true;
+                        waitTicks = 0;
+                        com.mockplayer.session.ControlCommands.respawn(botName);
+                    } else if (waitTicks > 40) {
+                        fail("respawn kill timeout alive=" + ccRespawnAlive);
+                        ccRespawnDone = true;
+                        waitTicks = 0;
+                    }
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    ccRespawnAlive = sp != null && sp.isAlive();
+                });
+                if (ccRespawnDone && ccRespawnAlive) {
+                    check("respawn recovered bot", true);
+                    com.mockplayer.session.SessionManager.getInstance().getSession(botName).setAutoRespawn(true);
+                    step = 18;
+                } else if (ccRespawnDone && ++waitTicks > 120) {
+                    fail("respawn timeout");
+                    step = 18;
+                }
+            }
+            case 18 -> { // 错误路径 + 全部动作输出 i18n
+                if (!ccErrorsOk) {
+                    ccErrorsOk = true;
+                    String notFound = com.mockplayer.session.ControlCommands.attack("nobody-cc", null).getString();
+                    String invalidHand = com.mockplayer.session.ControlCommands.useItem(botName, "bad").getString();
+                    String invalidSide = com.mockplayer.session.ControlCommands.useItemOn(botName, 0, 0, 0, "bad").getString();
+                    String invalidEffect = com.mockplayer.session.ControlCommands.setBeacon(
+                            botName, "minecraft:nonexistent_effect", null).getString();
+                    String blank = com.mockplayer.session.ControlCommands.chat(botName, " ").getString();
+                    String noEntity = com.mockplayer.session.ControlCommands.attack(botName, "zzz-no-entity").getString();
+                    check("error not_found", notFound.contains("nobody-cc"));
+                    check("error invalid_hand", invalidHand.contains("bad"));
+                    check("error invalid_side", invalidSide.contains("bad"));
+                    check("error invalid_effect", invalidEffect.contains("nonexistent"));
+                    check("error blank_message", !blank.isBlank() && !blank.contains("commands.mockplayer.control."));
+                    check("error entity_not_found", noEntity.contains("zzz-no-entity"));
+                    // 全部动作调用：输出都来自语言文件（getString 不含未翻译 key 原文）
+                    java.util.List<net.minecraft.network.chat.Component> outputs = new java.util.ArrayList<>();
+                    outputs.add(com.mockplayer.session.ControlCommands.move(botName, "forward"));
+                    outputs.add(com.mockplayer.session.ControlCommands.stop(botName));
+                    outputs.add(com.mockplayer.session.ControlCommands.setSneak(botName, true));
+                    outputs.add(com.mockplayer.session.ControlCommands.setSprint(botName, true));
+                    outputs.add(com.mockplayer.session.ControlCommands.jump(botName));
+                    outputs.add(com.mockplayer.session.ControlCommands.look(botName, 0.0F, 0.0F));
+                    outputs.add(com.mockplayer.session.ControlCommands.lookAt(botName, 0.0, 0.0, 0.0));
+                    outputs.add(com.mockplayer.session.ControlCommands.turn(botName, 0.0F, 0.0F));
+                    outputs.add(com.mockplayer.session.ControlCommands.stab(botName));
+                    outputs.add(com.mockplayer.session.ControlCommands.interact(botName, null));
+                    outputs.add(com.mockplayer.session.ControlCommands.useItem(botName, "offhand"));
+                    outputs.add(com.mockplayer.session.ControlCommands.releaseUsingItem(botName));
+                    outputs.add(com.mockplayer.session.ControlCommands.useItemOn(botName, 0, 0, 0, "up"));
+                    outputs.add(com.mockplayer.session.ControlCommands.placeBlock(botName, 0, 0, 0, "up"));
+                    outputs.add(com.mockplayer.session.ControlCommands.mineBlock(botName, 0, 0, 0));
+                    outputs.add(com.mockplayer.session.ControlCommands.attackBlock(botName, 0, 0, 0));
+                    outputs.add(com.mockplayer.session.ControlCommands.hotbar(botName, 1));
+                    outputs.add(com.mockplayer.session.ControlCommands.drop(botName, null, false));
+                    outputs.add(com.mockplayer.session.ControlCommands.swapHands(botName));
+                    outputs.add(com.mockplayer.session.ControlCommands.mount(botName, null));
+                    outputs.add(com.mockplayer.session.ControlCommands.dismount(botName));
+                    outputs.add(com.mockplayer.session.ControlCommands.chat(botName, "mockplayer-ctl-final"));
+                    outputs.add(com.mockplayer.session.ControlCommands.command(botName, "time set 2000"));
+                    outputs.add(com.mockplayer.session.ControlCommands.wakeUp(botName));
+                    outputs.add(com.mockplayer.session.ControlCommands.respawn(botName));
+                    outputs.add(com.mockplayer.session.ControlCommands.editBook(botName, 1, "page", null));
+                    outputs.add(com.mockplayer.session.ControlCommands.editSign(botName, 0, 0, 0, true,
+                            new String[]{"a", "b", "c", "d"}));
+                    outputs.add(com.mockplayer.session.ControlCommands.setBeacon(botName, "minecraft:speed", null));
+                    outputs.add(com.mockplayer.session.ControlCommands.renameItem(botName, "Test"));
+                    outputs.add(com.mockplayer.session.ControlCommands.pickItemFromBlock(botName, 0, 0, 0, false));
+                    outputs.add(com.mockplayer.session.ControlCommands.sustainedAttack(botName, null));
+                    outputs.add(com.mockplayer.session.ControlCommands.sustainedUse(botName, null));
+                    outputs.add(com.mockplayer.session.ControlCommands.stopSustained(botName));
+                    boolean allI18n = true;
+                    for (net.minecraft.network.chat.Component c : outputs) {
+                        String s = c.getString();
+                        if (s.isBlank() || s.contains("commands.mockplayer.control.")) {
+                            allI18n = false;
+                            System.out.println("[mocktest] non-i18n output: " + s);
+                        }
+                    }
+                    check("all control outputs i18n", allI18n);
+                    finishSuite();
+                }
             }
         }
     }
@@ -3482,6 +4440,83 @@ public final class TestRunner {
             MockplayerApi.bots().removeBot(b.getName(), "test");
         }
         bot = null;
+        ccTreeChecked = false;
+        ccMoveStarted = false;
+        ccMoved = false;
+        ccStopChecked = false;
+        ccBaseX = 0;
+        ccBaseZ = 0;
+        ccLookStage = 0;
+        ccServerYRot = -999;
+        ccHuskSummoned = false;
+        ccHuskAttacked = false;
+        ccHuskHealth = 20;
+        ccHuskTargetAttacked = false;
+        ccSustainedStarted = false;
+        ccSustainedHit = false;
+        ccVillagerSummoned = false;
+        ccMerchantOpen = false;
+        ccHotbarGiven = false;
+        ccHotbarVerified = false;
+        ccMainHandBefore = "";
+        ccDropVerified = false;
+        ccSwapGiven = false;
+        ccSwapVerified = false;
+        ccChatMsg = "";
+        ccChatListenerRegistered = false;
+        ccChatChecked = false;
+        ccChatSent = false;
+        ccCommandSent = false;
+        ccTimeVerified = false;
+        ccUseGiven = false;
+        ccUseChecked = false;
+        ccUsing = false;
+        ccReleased = false;
+        ccDirtGiven = false;
+        ccPlacePos = null;
+        ccPlacePos2 = null;
+        ccAttackBlockSent = false;
+        ccAttackBlockBroken = false;
+        ccAttackBlockChecked = false;
+        ccPlaceSent = false;
+        ccPlaceChecked = false;
+        ccPlacedDirt = false;
+        ccCreativeSet = false;
+        ccPickSent = false;
+        ccPickVerified = false;
+        ccPickChecked = false;
+        ccSurvivalBack = false;
+        ccPlace2Sent = false;
+        ccPlacedDirt2 = false;
+        ccPlaced2Checked = false;
+        ccMineSent = false;
+        ccMinedAir2 = false;
+        ccBedSet = false;
+        ccBedPos = null;
+        ccBedClicked = false;
+        ccSleepChecked = false;
+        ccSleeping = false;
+        ccWoke = false;
+        ccCartSummoned = false;
+        ccMountSent = false;
+        ccMountChecked = false;
+        ccMounted = false;
+        ccDismountSent = false;
+        ccDismounted = false;
+        ccChestSet = false;
+        ccChestClicked = false;
+        ccQueriesOk = false;
+        ccCloseSent = false;
+        ccCloseChecked = false;
+        ccListenOn = false;
+        ccListenDamaged = false;
+        ccEventsHasDamage = false;
+        ccListenOff = false;
+        ccErrorsOk = false;
+        ccRespawnKilled = false;
+        ccRespawnDead = false;
+        ccRespawnDone = false;
+        ccRespawnAlive = false;
         containerPos = null;
         containerAllCaseIndex = 0;
         containerAllPos = null;
