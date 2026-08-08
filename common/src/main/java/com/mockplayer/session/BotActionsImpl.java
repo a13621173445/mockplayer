@@ -9,6 +9,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.animal.equine.AbstractHorse;
 import net.minecraft.world.entity.decoration.ItemFrame;
@@ -219,7 +220,11 @@ public class BotActionsImpl implements BotActions {
         }
         // 右键实体（村民交易/喂食/骑乘）：EntityHitResult 定位目标
         net.minecraft.world.phys.EntityHitResult hit = new net.minecraft.world.phys.EntityHitResult(target);
-        this.bot.getGameMode().interact(player, target, hit, InteractionHand.MAIN_HAND);
+        InteractionResult result = this.bot.getGameMode().interact(player, target, hit, InteractionHand.MAIN_HAND);
+        // 与原版 Minecraft 右键分发一致：Success + swingSource==CLIENT → player.swing（本地动画 + ServerboundSwingPacket 广播）
+        if (result instanceof InteractionResult.Success success && success.swingSource() == InteractionResult.SwingSource.CLIENT) {
+            player.swing(InteractionHand.MAIN_HAND);
+        }
         this.bot.fireOnInteractEntity(target);
     }
 
@@ -280,8 +285,11 @@ public class BotActionsImpl implements BotActions {
         if (player == null || this.bot.getGameMode() == null) {
             return;
         }
-        // 原版右键使用物品不挥动（swing 是左键攻击/挖掘的动作）：itemStack.use → player.startUsingItem（举起使用的动画）
-        this.bot.getGameMode().useItem(player, hand);
+        // 原版 Minecraft.java:1743-1745：useItem 返回 Success + swingSource==CLIENT → swing（吃食物/投掷物/饮用药水等）
+        InteractionResult result = this.bot.getGameMode().useItem(player, hand);
+        if (result instanceof InteractionResult.Success success && success.swingSource() == InteractionResult.SwingSource.CLIENT) {
+            player.swing(hand);
+        }
         this.bot.fireOnUseItem(hand, player.getItemInHand(hand));
     }
 
@@ -305,7 +313,11 @@ public class BotActionsImpl implements BotActions {
         // 26.2：useItemOn(LocalPlayer, InteractionHand, BlockHitResult)
         BlockHitResult hit = new BlockHitResult(
                 Vec3.atCenterOf(pos), side != null ? side : Direction.UP, pos, false);
-        this.bot.getGameMode().useItemOn(player, InteractionHand.MAIN_HAND, hit);
+        InteractionResult result = this.bot.getGameMode().useItemOn(player, InteractionHand.MAIN_HAND, hit);
+        // 与原版 Minecraft 右键分发一致：Success + swingSource==CLIENT → player.swing（本地动画 + ServerboundSwingPacket 广播）
+        if (result instanceof InteractionResult.Success success && success.swingSource() == InteractionResult.SwingSource.CLIENT) {
+            player.swing(InteractionHand.MAIN_HAND);
+        }
         this.bot.fireOnInteractBlock(pos, side != null ? side : Direction.UP);
     }
 
@@ -357,8 +369,11 @@ public class BotActionsImpl implements BotActions {
         if (player == null) {
             return this;
         }
-        player.getInventory().setSelectedSlot(Mth.clamp(slot, 0, net.minecraft.world.entity.player.Inventory.getSelectionSize() - 1));
-        this.bot.fireOnHeldSlotChanged(player.getInventory().getSelectedSlot());
+        int selected = Mth.clamp(slot, 0, net.minecraft.world.entity.player.Inventory.getSelectionSize() - 1);
+        player.getInventory().setSelectedSlot(selected);
+        // 原版快捷栏切换：本地更新后，向当前 LocalPlayer.connection 发包；这里必须是 bot connection。
+        player.connection.send(new net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket(selected));
+        this.bot.fireOnHeldSlotChanged(selected);
         return this;
     }
 

@@ -47,6 +47,10 @@ public class FakePlayListener extends ClientPacketListener {
     private boolean checkDeathOnLogin;
     /** 上次血量（供 onHealthChanged/onDamage 事件推断） */
     private float lastHealth = 20.0F;
+    /** 服务端 damage_event 先于 set_health 到达时暂存的 bot 伤害来源。 */
+    private net.minecraft.world.damagesource.DamageSource pendingDamageSource;
+    /** 暂存的伤害是否由实体造成，用于区分 onDamage 与 onEntityAttacked。 */
+    private boolean pendingEntityAttack;
 
     public FakePlayListener(FakeSession session, Minecraft minecraft, Connection connection, CommonListenerCookie cookie) {
         super(minecraft, connection, cookie);
@@ -226,13 +230,24 @@ public class FakePlayListener extends ClientPacketListener {
         }
         this.session.getState().setHealth(packet.getHealth());
         this.session.getState().setFoodLevel(packet.getFood());
-        // Bot 事件：血量变化
-        fire(b -> b.fireOnHealthChanged(this.lastHealth, packet.getHealth()));
-        // 血量下降视为受到伤害（无 DamageSource 详情，MVP 级别）
-        if (packet.getHealth() < this.lastHealth) {
-            fire(b -> b.fireOnDamage(null, this.lastHealth - packet.getHealth()));
+        // Bot 事件只在血量真的变化时派发；登录首包通常也是 20，不应伪造一次变化事件。
+        float oldHealth = this.lastHealth;
+        float newHealth = packet.getHealth();
+        if (Float.compare(oldHealth, newHealth) != 0) {
+            fire(b -> b.fireOnHealthChanged(oldHealth, newHealth));
+            // SetHealth 包没有 DamageSource，伤害量由 bot 自己的前后血量精确计算。
+            if (newHealth < oldHealth) {
+                float amount = oldHealth - newHealth;
+                net.minecraft.world.damagesource.DamageSource source = this.pendingDamageSource;
+                fire(b -> b.fireOnDamage(source, amount));
+                if (this.pendingEntityAttack) {
+                    fire(b -> b.fireOnEntityAttacked(source, amount));
+                }
+                this.pendingDamageSource = null;
+                this.pendingEntityAttack = false;
+            }
         }
-        this.lastHealth = packet.getHealth();
+        this.lastHealth = newHealth;
 
         // 登录后首包血量检查（只检查一次）：覆盖「死亡后掉线、重连服务端仍判死」的竞态。
         // 登录包不含血量，服务端会随登录后第一批包下发 setHealth(当前血量)——血量 <= 0 即服务端认为假人已死。
@@ -257,9 +272,10 @@ public class FakePlayListener extends ClientPacketListener {
         try {
             if (this.fakePlayer != null && packet.entityId() == this.fakePlayer.getId()) {
                 net.minecraft.world.damagesource.DamageSource source = packet.getSource(this.fakePlayer.level());
-                if (source.getEntity() != null) {
-                    fire(b -> b.fireOnEntityAttacked(source, 0.0F));
-                }
+                // 伤害包携带的 cause/direct id 才是“实体攻击”的权威标记；
+                // 客户端暂时没同步攻击者实体时，source.getEntity() 可能为空，不能因此丢掉事件。
+                this.pendingDamageSource = source;
+                this.pendingEntityAttack = packet.sourceCauseId() >= 0 || packet.sourceDirectId() >= 0;
             }
         } catch (Exception e) {
             FakeSession.LOG.warn("[{}] handleDamageEvent 异常: {}", this.session.getName(), e.toString());
@@ -1319,12 +1335,15 @@ public class FakePlayListener extends ClientPacketListener {
 
     @Override
     public void handlePlayerCombatKill(net.minecraft.network.protocol.game.ClientboundPlayerCombatKillPacket packet) {
-        // 假人死亡：完整记录原始包（死亡消息/击杀者/是否弹死亡屏），数据零丢弃；不弹主玩家死亡界面
+        PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
+        if (this.fakePlayer == null || packet.playerId() != this.fakePlayer.getId()) {
+            return;
+        }
+        // 假人死亡：完整记录原始包（死亡消息/击杀者/是否弹死亡屏），数据零丢弃；不弹主玩家死亡界面。
+        // 无头 bot 没有可点击的死亡屏，收到死亡包后自动走原版 PERFORM_RESPAWN 网络路径。
         this.session.getState().recordPacket("handlePlayerCombatKill", packet);
+        this.session.getState().setHealth(0.0F);
         if (this.fakePlayer != null) {
-            this.session.getState().setHealth(0.0F);
-            // 与原版一致：死亡后触发重生（假人无死亡屏，直接 respawn → 服务端回 respawn 包走 handleRespawn）。
-            // 否则假人停在「死亡待重生」状态，服务端不释放/移除它。
             this.fakePlayer.respawn();
         }
         // Bot 事件：死亡（26.2 ClientboundPlayerCombatKillPacket 是 record，死亡消息 accessor = message()）

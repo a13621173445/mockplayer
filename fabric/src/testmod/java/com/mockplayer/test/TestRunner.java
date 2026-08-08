@@ -1598,6 +1598,15 @@ public final class TestRunner {
     // ===== listener-events：BotListener 全事件真实触发 + 计数强断言（服务端/主玩家可见） =====
 
     private static final java.util.Map<String, Integer> leCounts = new java.util.concurrent.ConcurrentHashMap<>();
+    private static com.mockplayer.api.Bot leDamageBot;
+    private static com.mockplayer.api.Bot leAttackedBot;
+    private static com.mockplayer.api.Bot leHealthBot;
+    private static float leDamageAmount;
+    private static net.minecraft.world.damagesource.DamageSource leDamageSource;
+    private static net.minecraft.world.damagesource.DamageSource leAttackedSource;
+    private static float leAttackedAmount;
+    private static float leHealthOld;
+    private static float leHealthNew;
     private static final com.mockplayer.api.event.BotListener leListener = new com.mockplayer.api.event.BotListener() {
         @Override public void onSpawned(com.mockplayer.api.Bot b) { leCounts.merge("onSpawned", 1, Integer::sum); }
         @Override public void onPlayReady(com.mockplayer.api.Bot b) { leCounts.merge("onPlayReady", 1, Integer::sum); }
@@ -1605,11 +1614,11 @@ public final class TestRunner {
         @Override public void onRespawn(com.mockplayer.api.Bot b) { leCounts.merge("onRespawn", 1, Integer::sum); }
         @Override public void onDimensionChange(com.mockplayer.api.Bot b, net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> f, net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> t) { leCounts.merge("onDimensionChange", 1, Integer::sum); }
         @Override public void onChat(com.mockplayer.api.Bot b, net.minecraft.network.chat.Component m) { leCounts.merge("onChat", 1, Integer::sum); }
-        @Override public void onDamage(com.mockplayer.api.Bot b, net.minecraft.world.damagesource.DamageSource s, float a) { leCounts.merge("onDamage", 1, Integer::sum); }
+        @Override public void onDamage(com.mockplayer.api.Bot b, net.minecraft.world.damagesource.DamageSource s, float a) { leDamageBot = b; leDamageSource = s; leDamageAmount = a; leCounts.merge("onDamage", 1, Integer::sum); }
         @Override public void onDeath(com.mockplayer.api.Bot b, net.minecraft.network.chat.Component d) { leCounts.merge("onDeath", 1, Integer::sum); }
-        @Override public void onHealthChanged(com.mockplayer.api.Bot b, float o, float n) { leCounts.merge("onHealthChanged", 1, Integer::sum); }
+        @Override public void onHealthChanged(com.mockplayer.api.Bot b, float o, float n) { leHealthBot = b; leHealthOld = o; leHealthNew = n; leCounts.merge("onHealthChanged", 1, Integer::sum); }
         @Override public void onAttackEntity(com.mockplayer.api.Bot b, net.minecraft.world.entity.Entity t) { leCounts.merge("onAttackEntity", 1, Integer::sum); }
-        @Override public void onEntityAttacked(com.mockplayer.api.Bot b, net.minecraft.world.damagesource.DamageSource s, float a) { leCounts.merge("onEntityAttacked", 1, Integer::sum); }
+        @Override public void onEntityAttacked(com.mockplayer.api.Bot b, net.minecraft.world.damagesource.DamageSource s, float a) { leAttackedBot = b; leAttackedSource = s; leAttackedAmount = a; leCounts.merge("onEntityAttacked", 1, Integer::sum); }
         @Override public void onInteractBlock(com.mockplayer.api.Bot b, net.minecraft.core.BlockPos p, net.minecraft.core.Direction s) { leCounts.merge("onInteractBlock", 1, Integer::sum); }
         @Override public void onPlaceBlock(com.mockplayer.api.Bot b, net.minecraft.core.BlockPos p) { leCounts.merge("onPlaceBlock", 1, Integer::sum); }
         @Override public void onBreakBlock(com.mockplayer.api.Bot b, net.minecraft.core.BlockPos p) { leCounts.merge("onBreakBlock", 1, Integer::sum); }
@@ -1641,13 +1650,18 @@ public final class TestRunner {
     private static int leInputWait;
     private static boolean leHeldDone;
     private static int leHeldWait;
+    private static net.minecraft.world.item.ItemStack[] leMainHotbar;
     private static boolean leInteractDone;
     private static int leInteractWait;
     private static boolean leChatDone;
     private static int leChatWait;
     private static boolean leBlockDone;
+    private static boolean lePlaceSwingSeen;
     private static int leBlockWait;
     private static boolean leZombieDone;
+    private static boolean leZombieInteracted;
+    private static boolean leZombieAttacked;
+    private static boolean leZombieKilled;
     private static int leZombieWait;
     private static boolean leContainerDone;
     private static int leContainerWait;
@@ -1657,11 +1671,13 @@ public final class TestRunner {
     private static boolean leDropChecked;
     private static int leDropWait;
     private static boolean leRespawnKilled;
+    private static int leRespawnKillAttempts;
     private static boolean leRespawnDone;
     private static int leRespawnWait;
     private static boolean lePickupDone;
     private static int lePickupWait;
     private static boolean leMerchantDone;
+    private static boolean leMerchantInteracted;
     private static int leMerchantWait;
     private static boolean leDimDone;
     private static int leDimWait;
@@ -1745,6 +1761,13 @@ public final class TestRunner {
             case 5 -> { // onHeldSlotChanged / onSwapHands
                 if (!leHeldDone) {
                     leHeldDone = true;
+                    net.minecraft.client.player.LocalPlayer mainPlayer = Minecraft.getInstance().player;
+                    leMainHotbar = new net.minecraft.world.item.ItemStack[9];
+                    if (mainPlayer != null) {
+                        for (int i = 0; i < leMainHotbar.length; i++) {
+                            leMainHotbar[i] = mainPlayer.getInventory().getItem(i).copy();
+                        }
+                    }
                     bot.actions().setSelectedSlot(1);
                 }
                 if (++leHeldWait > 10) {
@@ -1753,6 +1776,17 @@ public final class TestRunner {
                 if (++leHeldWait > 20) {
                     check("onHeldSlotChanged", leCounts.getOrDefault("onHeldSlotChanged", 0) >= 1);
                     check("onSwapHands", leCounts.getOrDefault("onSwapHands", 0) >= 1);
+                    net.minecraft.client.player.LocalPlayer mainPlayer = Minecraft.getInstance().player;
+                    boolean mainHotbarUnchanged = mainPlayer != null && leMainHotbar != null;
+                    if (mainHotbarUnchanged) {
+                        for (int i = 0; i < leMainHotbar.length; i++) {
+                            if (!net.minecraft.world.item.ItemStack.matches(leMainHotbar[i], mainPlayer.getInventory().getItem(i))) {
+                                mainHotbarUnchanged = false;
+                                break;
+                            }
+                        }
+                    }
+                    check("main hotbar isolated", mainHotbarUnchanged);
                     step = 6;
                 }
             }
@@ -1794,6 +1828,7 @@ public final class TestRunner {
             case 8 -> { // onPlaceBlock / onBreakBlock
                 if (!leBlockDone) {
                     leBlockDone = true;
+                    lePlaceSwingSeen = false;
                     leBlockWait = 0;
                     server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
                             "item replace entity " + botName + " weapon.mainhand with minecraft:dirt");
@@ -1805,8 +1840,13 @@ public final class TestRunner {
                 if (leBlockWait == 50) {
                     bot.actions().mineBlock(bot.getLocalPlayer().blockPosition().offset(4, 0, 0));
                 }
+                net.minecraft.server.level.ServerPlayer blockSp = server.getPlayerList().getPlayerByName(botName);
+                if (leBlockWait > 20 && blockSp != null && blockSp.swinging) {
+                    lePlaceSwingSeen = true;
+                }
                 if (leBlockWait > 120) { check("onPlaceBlock", leCounts.getOrDefault("onPlaceBlock", 0) >= 1);
                     check("onBreakBlock", leCounts.getOrDefault("onBreakBlock", 0) >= 1);
+                    check("placeBlock swing", lePlaceSwingSeen);
                     step = 9;
                 }
             }
@@ -1822,20 +1862,45 @@ public final class TestRunner {
                     }
                 }
                 leZombieWait++;
-                net.minecraft.world.entity.Entity zombie = bot.getEntitiesNear(10).stream()
+                net.minecraft.world.entity.Entity zombie = bot.getEntitiesNear(4).stream()
                         .filter(e -> net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).getPath().equals("zombie"))
                         .findFirst().orElse(null);
-                if (leZombieWait == 100 && zombie != null) { // 等僵尸靠近/攻击假人后假人交互
-                    bot.actions().interact(zombie); // onInteractEntity
+                if (zombie != null && !leZombieInteracted) {
+                    bot.actions().lookAt(zombie);
+                    bot.actions().interact(zombie); // 原版实体右键交互包 → onInteractEntity
+                    leZombieInteracted = true;
                 }
-                if (leZombieWait == 160 && zombie != null) {
-                    bot.actions().attack(zombie); // onAttackEntity
+                if (zombie != null && !leZombieAttacked) {
+                    bot.actions().lookAt(zombie);
+                    bot.actions().attack(zombie); // 原版左键攻击包 → onAttackEntity
+                    leZombieAttacked = true;
                 }
-                if (leZombieWait > 300) { check("onInteractEntity", leCounts.getOrDefault("onInteractEntity", 0) >= 1);
+                if (!leZombieKilled && leCounts.getOrDefault("onDamage", 0) >= 1) {
+                    // bot 的真实血量下降已收到，立即用原版命令清理攻击源，避免继续打死 bot。
+                    leZombieKilled = true;
+                    server.execute(() -> server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack(), "kill @e[type=minecraft:zombie]"));
+                }
+                if (leZombieKilled && leCounts.getOrDefault("onEntityAttacked", 0) >= 1) {
+                    check("onInteractEntity", leCounts.getOrDefault("onInteractEntity", 0) >= 1);
                     check("onAttackEntity", leCounts.getOrDefault("onAttackEntity", 0) >= 1);
                     check("onEntityAttacked", leCounts.getOrDefault("onEntityAttacked", 0) >= 1);
                     check("onDamage", leCounts.getOrDefault("onDamage", 0) >= 1);
                     check("onHealthChanged", leCounts.getOrDefault("onHealthChanged", 0) >= 1);
+                    check("damage callback belongs to bot", leDamageBot == bot
+                            && leDamageBot.getLocalPlayer() != Minecraft.getInstance().player
+                            && leDamageSource != null && leDamageAmount > 0.0F);
+                    check("entity-attacked callback belongs to bot", leAttackedBot == bot
+                            && leAttackedBot.getLocalPlayer() != Minecraft.getInstance().player
+                            && leAttackedSource != null && leAttackedAmount > 0.0F);
+                    check("health callback belongs to bot", leHealthBot == bot && leHealthNew < leHealthOld);
+                    step = 10;
+                } else if (leZombieWait > 360) {
+                    if (!leZombieKilled) {
+                        server.execute(() -> server.getCommands().performPrefixedCommand(
+                                server.createCommandSourceStack(), "kill @e[type=minecraft:zombie]"));
+                    }
+                    fail("zombie attack timeout (onDamage not fired)");
                     step = 10;
                 }
             }
@@ -1928,8 +1993,47 @@ public final class TestRunner {
                     step = 13;
                 }
             }
-            case 13 -> { // onMerchantOffersUpdated：由 merchant 套件强测（真实村民交易），此处跳过
-                step = 14;
+            case 13 -> { // onMerchantOffersUpdated：真实村民交易菜单（生命真 lookAt+interact，与 merchant 套件同路径）
+                if (!leMerchantDone) {
+                    leMerchantDone = true;
+                    leMerchantWait = 0;
+                    bot.actions().stop();
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            double x = sp.getX() + 5.0;
+                            double y = sp.getY();
+                            double z = sp.getZ();
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    "kill @e[type=minecraft:villager]");
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    String.format("tp %s %.2f %.2f %.2f", botName, x, y, z));
+                            String cmd = String.format(
+                                    "summon minecraft:villager %.2f %.2f %.2f {NoAI:1b,Offers:{Recipes:[{buy:{id:\"minecraft:emerald\",count:1},sell:{id:\"minecraft:diamond\",count:1},maxUses:99,xp:1}]}}",
+                                    x + 1.0, y, z);
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), cmd);
+                        }
+                    });
+                }
+                leMerchantWait++;
+                if (!leMerchantInteracted) { // 等村民实体同步到假人 level 再交互（避免发到空实体）
+                    net.minecraft.world.entity.Entity villager = bot.getEntitiesNear(64).stream()
+                            .filter(e -> e instanceof net.minecraft.world.entity.npc.villager.Villager)
+                            .min(java.util.Comparator.comparingDouble(e -> e.distanceToSqr(bot.getLocalPlayer())))
+                            .orElse(null);
+                    if (villager != null) {
+                        bot.actions().lookAt(villager);
+                        bot.actions().interact(villager);
+                        leMerchantInteracted = true;
+                    }
+                }
+                if (leCounts.getOrDefault("onMerchantOffersUpdated", 0) >= 1) {
+                    check("onMerchantOffersUpdated", true);
+                    step = 14;
+                } else if (leMerchantWait > 200) {
+                    fail("onMerchantOffersUpdated timeout");
+                    step = 14;
+                }
             }
             case 14 -> { // onDimensionChange：假人换维（下界）
                 if (!leDimDone) {
@@ -1949,11 +2053,18 @@ public final class TestRunner {
             case 15 -> { // onRespawn（kill → respawn）
                 if (!leRespawnKilled) {
                     leRespawnKilled = true;
-                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill " + botName);
+                    leRespawnKillAttempts = 1;
+                    server.execute(() -> server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack(), "kill " + botName));
+                }
+                if (leCounts.getOrDefault("onDeath", 0) < 1 && leRespawnWait > 0
+                        && leRespawnWait % 20 == 0 && leRespawnKillAttempts < 3) {
+                    leRespawnKillAttempts++;
+                    server.execute(() -> server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack(), "kill " + botName));
                 }
                 if (!leRespawnDone && leCounts.getOrDefault("onDeath", 0) >= 1) {
                     leRespawnDone = true;
-                    bot.actions().respawn();
                 }
                 if (leRespawnDone && leCounts.getOrDefault("onRespawn", 0) >= 1) {
                     check("onDeath", true);
