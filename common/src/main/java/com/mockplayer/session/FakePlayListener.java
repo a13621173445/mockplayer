@@ -1344,7 +1344,10 @@ public class FakePlayListener extends ClientPacketListener {
         this.session.getState().recordPacket("handlePlayerCombatKill", packet);
         this.session.getState().setHealth(0.0F);
         if (this.fakePlayer != null) {
-            this.fakePlayer.respawn();
+            // 自动重生开关（默认 true，产品行为不变）：测试关闭后由 respawn 命令触发重生
+            if (this.session.isAutoRespawn()) {
+                this.fakePlayer.respawn();
+            }
         }
         // Bot 事件：死亡（26.2 ClientboundPlayerCombatKillPacket 是 record，死亡消息 accessor = message()）
         net.minecraft.network.chat.Component deathMessage;

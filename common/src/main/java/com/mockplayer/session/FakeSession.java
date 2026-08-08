@@ -54,6 +54,8 @@ public class FakeSession {
     private String owner = BotManagerImpl.COMMAND_OWNER;
     /** 关联的 Bot 实现（BotManagerImpl 创建时写入，驱动事件/动作） */
     private BotImpl bot;
+    /** 死亡后是否自动重生（默认 true = 产品行为不变；测试可关闭以验证 respawn 命令） */
+    private volatile boolean autoRespawn = true;
 
     public FakeSession(String name) {
         this.name = name;
@@ -79,6 +81,16 @@ public class FakeSession {
     /** 关联的 Bot 实现 */
     public BotImpl getBot() {
         return this.bot;
+    }
+
+    /** 设置死亡后自动重生开关（测试用；默认 true） */
+    public void setAutoRespawn(boolean autoRespawn) {
+        this.autoRespawn = autoRespawn;
+    }
+
+    /** 死亡后是否自动重生 */
+    public boolean isAutoRespawn() {
+        return this.autoRespawn;
     }
 
     /** 是否处于连接/登录阶段（TCP 建连中或已建连未 PLAYING） */
