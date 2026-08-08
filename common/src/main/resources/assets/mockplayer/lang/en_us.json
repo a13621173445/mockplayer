@@ -129,5 +129,10 @@
     "commands.mockplayer.control.event.onSneakToggle": "sneak toggled",
     "commands.mockplayer.control.event.onSprintToggle": "sprint toggled",
     "commands.mockplayer.control.event.onTick": "tick",
-    "commands.mockplayer.control.event.onMove": "moved"
+    "commands.mockplayer.control.event.onMove": "moved",
+    "commands.mockplayer.control.suggest.x": "X coordinate",
+    "commands.mockplayer.control.suggest.y": "Y coordinate",
+    "commands.mockplayer.control.suggest.z": "Z coordinate",
+    "commands.mockplayer.control.suggest.yaw": "Yaw (horizontal rotation)",
+    "commands.mockplayer.control.suggest.pitch": "Pitch (vertical rotation)"
 }

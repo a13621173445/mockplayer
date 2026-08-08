@@ -7,6 +7,7 @@ import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -14,6 +15,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.animal.equine.AbstractHorse;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Input;
 import net.minecraft.world.entity.vehicle.boat.Boat;
 import net.minecraft.world.entity.vehicle.minecart.Minecart;
 import net.minecraft.world.item.ItemStack;
@@ -39,6 +41,8 @@ public class BotActionsImpl implements BotActions {
     private boolean sneaking;
     private boolean sprinting;
     private boolean jumping;
+    /** 下马 shift 保持 tick 数：模拟原版「按住 Shift 下马，再松开」，到期自动复位 false。 */
+    private int dismountShiftTicks;
     private Entity sustainedAttackTarget;
     private Entity sustainedUseTarget;
     private BlockPos miningPos;
@@ -143,6 +147,7 @@ public class BotActionsImpl implements BotActions {
         this.sneaking = false;
         this.sprinting = false;
         this.jumping = false;
+        this.dismountShiftTicks = 0;
         this.sustainedAttackTarget = null;
         this.sustainedUseTarget = null;
         return this;
@@ -162,8 +167,13 @@ public class BotActionsImpl implements BotActions {
         ((com.mockplayer.session.accessor.MockplayerClientInputAccessor) player.input)
                 .mockplayer$setMoveVector(new Vec2(this.strafe, this.forward));
         // jump/shift/sprint：原版从 keyPresses 位读，Bot 抽象动作驱动输入位（不涉及移动按键）
+        // shift 位 = 用户潜行状态 或 下马瞬间（dismount 置 2 tick，到期自动复位 false）
+        boolean shift = this.sneaking || this.dismountShiftTicks > 0;
+        if (this.dismountShiftTicks > 0) {
+            this.dismountShiftTicks--;
+        }
         player.input.keyPresses = new net.minecraft.world.entity.player.Input(
-                false, false, false, false, this.jumping, this.sneaking, this.sprinting);
+                false, false, false, false, this.jumping, shift, this.sprinting);
         // 持续挖掘（原版按住左键：每 tick continueDestroyBlock）
         this.tickMining();
         // 持续攻击/使用：目标死亡/无效则自动停止
@@ -412,7 +422,21 @@ public class BotActionsImpl implements BotActions {
         if (player == null) {
             return;
         }
-        // 客户端下马：removeVehicle 会发 ServerboundPlayerInputPacket 通知服务端
+        // 原版等价下马（2026-08-08 修复，对照 26.2 反编译源码）：
+        // 真玩家按 Shift 下马的完整链路是：
+        //   客户端 input.shift=true → LocalPlayer.tick 检测输入变化发 ServerboundPlayerInputPacket
+        //   → 服务端 handlePlayerInput 置 shiftKeyDown
+        //   → ServerPlayer.rideTick() 检测 wantsToStopRiding()（= isShiftKeyDown）→ stopRiding()
+        //   → 服务端广播 SetPassengers，客户端本地脱离。
+        // 实现：置 dismountShiftTicks=2，applyInput 写 keyPresses.shift=true 并保持 2 tick，
+        // 到期自动写回 false（LocalPlayer.tick 检测变化再发复位包）——等价于「按住 Shift 再松开」。
+        // 注意不能只发一次 shift=true：BotActionsImpl 输入驱动从不主动产生 shift=false 变化，
+        // 服务端会永久潜行，导致后续右键箱子/门被抑制（isSecondaryUseActive）。
+        // 之前只调 removeVehicle() 只改本地引用不发包，服务端不知道下马，矿车/船/马都下不来。
+        this.dismountShiftTicks = 2;
+        // 本地立即脱离（无头客户端不等渲染层 SetPassengers 回包）：
+        // 下一个动作可能立刻执行（如打开容器），骑乘状态会挡住交互，所以同步清本地引用。
+        // 服务端下马仍由上面的 shift 输入包驱动，二者不冲突。
         player.removeVehicle();
     }
 

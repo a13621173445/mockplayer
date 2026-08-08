@@ -1402,12 +1402,14 @@ public final class TestRunner {
     private static boolean ccSleepChecked;
     private static volatile boolean ccSleeping;
     private static volatile boolean ccWoke;
-    private static boolean ccCartSummoned;
+    private static boolean ccRailSet;
     private static boolean ccMountSent;
     private static boolean ccMountChecked;
     private static volatile boolean ccMounted;
+    private static int ccMountStableTicks;
     private static boolean ccDismountSent;
     private static volatile boolean ccDismounted;
+    private static BlockPos ccChestPos;
     private static boolean ccChestSet;
     private static boolean ccChestClicked;
     private static volatile boolean ccQueriesOk;
@@ -1521,6 +1523,12 @@ public final class TestRunner {
                 check("tab effects", sugg.contains("minecraft:speed"), "sugg=" + sugg);
                 sugg = ccCompletions(dispatcher, stack, "control " + botName + " drop 0 ");
                 check("tab drop modes", sugg.containsAll(java.util.List.of("one", "all")));
+                // 嵌套命令补全：command 参数复用主玩家连接命令树（原版 execute run 同款机制）
+                sugg = ccCompletions(dispatcher, stack, "control " + botName + " command ");
+                check("tab nested command root", sugg.contains("time") && sugg.contains("gamemode"),
+                        "sugg=" + sugg);
+                sugg = ccCompletions(dispatcher, stack, "control " + botName + " command time ");
+                check("tab nested command sub", sugg.contains("set"), "sugg=" + sugg);
                 // i18n：关键 key 有翻译（getString 不等于 key 原文）
                 for (String key : java.util.List.of(
                         "commands.mockplayer.control.success", "commands.mockplayer.control.not_found",
@@ -2061,13 +2069,19 @@ public final class TestRunner {
                 }
             }
             case 14 -> { // mount 矿车 + dismount
-                if (!ccCartSummoned) {
-                    ccCartSummoned = true;
+                if (!ccRailSet) {
+                    ccRailSet = true;
                     waitTicks = 0;
                     server.execute(() -> {
                         var p = bot.getLocalPlayer();
+                        var cartPos = p.blockPosition().offset(2, 0, 0);
+                        // 铁轨上召唤矿车：矿车稳定停靠，不会因坠落/碰撞被服务端自动弹出乘客（旧场景假绿根因）
                         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
-                                String.format("summon minecraft:minecart %.2f %.2f %.2f", p.getX() + 2.0, p.getY(), p.getZ()));
+                                "setblock " + cartPos.getX() + " " + cartPos.getY() + " " + cartPos.getZ()
+                                        + " minecraft:rail");
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                String.format("summon minecraft:minecart %.2f %.2f %.2f",
+                                        cartPos.getX() + 0.5, cartPos.getY() + 0.0, cartPos.getZ() + 0.5));
                     });
                 }
                 if (++waitTicks > 15 && !ccMountSent) {
@@ -2079,21 +2093,29 @@ public final class TestRunner {
                     ccMounted = sp != null && sp.getVehicle() != null;
                 });
                 if (ccMounted && !ccMountChecked) {
-                    ccMountChecked = true;
-                    check("mount minecart", true);
-                    if (!ccDismountSent) {
-                        ccDismountSent = true;
-                        com.mockplayer.session.ControlCommands.dismount(botName);
+                    // 稳定骑乘验证：连续 20 tick 服务端仍骑乘才认定上马成功，
+                    // 排除「矿车坠落/碰撞被服务端自动弹出乘客」造成的假绿
+                    if (++ccMountStableTicks >= 20) {
+                        ccMountStableTicks = 0;
+                        ccMountChecked = true;
+                        check("mount minecart", true);
+                        if (!ccDismountSent) {
+                            ccDismountSent = true;
+                            com.mockplayer.session.ControlCommands.dismount(botName);
+                        }
                     }
+                } else {
+                    ccMountStableTicks = 0;
                 }
                 server.execute(() -> {
                     var sp = server.getPlayerList().getPlayerByName(botName);
                     ccDismounted = sp != null && sp.getVehicle() == null;
                 });
-                if (ccDismounted) {
+                // 必须先 mount 成功才允许 dismount PASS：没上马时 getVehicle()==null 恒真，会假绿
+                if (ccDismounted && ccMountChecked) {
                     check("dismount", true);
                     step = 15;
-                } else if (waitTicks > 160) {
+                } else if (waitTicks > 220) {
                     fail("mount/dismount timeout");
                     step = 15;
                 }
@@ -2105,18 +2127,21 @@ public final class TestRunner {
                     server.execute(() -> {
                         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
                                 "give " + botName + " minecraft:stone 3");
-                        var p = bot.getLocalPlayer();
-                        BlockPos chest = p.blockPosition().offset(2, 0, 0);
+                        // 主手换成不可放置物品（木棍）：否则 BlockItem 会尝试放到箱子顶上，箱子打不开
                         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
-                                "setblock " + chest.getX() + " " + chest.getY() + " " + chest.getZ() + " minecraft:chest");
-                        bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(chest));
+                                "item replace entity " + botName + " weapon.mainhand with minecraft:stick");
+                        var p = bot.getLocalPlayer();
+                        ccChestPos = p.blockPosition().offset(2, 0, 0);
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "setblock " + ccChestPos.getX() + " " + ccChestPos.getY() + " " + ccChestPos.getZ()
+                                        + " minecraft:chest");
+                        bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(ccChestPos));
                     });
                 }
                 if (++waitTicks > 20 && !ccChestClicked) {
                     ccChestClicked = true;
-                    var p = bot.getLocalPlayer();
-                    BlockPos chest = p.blockPosition().offset(2, 0, 0);
-                    com.mockplayer.session.ControlCommands.useItemOn(botName, chest.getX(), chest.getY(), chest.getZ(), "up");
+                    com.mockplayer.session.ControlCommands.useItemOn(botName,
+                            ccChestPos.getX(), ccChestPos.getY(), ccChestPos.getZ(), "up");
                 }
                 if (waitTicks > 40 && !ccQueriesOk) {
                     ccQueriesOk = true;
@@ -3039,7 +3064,11 @@ public final class TestRunner {
                     leRemoveWait = 0;
                     leBot2 = MockplayerApi.bots().createBot(BotProfile.of("tbot-le2", "test"));
                 }
-                if (leBot2 != null && leBot2.getLifecycle() == BotLifecycle.PLAYING && !leRemove2Done) {
+                // 必须先让主假人 TabList 同步到 tbot-le2 再移除，否则 onPlayerLeft 永远不会触发
+                boolean le2Seen = leBot2 != null && leBot2.getLifecycle() == BotLifecycle.PLAYING
+                        && bot.getOnlinePlayers().stream()
+                        .anyMatch(p -> p.getProfile().name().equals("tbot-le2"));
+                if (le2Seen && !leRemove2Done) {
                     leRemove2Done = true;
                     MockplayerApi.bots().removeBot("tbot-le2", "test"); // 第二个假人离开 → 主假人 onPlayerLeft
                 }
@@ -3047,8 +3076,11 @@ public final class TestRunner {
                     check("onDisconnected", true);
                     check("onPlayerLeft", true);
                     step = 17;
-                } else if (++leRemoveWait > 200) {
-                    fail("onDisconnected timeout");
+                } else if (++leRemoveWait > 600) {
+                    fail("onDisconnected timeout bot2=" + (leBot2 != null ? leBot2.getLifecycle() : "null")
+                            + " seen=" + leRemove2Done
+                            + " counts=" + leCounts.getOrDefault("onDisconnected", 0)
+                            + "/" + leCounts.getOrDefault("onPlayerLeft", 0));
                     step = 17;
                 }
             }
@@ -4497,12 +4529,14 @@ public final class TestRunner {
         ccSleepChecked = false;
         ccSleeping = false;
         ccWoke = false;
-        ccCartSummoned = false;
+        ccRailSet = false;
         ccMountSent = false;
         ccMountChecked = false;
         ccMounted = false;
+        ccMountStableTicks = 0;
         ccDismountSent = false;
         ccDismounted = false;
+        ccChestPos = null;
         ccChestSet = false;
         ccChestClicked = false;
         ccQueriesOk = false;

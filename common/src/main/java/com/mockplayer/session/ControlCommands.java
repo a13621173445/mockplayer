@@ -13,6 +13,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 
 import net.minecraft.ChatFormatting;
@@ -33,7 +34,6 @@ import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -784,52 +784,67 @@ public class ControlCommands {
         }
     }
 
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> entityNames() {
+    /**
+     * 实体目标补全：只补全附近实体的类型路径（villager / minecart 等，语言无关）。
+     * 不补全本地化显示名，避免中文环境出现「村民」「矿车」这类随语言变化的字符串。
+     */
+    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> entityTypes() {
         return (ctx, builder) -> {
             Bot bot = botFromContext(ctx);
             if (bot == null) {
                 return builder.buildFuture();
             }
-            List<String> names = bot.getEntitiesNear(16.0).stream()
-                    .map(e -> e.getName().getString())
-                    .distinct()
-                    .toList();
             List<String> typeIds = bot.getEntitiesNear(16.0).stream()
                     .map(e -> net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
                             .getKey(e.getType()).getPath())
                     .distinct()
                     .toList();
-            java.util.LinkedHashSet<String> all = new java.util.LinkedHashSet<>(names);
-            all.addAll(typeIds);
-            return SharedSuggestionProvider.suggest(new ArrayList<>(all), builder);
+            return SharedSuggestionProvider.suggest(typeIds, builder);
         };
     }
 
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> coords() {
+    /**
+     * 数字补全通用实现：只建议当前参数的一个值，并带 i18n tooltip 说明语义，
+     * 避免一个参数冒出多个候选（如 x 参数同时给 x/y/z）导致语义不清。
+     */
+    private static <S extends SharedSuggestionProvider> SuggestionProvider<S> playerNumber(
+            String tooltipKey, java.util.function.ToDoubleFunction<net.minecraft.world.entity.player.Player> getter,
+            String format) {
         return (ctx, builder) -> {
             Bot bot = botFromContext(ctx);
             if (bot == null || bot.getLocalPlayer() == null) {
                 return builder.buildFuture();
             }
-            var p = bot.getLocalPlayer();
-            return SharedSuggestionProvider.suggest(List.of(
-                    String.format(java.util.Locale.ROOT, "%.0f", p.getX()),
-                    String.format(java.util.Locale.ROOT, "%.0f", p.getY()),
-                    String.format(java.util.Locale.ROOT, "%.0f", p.getZ())), builder);
+            builder.suggest(
+                    String.format(java.util.Locale.ROOT, format, getter.applyAsDouble(bot.getLocalPlayer())),
+                    Component.translatable(tooltipKey));
+            return builder.buildFuture();
         };
     }
 
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> yawPitch() {
-        return (ctx, builder) -> {
-            Bot bot = botFromContext(ctx);
-            if (bot == null || bot.getLocalPlayer() == null) {
-                return builder.buildFuture();
-            }
-            var p = bot.getLocalPlayer();
-            return SharedSuggestionProvider.suggest(List.of(
-                    String.format(java.util.Locale.ROOT, "%.1f", p.getYRot()),
-                    String.format(java.util.Locale.ROOT, "%.1f", p.getXRot())), builder);
-        };
+    /** X 坐标补全（只建议当前 X，tooltip 标明语义）。 */
+    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> coordX() {
+        return playerNumber("commands.mockplayer.control.suggest.x", p -> p.getX(), "%.0f");
+    }
+
+    /** Y 坐标补全（只建议当前 Y，tooltip 标明语义）。 */
+    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> coordY() {
+        return playerNumber("commands.mockplayer.control.suggest.y", p -> p.getY(), "%.0f");
+    }
+
+    /** Z 坐标补全（只建议当前 Z，tooltip 标明语义）。 */
+    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> coordZ() {
+        return playerNumber("commands.mockplayer.control.suggest.z", p -> p.getZ(), "%.0f");
+    }
+
+    /** 偏航角补全（只建议当前 yaw，tooltip 标明语义）。 */
+    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> yawNow() {
+        return playerNumber("commands.mockplayer.control.suggest.yaw", p -> p.getYRot(), "%.1f");
+    }
+
+    /** 俯仰角补全（只建议当前 pitch，tooltip 标明语义）。 */
+    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> pitchNow() {
+        return playerNumber("commands.mockplayer.control.suggest.pitch", p -> p.getXRot(), "%.1f");
     }
 
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> directions() {
@@ -865,12 +880,39 @@ public class ControlCommands {
         };
     }
 
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> commandExamples() {
-        return fixed("time set 1000", "gamemode creative", "me hello");
-    }
-
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> chatExamples() {
-        return fixed("hello", "mockplayer test");
+    /**
+     * 嵌套命令补全：/control &lt;player&gt; command &lt;cmd&gt; 复用客户端命令树，
+     * 与原版 /execute ... run 同款机制（CommandSuggestions 用本连接 dispatcher 解析补全）。
+     * 让假人执行命令时也能逐级 Tab 补全（如 time set 1000 / gamemode creative）。
+     */
+    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> nestedCommands() {
+        return (ctx, builder) -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || mc.player.connection == null) {
+                return builder.buildFuture();
+            }
+            var dispatcher = mc.player.connection.getCommands();
+            // 只解析 command 参数剩余部分（如 "time "），避免依赖完整输入里的参数起点；
+            // 子命令建议的 range 基于剩余串，最后平移到 builder 的绝对位置。
+            String remaining = builder.getRemaining();
+            StringReader reader = new StringReader(remaining);
+            var parse = dispatcher.parse(reader, mc.player.connection.getSuggestionsProvider());
+            // 原版 CommandSuggestions 传的是输入末尾位置（含尾随空格），不是 parse 后的 reader cursor；
+            // 否则 findSuggestionContext 找不到已匹配节点，建议会回退成顶层命令列表。
+            int cursor = remaining.length();
+            int base = builder.getStart();
+            return dispatcher.getCompletionSuggestions(parse, cursor).thenApply(inner -> {
+                java.util.List<com.mojang.brigadier.suggestion.Suggestion> shifted = inner.getList().stream()
+                        .map(s -> new com.mojang.brigadier.suggestion.Suggestion(
+                                new com.mojang.brigadier.context.StringRange(
+                                        base + s.getRange().getStart(), base + s.getRange().getEnd()),
+                                s.getText(), s.getTooltip()))
+                        .toList();
+                String full = builder.getInput();
+                return new com.mojang.brigadier.suggestion.Suggestions(
+                        new com.mojang.brigadier.context.StringRange(0, full.length()), shifted);
+            });
+        };
     }
 
     // ===== 命令树构建（双端共用，平台只提供 literal/argument/反馈函数） =====
@@ -927,8 +969,9 @@ public class ControlCommands {
 
         player.then(f.literal("look")
                 .then(f.argument("yaw", FloatArgumentType.floatArg())
-                        .suggests(yawPitch())
+                        .suggests(yawNow())
                         .then(f.argument("pitch", FloatArgumentType.floatArg(-90.0F, 90.0F))
+                                .suggests(pitchNow())
                                 .executes(ctx -> {
                                     String name = StringArgumentType.getString(ctx, "player");
                                     f.sendFeedback(ctx.getSource(), look(name,
@@ -938,9 +981,11 @@ public class ControlCommands {
                                 }))));
         player.then(f.literal("lookAt")
                 .then(f.argument("x", DoubleArgumentType.doubleArg())
-                        .suggests(coords())
+                        .suggests(coordX())
                         .then(f.argument("y", DoubleArgumentType.doubleArg())
+                                .suggests(coordY())
                                 .then(f.argument("z", DoubleArgumentType.doubleArg())
+                                        .suggests(coordZ())
                                         .executes(ctx -> {
                                             String name = StringArgumentType.getString(ctx, "player");
                                             f.sendFeedback(ctx.getSource(), lookAt(name,
@@ -951,7 +996,6 @@ public class ControlCommands {
                                         })))));
         player.then(f.literal("turn")
                 .then(f.argument("yaw", FloatArgumentType.floatArg())
-                        .suggests(fixed("0", "90", "180", "-90"))
                         .then(f.argument("pitch", FloatArgumentType.floatArg(-90.0F, 90.0F))
                                 .executes(ctx -> {
                                     String name = StringArgumentType.getString(ctx, "player");
@@ -967,7 +1011,7 @@ public class ControlCommands {
                     return 1;
                 })
                 .then(f.argument("target", StringArgumentType.word())
-                        .suggests(entityNames())
+                        .suggests(entityTypes())
                         .executes(ctx -> {
                             f.sendFeedback(ctx.getSource(), attack(
                                     StringArgumentType.getString(ctx, "player"),
@@ -984,7 +1028,7 @@ public class ControlCommands {
                     return 1;
                 })
                 .then(f.argument("target", StringArgumentType.word())
-                        .suggests(entityNames())
+                        .suggests(entityTypes())
                         .executes(ctx -> {
                             f.sendFeedback(ctx.getSource(), sustainedAttack(
                                     StringArgumentType.getString(ctx, "player"),
@@ -997,7 +1041,7 @@ public class ControlCommands {
                     return 1;
                 })
                 .then(f.argument("target", StringArgumentType.word())
-                        .suggests(entityNames())
+                        .suggests(entityTypes())
                         .executes(ctx -> {
                             f.sendFeedback(ctx.getSource(), sustainedUse(
                                     StringArgumentType.getString(ctx, "player"),
@@ -1015,7 +1059,7 @@ public class ControlCommands {
                     return 1;
                 })
                 .then(f.argument("target", StringArgumentType.word())
-                        .suggests(entityNames())
+                        .suggests(entityTypes())
                         .executes(ctx -> {
                             f.sendFeedback(ctx.getSource(), interact(
                                     StringArgumentType.getString(ctx, "player"),
@@ -1151,7 +1195,6 @@ public class ControlCommands {
 
         player.then(f.literal("chat")
                 .then(f.argument("message", StringArgumentType.greedyString())
-                        .suggests(chatExamples())
                         .executes(ctx -> {
                             f.sendFeedback(ctx.getSource(), chat(
                                     StringArgumentType.getString(ctx, "player"),
@@ -1160,7 +1203,7 @@ public class ControlCommands {
                         })));
         player.then(f.literal("command")
                 .then(f.argument("command", StringArgumentType.greedyString())
-                        .suggests(commandExamples())
+                        .suggests(nestedCommands())
                         .executes(ctx -> {
                             f.sendFeedback(ctx.getSource(), command(
                                     StringArgumentType.getString(ctx, "player"),
@@ -1179,7 +1222,6 @@ public class ControlCommands {
                 .then(f.argument("slot", IntegerArgumentType.integer(1, 9))
                         .suggests(fixed("1", "2", "3", "4", "5", "6", "7", "8", "9"))
                         .then(f.argument("page", StringArgumentType.word())
-                                .suggests(fixed("mockplayer", "page", "test"))
                                 .executes(ctx -> {
                                     String name = StringArgumentType.getString(ctx, "player");
                                     f.sendFeedback(ctx.getSource(), editBook(name,
@@ -1198,9 +1240,11 @@ public class ControlCommands {
                                         })))));
         player.then(f.literal("editSign")
                 .then(f.argument("x", IntegerArgumentType.integer())
-                        .suggests(coords())
+                        .suggests(coordX())
                         .then(f.argument("y", IntegerArgumentType.integer())
+                                .suggests(coordY())
                                 .then(f.argument("z", IntegerArgumentType.integer())
+                                        .suggests(coordZ())
                                         .then(f.argument("side", StringArgumentType.word())
                                                 .suggests(fixed("front", "back"))
                                                 .then(f.argument("line1", StringArgumentType.word())
@@ -1244,7 +1288,6 @@ public class ControlCommands {
                                 }))));
         player.then(f.literal("renameItem")
                 .then(f.argument("name", StringArgumentType.greedyString())
-                        .suggests(fixed("Mockplayer Sword", "Test Name"))
                         .executes(ctx -> {
                             f.sendFeedback(ctx.getSource(), renameItem(
                                     StringArgumentType.getString(ctx, "player"),
@@ -1253,9 +1296,11 @@ public class ControlCommands {
                         })));
         player.then(f.literal("pickItemFromBlock")
                 .then(f.argument("x", IntegerArgumentType.integer())
-                        .suggests(coords())
+                        .suggests(coordX())
                         .then(f.argument("y", IntegerArgumentType.integer())
+                                .suggests(coordY())
                                 .then(f.argument("z", IntegerArgumentType.integer())
+                                        .suggests(coordZ())
                                         .then(f.argument("includeData", StringArgumentType.word())
                                                 .suggests(fixed("true", "false"))
                                                 .executes(ctx -> {
@@ -1286,7 +1331,6 @@ public class ControlCommands {
                     return 1;
                 })
                 .then(f.argument("radius", DoubleArgumentType.doubleArg(0.0))
-                        .suggests(fixed("10", "20", "32"))
                         .executes(ctx -> {
                             f.sendFeedback(ctx.getSource(), near(
                                     StringArgumentType.getString(ctx, "player"),
@@ -1295,9 +1339,11 @@ public class ControlCommands {
                         })));
         player.then(f.literal("block")
                 .then(f.argument("x", IntegerArgumentType.integer())
-                        .suggests(coords())
+                        .suggests(coordX())
                         .then(f.argument("y", IntegerArgumentType.integer())
+                                .suggests(coordY())
                                 .then(f.argument("z", IntegerArgumentType.integer())
+                                        .suggests(coordZ())
                                         .executes(ctx -> {
                                             String name = StringArgumentType.getString(ctx, "player");
                                             f.sendFeedback(ctx.getSource(), blockAt(name,
@@ -1329,7 +1375,6 @@ public class ControlCommands {
                     return 1;
                 })
                 .then(f.argument("count", IntegerArgumentType.integer(1, 50))
-                        .suggests(fixed("10", "20", "50"))
                         .executes(ctx -> {
                             f.sendFeedback(ctx.getSource(), events(
                                     StringArgumentType.getString(ctx, "player"),

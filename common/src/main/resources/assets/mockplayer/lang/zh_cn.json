@@ -34,7 +34,7 @@
     "commands.mockplayer.control.action.drop": "丢弃物品",
     "commands.mockplayer.control.action.swapHands": "交换主副手",
     "commands.mockplayer.control.action.mount": "骑乘",
-    "commands.mockplayer.control.action.dismount": "下马",
+    "commands.mockplayer.control.action.dismount": "解除骑乘",
     "commands.mockplayer.control.action.move": "移动",
     "commands.mockplayer.control.action.stop": "停止",
     "commands.mockplayer.control.action.sneak": "潜行",
@@ -129,5 +129,10 @@
     "commands.mockplayer.control.event.onSneakToggle": "潜行切换",
     "commands.mockplayer.control.event.onSprintToggle": "疾跑切换",
     "commands.mockplayer.control.event.onTick": "tick",
-    "commands.mockplayer.control.event.onMove": "移动"
+    "commands.mockplayer.control.event.onMove": "移动",
+    "commands.mockplayer.control.suggest.x": "X 坐标",
+    "commands.mockplayer.control.suggest.y": "Y 坐标",
+    "commands.mockplayer.control.suggest.z": "Z 坐标",
+    "commands.mockplayer.control.suggest.yaw": "偏航角（水平朝向）",
+    "commands.mockplayer.control.suggest.pitch": "俯仰角（垂直朝向）"
 }
