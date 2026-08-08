@@ -1,32 +1,54 @@
-# MultiLoader Template
+# Mockplayer
 
-This project provides a Gradle project template that can compile Minecraft mods for multiple modloaders using a common project for the sources. This project does not require any third party libraries or dependencies. If you have any questions or want to discuss the project, please join our [Discord](https://discord.myceliummod.network).
+纯客户端实现的 Minecraft 假人（Fake Player）模组，支持 Fabric 与 NeoForge 双端。
 
-## Getting Started
+## 简介
 
-### IntelliJ IDEA
-This guide will show how to import the MultiLoader Template into IntelliJ IDEA. The setup process is roughly equivalent to setting up the modloaders independently and should be very familiar to anyone who has worked with their MDKs.
+在 offline-mode 服务器上创建与真玩家零区别的假人：每个假人拥有独立的会话、连接与状态，
+服务端视角就是普通玩家。支持通过命令遥控假人的移动、攻击、交互、挖掘、容器、骑乘、聊天，
+以及查询假人状态和监听事件。
 
-1. Clone or download this repository to your computer.
-2. Configure the project by setting the properties in the `gradle.properties` file. You will also need to change the `rootProject.name`  property in `settings.gradle`, this should match the folder name of your project, or else IDEA may complain.
-3. Open the template's root folder as a new project in IDEA. This is the folder that contains this README.md file and the gradlew executable.
-4. If your default JVM/JDK is not Java 25 you will encounter an error when opening the project. This error is fixed by going to `File > Settings > Build, Execution, Deployment > Build Tools > Gradle > Gradle JVM` and changing the value to a valid Java 25 JVM. You will also need to set the Project SDK to Java 25. This can be done by going to `File > Project Structure > Project SDK`. Once both have been set open the Gradle tab in IDEA and click the refresh button to reload the project.
-5. Open your Run/Debug Configurations. Under the `Application` category there should now be options to run Fabric and NeoForge projects. Select one of the client options and try to run it.
-6. Assuming you were able to run the game in step 5 your workspace should now be set up.
+## 当前状态
 
-### Eclipse
-While it is possible to use this template in Eclipse it is not recommended. During the development of this template multiple critical bugs and quirks related to Eclipse were found at nearly every level of the required build tools. While we continue to work with these tools to report and resolve issues support for projects like these are not there yet. For now Eclipse is considered unsupported by this project. The development cycle for build tools is notoriously slow so there are no ETAs available.
+当前可能存在不稳定情况，请按需使用。
 
-## Development Guide
-When using this template the majority of your mod should be developed in the `common` project. The `common` project is compiled against the vanilla game and is used to hold code that is shared between the different loader-specific versions of your mod. The `common` project has no knowledge or access to ModLoader specific code, apis, or concepts. Code that requires something from a specific loader must be done through the project that is specific to that loader, such as the `fabric` or `neoforge` projects.
+## 功能
 
-Loader specific projects such as the `fabric` and `neoforge` project are used to load the `common` project into the game. These projects also define code that is specific to that loader. Loader specific projects can access all the code in the `common` project. It is important to remember that the `common` project can not access code from loader specific projects.
+- `/newplayer <name>`：创建假人并加入当前服务器
+- `/delplayer <name>`：移除假人
+- `/connect <name> <host> [port]`：让已存在的假人连接指定服务器
+- `/control <player> <action>`：遥控假人
+  - 动作：移动、跳跃、潜行、疾跑、攻击、交互、使用物品、挖掘/放置方块、容器交互、
+    骑乘/解除骑乘、聊天/执行命令、睡觉、重生、写书/告示牌、信标、物品改名等
+  - 查询：列表、信息、物品栏、容器、附近实体、方块、在线玩家、聊天记录、事件记录
+  - 监听：`/control <player> listen on/off` 实时推送假人事件
 
-## Removing Platforms and Loaders
-While this template has support for many modloaders, new loaders may appear in the future, and existing loaders may become less relevant.
+## 环境
 
-Removing loader specific projects is as easy as deleting the folder, and removing the `include("projectname")` line from the `settings.gradle` file.
-For example if you wanted to remove support for `forge` you would follow the following steps:
+- Minecraft 26.2
+- Fabric 或 NeoForge 客户端
+- offline-mode（离线模式）服务器
 
-1. Delete the subproject folder. For example, delete `MultiLoader-Template/forge`.
-2. Remove the project from `settings.gradle`. For example, remove `include("forge")`. 
+## 感谢
+
+- [Carpet](https://github.com/gnembon/fabric-carpet)（假人遥控与事件思路）
+- [MultiLoader-Template](https://github.com/jaredlll08/MultiLoader-Template)（双端工程模板）
+- [Fabric API](https://github.com/FabricMC/fabric)
+- [NeoForge](https://github.com/neoforged/NeoForge)
+- [Mixin](https://github.com/SpongePowered/Mixin)
+
+## 免责声明
+
+本模组与 Mojang Studios / Microsoft 无关，未经官方认可。
+使用本模组请遵守 Minecraft 最终用户许可协议（EULA）。
+本模组不包含任何 Minecraft 原版代码或资源。
+
+## 协议
+
+MIT License
+
+Copyright (c) 2026 1cyberlangke1
+
+## AI 生成声明
+
+本项目的代码由大语言模型（LLM）辅助生成。

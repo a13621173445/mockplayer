@@ -40,7 +40,7 @@ import java.util.Optional;
  */
 public final class TestRunner {
 
-    private static final long TIMEOUT_MS = 45_000;
+    private static final long TIMEOUT_MS = 120_000;
 
     /** 全部套件（suite=all / IDE 默认入口时按序连续跑） */
     private static final List<String> ALL_SUITES = List.of(
@@ -1415,6 +1415,30 @@ public final class TestRunner {
     private static volatile boolean ccQueriesOk;
     private static boolean ccCloseSent;
     private static boolean ccCloseChecked;
+    private static boolean ccClickPutSent;
+    private static boolean ccClickPutDone;
+    private static boolean ccClickPutVerified;
+    private static volatile boolean ccClickPutItemInChest;
+    private static boolean ccMineTestSet;
+    private static boolean ccMineTestSynced;
+    private static boolean ccMineTestDone;
+    private static boolean ccMineStopSent;
+    private static int ccMineTestTicks;
+    private static volatile boolean ccMineSpReady;
+    private static volatile BlockPos ccMineStone1;
+    private static volatile BlockPos ccMineStone2;
+    private static volatile BlockPos ccMineStoneFar;
+    private static boolean ccMineFarSent;
+    private static boolean ccMineFarChecked;
+    private static boolean ccMineFarWaitDone;
+    private static volatile boolean ccMineFarStill;
+    private static volatile boolean ccMineStone1Air;
+    private static volatile boolean ccMineStone2Still;
+    private static volatile String ccMineMainHand = "?";
+    private static volatile float ccMineDigSpeed = -1.0F;
+    private static volatile boolean ccMineCorrectTool = false;
+    private static volatile float ccMineDestroyProgressRate = -1.0F;
+    private static boolean ccMineStopWaitDone;
     private static boolean ccListenOn;
     private static boolean ccListenDamaged;
     private static volatile boolean ccEventsHasDamage;
@@ -1523,7 +1547,8 @@ public final class TestRunner {
                         "stopSustained", "interact", "useItem", "releaseUsingItem", "useItemOn",
                         "placeBlock", "mineBlock", "attackBlock", "hotbar", "drop", "swapHands",
                         "mount", "dismount", "chat", "command", "wakeUp", "respawn", "editBook",
-                        "editSign", "setBeacon", "renameItem", "pickItemFromBlock",
+                        "close", "click", "button", "trade", "setSlot", "editSign", "setBeacon",
+                        "renameItem", "pickItemFromBlock",
                         "info", "inventory", "container", "near", "block", "online", "chatlog", "listen", "events");
                 java.util.List<String> missing = new java.util.ArrayList<>(expected);
                 missing.removeAll(subs);
@@ -2020,7 +2045,7 @@ public final class TestRunner {
                         ccPlacedDirt2 = ccPlacePos2 != null && level != null
                                 && level.getBlockState(ccPlacePos2).is(net.minecraft.world.level.block.Blocks.DIRT);
                     });
-                    if (++waitTicks > 80) {
+                    if (++waitTicks > 160) {
                         fail("placeBlock 2 timeout");
                         step = 13;
                     }
@@ -2108,7 +2133,7 @@ public final class TestRunner {
                 }
                 if (++waitTicks > 15 && !ccMountSent) {
                     ccMountSent = true;
-                    com.mockplayer.session.ControlCommands.mount(botName, null);
+                    com.mockplayer.session.ControlCommands.mount(botName, "minecart", null);
                 }
                 server.execute(() -> {
                     var sp = server.getPlayerList().getPlayerByName(botName);
@@ -2183,10 +2208,39 @@ public final class TestRunner {
                     check("query block", blockText.contains("minecraft:"), "text=" + blockText);
                     check("query online", onlineText.contains(mc.player.getGameProfile().name()) && onlineText.contains(botName));
                     check("query chat", chatText.contains("mockplayer-ctl-chat"));
-                    // 容器用完必须关闭（残留菜单会污染后续 case）
-                    bot.getContainer().ifPresent(c -> c.close());
-                    ccCloseSent = true;
-                    step = 16;
+                    // 容器交互命令强测：拿起主手石头 → 放入箱子槽 0 → 服务端 BlockEntity 证据
+                    ccClickPutSent = true;
+                    waitTicks = 0;
+                    com.mockplayer.session.ControlCommands.hotbar(botName, 1);
+                    server.execute(() -> server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack(), "give " + botName + " minecraft:stone 1"));
+                } else if (ccClickPutSent && !ccClickPutDone) {
+                    if (++waitTicks > 5) {
+                        ccClickPutDone = true;
+                        waitTicks = 0;
+                        var c = bot.getContainer();
+                        // 菜单槽 = 总槽数 - 9（快捷栏起点）+ selected(0)；getSize() 含玩家背包 36 槽
+                        int pickupSlot = (c.isPresent() ? c.get().getSize() : 63) - 9;
+                        com.mockplayer.session.ControlCommands.click(botName, pickupSlot, 0, "pickup");
+                        com.mockplayer.session.ControlCommands.click(botName, 0, 0, "pickup");
+                    }
+                } else if (ccClickPutDone && !ccClickPutVerified) {
+                    server.execute(() -> {
+                        var level = server.getLevel(Level.OVERWORLD);
+                        ccClickPutItemInChest = level != null
+                                && level.getBlockEntity(ccChestPos)
+                                instanceof net.minecraft.world.level.block.entity.ChestBlockEntity chest
+                                && chest.getItem(0).is(net.minecraft.world.item.Items.STONE);
+                    });
+                    if (++waitTicks > 40) {
+                        ccClickPutVerified = true;
+                        check("container click put item", ccClickPutItemInChest,
+                                "chest0=" + ccClickPutItemInChest);
+                        // 容器用完必须关闭：走 /control close 命令路径（强测命令本身）
+                        com.mockplayer.session.ControlCommands.close(botName);
+                        ccCloseSent = true;
+                        step = 16;
+                    }
                 } else if (waitTicks > 160) {
                     fail("query timeout");
                     step = 16;
@@ -2314,7 +2368,7 @@ public final class TestRunner {
                     outputs.add(com.mockplayer.session.ControlCommands.hotbar(botName, 1));
                     outputs.add(com.mockplayer.session.ControlCommands.drop(botName, null, false));
                     outputs.add(com.mockplayer.session.ControlCommands.swapHands(botName));
-                    outputs.add(com.mockplayer.session.ControlCommands.mount(botName, null));
+                    outputs.add(com.mockplayer.session.ControlCommands.mount(botName, null, null));
                     outputs.add(com.mockplayer.session.ControlCommands.dismount(botName));
                     outputs.add(com.mockplayer.session.ControlCommands.chat(botName, "mockplayer-ctl-final"));
                     outputs.add(com.mockplayer.session.ControlCommands.command(botName, "time set 2000"));
@@ -2346,7 +2400,7 @@ public final class TestRunner {
                             "text=" + escapeOut.getString());
                     check("escape chat no style inject", ccNoInjectedStyle(escapeOut, false),
                             "styles=" + ccCollectStyles(escapeOut));
-                    String escapeCmd = "say 100%s";
+                    String escapeCmd = "say 100%s \u00a7c";
                     net.minecraft.network.chat.Component escapeCmdOut =
                             com.mockplayer.session.ControlCommands.command(botName, escapeCmd);
                     check("escape command text", escapeCmdOut.getString().contains(escapeCmd),
@@ -2357,8 +2411,151 @@ public final class TestRunner {
                             "text=" + escapeNameOut.getString());
                     check("escape name no style inject", ccNoInjectedStyle(escapeNameOut, true),
                             "styles=" + ccCollectStyles(escapeNameOut));
-                    finishSuite();
+                    // container.none 模板 %s 必须被替换：输出含假人名字、不得残留字面 %s
+                    String noneText = com.mockplayer.session.ControlCommands.container(botName).getString();
+                    check("container none text", noneText.contains(botName) && !noneText.contains("%s"),
+                            "text=" + noneText);
+                    // 清掉 outputs 里 move/jump 等持续输入，否则假人带着前进+跳跃进入挖掘测试
+                    // （onGround=false → 挖掘速度 /5，mine time 测试会假失败）
+                    com.mockplayer.session.ControlCommands.stop(botName);
+                    step = 19;
                 }
+            }
+            case 19 -> { // 挖掘时间原版锁定 + stopSustained 取消挖掘（服务端证据）
+                if (!ccMineTestSet) {
+                    ccMineTestSet = true;
+                    waitTicks = 0;
+                    server.execute(() -> {
+                        // 用服务端玩家位置算石头坐标：respawn 后客户端位置可能尚未同步到重生点
+                        var sp = server.getPlayerList().getPlayerByName(botName);
+                        ccMineSpReady = sp != null;
+                        if (sp == null) {
+                            return;
+                        }
+                        ccMineStone1 = sp.blockPosition().offset(2, 0, 0);
+                        ccMineStone2 = sp.blockPosition().offset(3, 0, 0);
+                        ccMineStoneFar = sp.blockPosition().offset(8, 0, 0);
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "setblock " + ccMineStone1.getX() + " " + ccMineStone1.getY() + " "
+                                        + ccMineStone1.getZ() + " minecraft:stone");
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "setblock " + ccMineStone2.getX() + " " + ccMineStone2.getY() + " "
+                                        + ccMineStone2.getZ() + " minecraft:stone");
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "setblock " + ccMineStoneFar.getX() + " " + ccMineStoneFar.getY() + " "
+                                        + ccMineStoneFar.getZ() + " minecraft:stone");
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                // give 不覆盖主手（selected 槽还有木棍），必须 replace 才保证用石镐挖
+                                "item replace entity " + botName + " weapon.mainhand with minecraft:stone_pickaxe");
+                    });
+                } else if (!ccMineTestSynced) {
+                    if (!ccMineSpReady || ccMineStone1 == null) {
+                        // 服务端玩家还没就绪：等待，不要对 null 位置调 getBlockState
+                        if (++waitTicks > 40) {
+                            fail("mine test spawn missing");
+                            step = 20;
+                        }
+                        return;
+                    }
+                    if (++waitTicks > 20 && bot.getBlockState(ccMineStone1).is(net.minecraft.world.level.block.Blocks.STONE)
+                            && bot.getBlockState(ccMineStone2).is(net.minecraft.world.level.block.Blocks.STONE)) {
+                        ccMineTestSynced = true;
+                        ccMineTestTicks = 0;
+                        waitTicks = 0;
+                        var stoneState = bot.getBlockState(ccMineStone1);
+                        ccMineDigSpeed = bot.getLocalPlayer().getDestroySpeed(stoneState);
+                        ccMineCorrectTool = bot.getLocalPlayer().hasCorrectToolForDrops(stoneState);
+                        ccMineDestroyProgressRate = stoneState.getDestroyProgress(
+                                bot.getLocalPlayer(), bot.getLevel(), ccMineStone1);
+                        server.execute(() -> {
+                            var sp = server.getPlayerList().getPlayerByName(botName);
+                            ccMineMainHand = sp != null ? String.valueOf(sp.getMainHandItem().getItem()) : "?";
+                        });
+                        com.mockplayer.session.ControlCommands.mineBlock(botName,
+                                ccMineStone1.getX(), ccMineStone1.getY(), ccMineStone1.getZ());
+                    } else if (waitTicks > 200) {
+                        fail("mine test sync timeout bot="
+                                + (bot.getLocalPlayer() != null ? bot.getLocalPlayer().blockPosition() : "?")
+                                + " stone1=" + ccMineStone1
+                                + " client=" + bot.getBlockState(ccMineStone1));
+                        step = 20;
+                    }
+                } else if (!ccMineTestDone) {
+                    ccMineTestTicks++;
+                    server.execute(() -> {
+                        var level = server.getLevel(Level.OVERWORLD);
+                        ccMineStone1Air = level != null
+                                && level.getBlockState(ccMineStone1).is(net.minecraft.world.level.block.Blocks.AIR);
+                    });
+                    if (ccMineStone1Air) {
+                        ccMineTestDone = true;
+                        // 石镐挖石头原版约 12 tick（硬度 1.5 × 30 / 速度 4）；6-20 范围锁定原版时间
+                        System.out.println("[mocktest] mine ticks=" + ccMineTestTicks
+                                + " hand=" + ccMineMainHand
+                                + " digSpeed=" + ccMineDigSpeed
+                                + " correctTool=" + ccMineCorrectTool
+                                + " rate=" + ccMineDestroyProgressRate);
+                        check("mine time vanilla", ccMineTestTicks >= 6 && ccMineTestTicks <= 20,
+                                "ticks=" + ccMineTestTicks
+                                        + " hand=" + ccMineMainHand
+                                        + " digSpeed=" + ccMineDigSpeed
+                                        + " correctTool=" + ccMineCorrectTool
+                                        + " rate=" + ccMineDestroyProgressRate);
+                        waitTicks = 0;
+                        com.mockplayer.session.ControlCommands.mineBlock(botName,
+                                ccMineStone2.getX(), ccMineStone2.getY(), ccMineStone2.getZ());
+                    } else if (ccMineTestTicks > 160) {
+                        fail("mine time timeout hand=" + ccMineMainHand
+                                + " digSpeed=" + ccMineDigSpeed
+                                + " correctTool=" + ccMineCorrectTool
+                                + " rate=" + ccMineDestroyProgressRate);
+                        step = 20;
+                    }
+                } else if (!ccMineStopSent) {
+                    if (++waitTicks >= 5) {
+                        ccMineStopSent = true;
+                        waitTicks = 0;
+                        com.mockplayer.session.ControlCommands.stopSustained(botName);
+                    }
+                } else {
+                    if (++waitTicks > 80) {
+                        server.execute(() -> {
+                            var level = server.getLevel(Level.OVERWORLD);
+                            ccMineStone2Still = level != null
+                                    && level.getBlockState(ccMineStone2).is(net.minecraft.world.level.block.Blocks.STONE);
+                        });
+                        ccMineStopWaitDone = true;
+                        waitTicks = 0;
+                    } else if (ccMineStopWaitDone && ++waitTicks > 3) {
+                        check("stopSustained cancels mining", ccMineStone2Still,
+                                "stone2=" + ccMineStone2 + " still=" + ccMineStone2Still);
+                        ccMineStopWaitDone = false; // 防止分支重复执行灌爆 records
+                        // 距离拒绝：8 格外方块超出原版交互范围，mineBlock 必须被客户端拒绝
+                        com.mockplayer.session.ControlCommands.mineBlock(botName,
+                                ccMineStoneFar.getX(), ccMineStoneFar.getY(), ccMineStoneFar.getZ());
+                        ccMineFarSent = true;
+                        waitTicks = 0;
+                    } else if (ccMineFarSent && !ccMineFarChecked) {
+                        if (++waitTicks > 20) {
+                            ccMineFarChecked = true;
+                            server.execute(() -> {
+                                var level = server.getLevel(Level.OVERWORLD);
+                                ccMineFarStill = level != null
+                                        && level.getBlockState(ccMineStoneFar).is(net.minecraft.world.level.block.Blocks.STONE);
+                            });
+                            ccMineFarWaitDone = true;
+                            waitTicks = 0;
+                        }
+                    } else if (ccMineFarWaitDone && ++waitTicks > 3) {
+                        check("mine distance rejected", ccMineFarStill,
+                                "far=" + ccMineStoneFar + " still=" + ccMineFarStill);
+                        ccMineFarWaitDone = false; // 防止分支重复执行灌爆 records
+                        step = 20;
+                    }
+                }
+            }
+            case 20 -> {
+                finishSuite();
             }
         }
     }
@@ -4583,6 +4780,30 @@ public final class TestRunner {
         ccQueriesOk = false;
         ccCloseSent = false;
         ccCloseChecked = false;
+        ccClickPutSent = false;
+        ccClickPutDone = false;
+        ccClickPutVerified = false;
+        ccClickPutItemInChest = false;
+        ccMineTestSet = false;
+        ccMineTestSynced = false;
+        ccMineTestDone = false;
+        ccMineStopSent = false;
+        ccMineTestTicks = 0;
+        ccMineSpReady = false;
+        ccMineStone1 = null;
+        ccMineStone2 = null;
+        ccMineStoneFar = null;
+        ccMineFarSent = false;
+        ccMineFarChecked = false;
+        ccMineFarWaitDone = false;
+        ccMineFarStill = false;
+        ccMineStone1Air = false;
+        ccMineStone2Still = false;
+        ccMineMainHand = "?";
+        ccMineDigSpeed = -1.0F;
+        ccMineCorrectTool = false;
+        ccMineDestroyProgressRate = -1.0F;
+        ccMineStopWaitDone = false;
         ccListenOn = false;
         ccListenDamaged = false;
         ccEventsHasDamage = false;

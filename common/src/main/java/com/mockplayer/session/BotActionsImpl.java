@@ -137,6 +137,7 @@ public class BotActionsImpl implements BotActions {
     public BotActions stopSustained() {
         this.sustainedAttackTarget = null;
         this.sustainedUseTarget = null;
+        this.stopMining();
         return this;
     }
 
@@ -150,7 +151,16 @@ public class BotActionsImpl implements BotActions {
         this.dismountShiftTicks = 0;
         this.sustainedAttackTarget = null;
         this.sustainedUseTarget = null;
+        this.stopMining();
         return this;
+    }
+
+    /** 取消持续挖掘：清目标 + 发 ABORT_DESTROY_BLOCK（原版松开左键等价）。 */
+    private void stopMining() {
+        if (this.miningPos != null && this.bot.getGameMode() != null) {
+            this.bot.getGameMode().stopDestroyBlock();
+        }
+        this.miningPos = null;
     }
 
     /** 内部：每 tick 应用持续输入 + 持续挖掘（BotImpl.tick 调用）。
@@ -257,6 +267,11 @@ public class BotActionsImpl implements BotActions {
         if (player == null || pos == null || this.bot.getGameMode() == null) {
             return;
         }
+        // 原版等价距离判断：复用 Player.isWithinBlockInteractionRange（blockInteractionRange，生存约 4.5 格），
+        // 与原版 Minecraft.startAttack 的 hitResult 射线范围一致；不做视线射线（方块在背后也能按坐标挖，方便使用）
+        if (!player.isWithinBlockInteractionRange(pos, 0.0)) {
+            return;
+        }
         // 复用原版挖掘驱动（Minecraft.continueAttack）：
         // startDestroyBlock（按住第一帧，发 START_DESTROY_BLOCK）→ 之后由 tickMining 每 tick
         // continueDestroyBlock（原版按住期间每 tick 持续发 START + 本地裂纹）→ 服务端进度推进到 1.0
@@ -275,6 +290,11 @@ public class BotActionsImpl implements BotActions {
             return;
         }
         BlockPos pos = this.miningPos;
+        // 原版等价：玩家移动/目标离开交互范围后，continueAttack 的 hitResult 不再指向该方块 → 松开左键
+        if (!player.isWithinBlockInteractionRange(pos, 0.0)) {
+            this.stopMining();
+            return;
+        }
         // 原版 Minecraft.continueAttack：continueDestroyBlock → addBreakingBlockEffect（裂纹）→ swing（挥动）
         if (this.bot.getGameMode().continueDestroyBlock(pos, Direction.UP)) {
             if (player.level() instanceof net.minecraft.client.multiplayer.ClientLevel cl) {
@@ -407,13 +427,22 @@ public class BotActionsImpl implements BotActions {
         if (closest == null) {
             return;
         }
-        // 客户端骑乘：右键坐骑走 ServerboundInteractPacket，服务端处理上马
-        this.bot.getGameMode().interact(player, closest, new EntityHitResult(closest), InteractionHand.MAIN_HAND);
+        this.mount(closest);
     }
 
     @Override
     public void mount() {
         this.mount(true);
+    }
+
+    @Override
+    public void mount(Entity target) {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null || this.bot.getGameMode() == null || target == null) {
+            return;
+        }
+        // 客户端骑乘：右键坐骑走 ServerboundInteractPacket，服务端处理上马
+        this.bot.getGameMode().interact(player, target, new EntityHitResult(target), InteractionHand.MAIN_HAND);
     }
 
     @Override
@@ -428,12 +457,14 @@ public class BotActionsImpl implements BotActions {
         //   → 服务端 handlePlayerInput 置 shiftKeyDown
         //   → ServerPlayer.rideTick() 检测 wantsToStopRiding()（= isShiftKeyDown）→ stopRiding()
         //   → 服务端广播 SetPassengers，客户端本地脱离。
-        // 实现：置 dismountShiftTicks=2，applyInput 写 keyPresses.shift=true 并保持 2 tick，
+        // 实现：置 dismountShiftTicks=10，applyInput 写 keyPresses.shift=true 并保持 10 tick，
         // 到期自动写回 false（LocalPlayer.tick 检测变化再发复位包）——等价于「按住 Shift 再松开」。
+        // 保持时间不能太短：true 和 false 复位包若被服务端同一 tick 处理，rideTick 检查时
+        // shift 已是 false 会漏掉下马（间歇性「下不来」的竞态），10 tick = 0.5 秒足够稳定。
         // 注意不能只发一次 shift=true：BotActionsImpl 输入驱动从不主动产生 shift=false 变化，
         // 服务端会永久潜行，导致后续右键箱子/门被抑制（isSecondaryUseActive）。
         // 之前只调 removeVehicle() 只改本地引用不发包，服务端不知道下马，矿车/船/马都下不来。
-        this.dismountShiftTicks = 2;
+        this.dismountShiftTicks = 10;
         // 本地立即脱离（无头客户端不等渲染层 SetPassengers 回包）：
         // 下一个动作可能立刻执行（如打开容器），骑乘状态会挡住交互，所以同步清本地引用。
         // 服务端下马仍由上面的 shift 输入包驱动，二者不冲突。
@@ -454,12 +485,18 @@ public class BotActionsImpl implements BotActions {
         if (c == null) {
             return this;
         }
-        if (message.startsWith("/")) {
-            return this.sendCommand(message.substring(1));
+        // 原版等价过滤：StringUtil.filterText 移除 §(167) 等非法聊天字符，
+        // 服务端 tryHandleChat 对含 § 的消息直接 disconnect(illegal_characters) 踢人。
+        String filtered = net.minecraft.util.StringUtil.filterText(message);
+        if (filtered.isEmpty()) {
+            return this;
+        }
+        if (filtered.startsWith("/")) {
+            return this.sendCommand(filtered.substring(1));
         }
         // offline 服务器不要求签名（signature=null）+ 空 lastSeen（原版无历史消息时等同）
         c.send(new net.minecraft.network.protocol.game.ServerboundChatPacket(
-                message, java.time.Instant.now(), net.minecraft.util.Crypt.SaltSupplier.getLong(), null,
+                filtered, java.time.Instant.now(), net.minecraft.util.Crypt.SaltSupplier.getLong(), null,
                 new net.minecraft.network.chat.LastSeenMessages.Update(0, new java.util.BitSet(), (byte) 0)));
         return this;
     }
@@ -470,7 +507,12 @@ public class BotActionsImpl implements BotActions {
         if (c == null) {
             return this;
         }
-        c.send(new net.minecraft.network.protocol.game.ServerboundChatCommandPacket(command));
+        // 命令通道同样走 tryHandleChat 校验：含 § 会被踢，先过滤
+        String filtered = net.minecraft.util.StringUtil.filterText(command);
+        if (filtered.isEmpty()) {
+            return this;
+        }
+        c.send(new net.minecraft.network.protocol.game.ServerboundChatCommandPacket(filtered));
         return this;
     }
 

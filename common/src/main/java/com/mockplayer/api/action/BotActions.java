@@ -225,6 +225,13 @@ public interface BotActions {
     void mount();
 
     /**
+     * 骑乘指定实体（右键坐骑等价，服务端决定能否上马）。
+     *
+     * @param target 目标实体
+     */
+    void mount(Entity target);
+
+    /**
      * 下马。
      */
     void dismount();

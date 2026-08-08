@@ -455,13 +455,23 @@ public class ControlCommands {
         return success("swapHands", name);
     }
 
-    public static Component mount(String name, Boolean onlyRideables) {
+    public static Component mount(String name, String target, Boolean onlyRideables) {
         Component blocked = requirePlaying(name);
         if (blocked != null) {
             return blocked;
         }
-        findBot(name).actions().mount(onlyRideables == null || onlyRideables);
-        return success("mount", name);
+        Bot bot = findBot(name);
+        if (target == null || target.isBlank()) {
+            // 自动模式：骑最近的可骑乘实体（或任意实体，由 onlyRideables 决定）
+            bot.actions().mount(onlyRideables == null || onlyRideables);
+            return success("mount", name);
+        }
+        Entity entity = resolveEntity(bot, target);
+        if (entity == null) {
+            return fail("commands.mockplayer.control.entity_not_found", playerName(name), target);
+        }
+        bot.actions().mount(entity);
+        return success("mount", name, entity.getName());
     }
 
     public static Component dismount(String name) {
@@ -471,6 +481,114 @@ public class ControlCommands {
         }
         findBot(name).actions().dismount();
         return success("dismount", name);
+    }
+
+    /** 关闭假人当前打开的容器 GUI（原版 LocalPlayer.closeContainer 等价，发关闭包）。 */
+    public static Component close(String name) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        Bot bot = findBot(name);
+        Optional<BotContainer> c = bot.getContainer();
+        if (c.isEmpty()) {
+            return info("commands.mockplayer.control.container.none", playerName(name));
+        }
+        c.get().close();
+        return success("close", name);
+    }
+
+    /** 点击容器槽位（拿取/放置/换位/拖拽，ContainerInput 枚举小写名）。 */
+    public static Component click(String name, int slot, int button, String mode) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        Bot bot = findBot(name);
+        Optional<BotContainer> c = bot.getContainer();
+        if (c.isEmpty()) {
+            return info("commands.mockplayer.control.container.none", playerName(name));
+        }
+        net.minecraft.world.inventory.ContainerInput input = resolveClickMode(mode);
+        if (input == null) {
+            return fail("commands.mockplayer.control.invalid_click_mode", mode == null ? "" : mode);
+        }
+        BotContainer container = c.get();
+        if (slot < -1 || slot >= container.getSize()) {
+            // 越界点击会让原版 clicked 抛 IndexOutOfBounds（客户端崩溃），命令层先拦下
+            return fail("commands.mockplayer.control.invalid_slot", slot);
+        }
+        container.click(slot, button, input);
+        return success("click", name, slot, button, mode);
+    }
+
+    private static net.minecraft.world.inventory.ContainerInput resolveClickMode(String mode) {
+        if (mode == null) {
+            return null;
+        }
+        return switch (mode.toLowerCase(java.util.Locale.ROOT)) {
+            case "pickup" -> net.minecraft.world.inventory.ContainerInput.PICKUP;
+            case "quickmove", "quick_move" -> net.minecraft.world.inventory.ContainerInput.QUICK_MOVE;
+            case "swap" -> net.minecraft.world.inventory.ContainerInput.SWAP;
+            case "clone" -> net.minecraft.world.inventory.ContainerInput.CLONE;
+            case "throw" -> net.minecraft.world.inventory.ContainerInput.THROW;
+            case "quickcraft", "quick_craft" -> net.minecraft.world.inventory.ContainerInput.QUICK_CRAFT;
+            case "pickupall", "pickup_all" -> net.minecraft.world.inventory.ContainerInput.PICKUP_ALL;
+            default -> null;
+        };
+    }
+
+    /** 点击菜单按钮（附魔台选附魔等）。 */
+    public static Component button(String name, int buttonId) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        Bot bot = findBot(name);
+        Optional<BotContainer> c = bot.getContainer();
+        if (c.isEmpty()) {
+            return info("commands.mockplayer.control.container.none", playerName(name));
+        }
+        c.get().clickButton(buttonId);
+        return success("button", name, buttonId);
+    }
+
+    /** 选择交易菜单中的一笔报价。 */
+    public static Component trade(String name, int index) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        Bot bot = findBot(name);
+        Optional<BotContainer> c = bot.getContainer();
+        if (c.isEmpty()) {
+            return info("commands.mockplayer.control.container.none", playerName(name));
+        }
+        c.get().selectTrade(index);
+        return success("trade", name, index);
+    }
+
+    /** 把假人主手物品乐观写入容器槽位（服务端回包为准）。 */
+    public static Component setSlot(String name, int slot) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        Bot bot = findBot(name);
+        Optional<BotContainer> c = bot.getContainer();
+        if (c.isEmpty()) {
+            return info("commands.mockplayer.control.container.none", playerName(name));
+        }
+        if (bot.getLocalPlayer() == null) {
+            return fail("commands.mockplayer.control.not_playing", playerName(name));
+        }
+        BotContainer container = c.get();
+        if (slot < 0 || slot >= container.getSize()) {
+            // 越界写入会让原版 setItem 抛 IndexOutOfBounds（客户端崩溃），命令层先拦下
+            return fail("commands.mockplayer.control.invalid_slot", slot);
+        }
+        container.setSlot(slot, bot.getLocalPlayer().getMainHandItem());
+        return success("setSlot", name, slot);
     }
 
     public static Component chat(String name, String message) {
@@ -659,7 +777,8 @@ public class ControlCommands {
         }
         Optional<BotContainer> c = bot.getContainer();
         if (c.isEmpty()) {
-            return info("commands.mockplayer.control.container.none");
+            // 模板含 %s（假人名字），必须传参数，否则输出残留字面 %s
+            return info("commands.mockplayer.control.container.none", playerName(name));
         }
         BotContainer container = c.get();
         MutableComponent out = info("commands.mockplayer.control.container.header",
@@ -867,8 +986,22 @@ public class ControlCommands {
         return fixed("mainhand", "offhand");
     }
 
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> mountModes() {
-        return fixed("rideables", "anything");
+    /** mount 目标补全：附近实体类型 id + 自动模式关键字（真实候选）。 */
+    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> mountTargets() {
+        return (ctx, builder) -> {
+            Bot bot = botFromContext(ctx);
+            java.util.LinkedHashSet<String> all = new java.util.LinkedHashSet<>();
+            if (bot != null) {
+                bot.getEntitiesNear(16.0).stream()
+                        .map(e -> net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
+                                .getKey(e.getType()).getPath())
+                        .distinct()
+                        .forEach(all::add);
+            }
+            all.add("rideables");
+            all.add("anything");
+            return SharedSuggestionProvider.suggest(new java.util.ArrayList<>(all), builder);
+        };
     }
 
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> onOff() {
@@ -886,6 +1019,26 @@ public class ControlCommands {
                     .toList();
             return SharedSuggestionProvider.suggest(ids, builder);
         };
+    }
+
+    /** 容器槽位补全：当前打开容器 0..size-1（真实候选，不是示例）。 */
+    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> containerSlots() {
+        return (ctx, builder) -> {
+            Bot bot = botFromContext(ctx);
+            if (bot == null || bot.getContainer().isEmpty()) {
+                return builder.buildFuture();
+            }
+            List<String> slots = new java.util.ArrayList<>();
+            for (int i = 0; i < bot.getContainer().get().getSize(); i++) {
+                slots.add(String.valueOf(i));
+            }
+            return SharedSuggestionProvider.suggest(slots, builder);
+        };
+    }
+
+    /** 点击模式补全：ContainerInput 枚举小写名。 */
+    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> clickModes() {
+        return fixed("pickup", "quick_move", "swap", "clone", "throw", "quick_craft", "pickup_all");
     }
 
     /**
@@ -1185,21 +1338,72 @@ public class ControlCommands {
 
         player.then(f.literal("mount")
                 .executes(ctx -> {
-                    f.sendFeedback(ctx.getSource(), mount(StringArgumentType.getString(ctx, "player"), null));
+                    f.sendFeedback(ctx.getSource(), mount(StringArgumentType.getString(ctx, "player"), null, null));
                     return 1;
                 })
-                .then(f.argument("mode", StringArgumentType.word())
-                        .suggests(mountModes())
+                .then(f.argument("target", StringArgumentType.word())
+                        .suggests(mountTargets())
                         .executes(ctx -> {
                             String name = StringArgumentType.getString(ctx, "player");
-                            String mode = StringArgumentType.getString(ctx, "mode");
-                            f.sendFeedback(ctx.getSource(), mount(name, "anything".equals(mode) ? false : true));
+                            String target = StringArgumentType.getString(ctx, "target");
+                            // 关键字：rideables/anything = 自动模式；否则 = 指定实体
+                            if ("rideables".equalsIgnoreCase(target) || "anything".equalsIgnoreCase(target)) {
+                                f.sendFeedback(ctx.getSource(), mount(name, null,
+                                        "rideables".equalsIgnoreCase(target)));
+                            } else {
+                                f.sendFeedback(ctx.getSource(), mount(name, target, null));
+                            }
                             return 1;
                         })));
         player.then(f.literal("dismount").executes(ctx -> {
             f.sendFeedback(ctx.getSource(), dismount(StringArgumentType.getString(ctx, "player")));
             return 1;
         }));
+        player.then(f.literal("close").executes(ctx -> {
+            f.sendFeedback(ctx.getSource(), close(StringArgumentType.getString(ctx, "player")));
+            return 1;
+        }));
+        player.then(f.literal("click")
+                .then(f.argument("slot", IntegerArgumentType.integer(0))
+                        .suggests(containerSlots())
+                        .then(f.argument("button", IntegerArgumentType.integer(0, 2))
+                                .then(f.argument("mode", StringArgumentType.word())
+                                        .suggests(clickModes())
+                                        .executes(ctx -> {
+                                            String name = StringArgumentType.getString(ctx, "player");
+                                            f.sendFeedback(ctx.getSource(), click(name,
+                                                    IntegerArgumentType.getInteger(ctx, "slot"),
+                                                    IntegerArgumentType.getInteger(ctx, "button"),
+                                                    StringArgumentType.getString(ctx, "mode")));
+                                            return 1;
+                                        })))));
+        player.then(f.literal("button")
+                .then(f.argument("id", IntegerArgumentType.integer(0, 3))
+                        .suggests(fixed("0", "1", "2", "3"))
+                        .executes(ctx -> {
+                            String name = StringArgumentType.getString(ctx, "player");
+                            f.sendFeedback(ctx.getSource(), button(name,
+                                    IntegerArgumentType.getInteger(ctx, "id")));
+                            return 1;
+                        })));
+        player.then(f.literal("trade")
+                .then(f.argument("index", IntegerArgumentType.integer(0))
+                        .suggests(fixed("0", "1", "2", "3", "4", "5"))
+                        .executes(ctx -> {
+                            String name = StringArgumentType.getString(ctx, "player");
+                            f.sendFeedback(ctx.getSource(), trade(name,
+                                    IntegerArgumentType.getInteger(ctx, "index")));
+                            return 1;
+                        })));
+        player.then(f.literal("setSlot")
+                .then(f.argument("slot", IntegerArgumentType.integer(0))
+                        .suggests(containerSlots())
+                        .executes(ctx -> {
+                            String name = StringArgumentType.getString(ctx, "player");
+                            f.sendFeedback(ctx.getSource(), setSlot(name,
+                                    IntegerArgumentType.getInteger(ctx, "slot")));
+                            return 1;
+                        })));
 
         player.then(f.literal("chat")
                 .then(f.argument("message", StringArgumentType.greedyString())

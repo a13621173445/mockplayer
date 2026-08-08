@@ -67,6 +67,12 @@ public class BotContainerImpl implements BotContainer {
         if (player == null) {
             return;
         }
+        // 受控异常代替原版 IndexOutOfBounds（原版 AbstractContainerMenu.clicked 越界会崩客户端）：
+        // 调用方（ControlCommands 命令层已前置校验）应捕获并转成用户可读错误。
+        if (slot < -1 || slot >= this.menu.slots.size()) {
+            throw new IllegalArgumentException("slot out of bounds: " + slot
+                    + " (menu slots=" + this.menu.slots.size() + ")");
+        }
         // 复用原版发包方法：handleContainerInput 内部调 menu.clicked（本地移动）+ 生成并发送
         // ServerboundContainerClickPacket（含 stateId/changedSlots/carried）。只调 menu.clicked 会本地改
         // 但服务端容器不更新（点击包没发出去），测试实测容器操作不生效。
@@ -105,6 +111,11 @@ public class BotContainerImpl implements BotContainer {
 
     @Override
     public void setSlot(int slot, ItemStack stack) {
+        // 受控异常代替原版 IndexOutOfBounds：调用方应先校验槽位范围
+        if (slot < 0 || slot >= this.menu.slots.size()) {
+            throw new IllegalArgumentException("slot out of bounds: " + slot
+                    + " (menu slots=" + this.menu.slots.size() + ")");
+        }
         // 本地乐观写入（服务端会以回包为准修正）；完整拖拽/移动请用 click。
         this.menu.setItem(slot, 0, stack);
     }
