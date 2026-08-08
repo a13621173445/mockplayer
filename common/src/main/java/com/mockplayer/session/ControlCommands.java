@@ -92,6 +92,14 @@ public class ControlCommands {
         return Component.translatable("commands.mockplayer.control.success", args).withStyle(SUCCESS_COLOR);
     }
 
+    /** 带内容的成功反馈（chat/command/renameItem）：模板含 %3$s 显示用户输入原文。 */
+    private static Component contentSuccess(String actionKey, String name, Object content) {
+        return Component.translatable("commands.mockplayer.control.success.content",
+                playerName(name),
+                Component.translatable("commands.mockplayer.control.action." + actionKey),
+                content).withStyle(SUCCESS_COLOR);
+    }
+
     private static Bot findBot(String name) {
         return MockplayerApi.bots().getBot(name).orElse(null);
     }
@@ -474,7 +482,7 @@ public class ControlCommands {
             return fail("commands.mockplayer.control.blank_message");
         }
         findBot(name).actions().chat(message);
-        return success("chat", name, message);
+        return contentSuccess("chat", name, message);
     }
 
     public static Component command(String name, String commandLine) {
@@ -486,7 +494,7 @@ public class ControlCommands {
             return fail("commands.mockplayer.control.blank_message");
         }
         findBot(name).actions().sendCommand(commandLine);
-        return success("command", name, commandLine);
+        return contentSuccess("command", name, commandLine);
     }
 
     public static Component wakeUp(String name) {
@@ -558,7 +566,7 @@ public class ControlCommands {
             return fail("commands.mockplayer.control.blank_message");
         }
         findBot(name).actions().renameItem(newName);
-        return success("renameItem", name, newName);
+        return contentSuccess("renameItem", name, newName);
     }
 
     public static Component pickItemFromBlock(String name, int x, int y, int z, boolean includeData) {

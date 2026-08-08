@@ -1444,6 +1444,28 @@ public final class TestRunner {
         }
     }
 
+    /** 收集组件 visit 展开后的全部样式片段（转义断言用）。 */
+    private static java.util.List<net.minecraft.network.chat.Style> ccCollectStyles(net.minecraft.network.chat.Component c) {
+        java.util.List<net.minecraft.network.chat.Style> styles = new java.util.ArrayList<>();
+        c.visit((style, text) -> {
+            styles.add(style);
+            return java.util.Optional.empty();
+        }, net.minecraft.network.chat.Style.EMPTY);
+        return styles;
+    }
+
+    /**
+     * § 注入检测：出现非预期 RED（allowRootRed=false 时）或任何 BOLD/斜体/下划线/删除线/混淆即失败。
+     * 26.2 组件树是结构化 Style，§ 不应被解析成样式——若被解析会在这里被抓到。
+     */
+    private static boolean ccNoInjectedStyle(net.minecraft.network.chat.Component c, boolean allowRootRed) {
+        return ccCollectStyles(c).stream().noneMatch(s ->
+                (s.getColor() != null && !allowRootRed
+                        && s.getColor().equals(net.minecraft.network.chat.TextColor.fromLegacyFormat(
+                        net.minecraft.ChatFormatting.RED)))
+                        || s.isBold() || s.isItalic() || s.isUnderlined() || s.isStrikethrough() || s.isObfuscated());
+    }
+
     private static void runControlCommands(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
         if (server == null) {
@@ -2316,6 +2338,25 @@ public final class TestRunner {
                         }
                     }
                     check("all control outputs i18n", allI18n);
+                    // 输出转义强测：%s / § 输入不二次解析、不注入样式、不炸
+                    String escapeChat = "100%s \u00a7c\u00a7lHi";
+                    net.minecraft.network.chat.Component escapeOut =
+                            com.mockplayer.session.ControlCommands.chat(botName, escapeChat);
+                    check("escape chat text", escapeOut.getString().contains(escapeChat),
+                            "text=" + escapeOut.getString());
+                    check("escape chat no style inject", ccNoInjectedStyle(escapeOut, false),
+                            "styles=" + ccCollectStyles(escapeOut));
+                    String escapeCmd = "say 100%s";
+                    net.minecraft.network.chat.Component escapeCmdOut =
+                            com.mockplayer.session.ControlCommands.command(botName, escapeCmd);
+                    check("escape command text", escapeCmdOut.getString().contains(escapeCmd),
+                            "text=" + escapeCmdOut.getString());
+                    net.minecraft.network.chat.Component escapeNameOut =
+                            com.mockplayer.session.ControlCommands.stop("x\u00a7ly");
+                    check("escape name text", escapeNameOut.getString().contains("x\u00a7ly"),
+                            "text=" + escapeNameOut.getString());
+                    check("escape name no style inject", ccNoInjectedStyle(escapeNameOut, true),
+                            "styles=" + ccCollectStyles(escapeNameOut));
                     finishSuite();
                 }
             }

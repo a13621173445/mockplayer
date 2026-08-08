@@ -13,6 +13,7 @@
     "commands.mockplayer.name.invalid": "Invalid fake player name",
     "disconnect.mockplayer.fake_player_removed": "Fake player removed",
     "commands.mockplayer.control.success": "Executed %2$s on fake player %1$s",
+    "commands.mockplayer.control.success.content": "Executed %2$s on fake player %1$s: %3$s",
     "commands.mockplayer.control.not_found": "Fake player %s does not exist",
     "commands.mockplayer.control.not_playing": "Fake player %s is not ready (PLAYING)",
     "commands.mockplayer.control.entity_not_found": "No entity named %2$s near fake player %1$s",
