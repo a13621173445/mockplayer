@@ -8,6 +8,8 @@ import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.SessionManager;
 import com.mockplayer.session.ControlCommands;
+import com.mockplayer.session.QueryCommands;
+import com.mockplayer.session.CommandSupport;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -33,23 +35,8 @@ public class MockplayerClient implements ClientModInitializer {
 
     private void registerCommands() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
-            dispatcher.register(ControlCommands.buildCommandTree(new ControlCommands.CommandFactory<FabricClientCommandSource>() {
-                @Override
-                public com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource> literal(String name) {
-                    return ClientCommands.literal(name);
-                }
-
-                @Override
-                public com.mojang.brigadier.builder.RequiredArgumentBuilder<FabricClientCommandSource, ?> argument(
-                        String name, com.mojang.brigadier.arguments.ArgumentType<?> type) {
-                    return ClientCommands.argument(name, type);
-                }
-
-                @Override
-                public void sendFeedback(FabricClientCommandSource source, net.minecraft.network.chat.Component message) {
-                    source.sendFeedback(message);
-                }
-            }));
+            dispatcher.register(ControlCommands.buildControlTree(factory()));
+            dispatcher.register(QueryCommands.buildQueryTree(factory()));
             dispatcher.register(literal("newplayer")
                     .then(argument("name", FakePlayerNameArgument.fakePlayerName())
                             .executes(ctx -> {
@@ -84,6 +71,27 @@ public class MockplayerClient implements ClientModInitializer {
                                                 return 1;
                                             })))));
         });
+    }
+
+    /** 双端共用命令树工厂：Fabric 提供 literal/argument/反馈函数。 */
+    private static CommandSupport.CommandFactory<FabricClientCommandSource> factory() {
+        return new CommandSupport.CommandFactory<FabricClientCommandSource>() {
+            @Override
+            public com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource> literal(String name) {
+                return ClientCommands.literal(name);
+            }
+
+            @Override
+            public com.mojang.brigadier.builder.RequiredArgumentBuilder<FabricClientCommandSource, ?> argument(
+                    String name, com.mojang.brigadier.arguments.ArgumentType<?> type) {
+                return ClientCommands.argument(name, type);
+            }
+
+            @Override
+            public void sendFeedback(FabricClientCommandSource source, net.minecraft.network.chat.Component message) {
+                source.sendFeedback(message);
+            }
+        };
     }
 
     private void registerTick() {

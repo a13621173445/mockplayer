@@ -8,6 +8,8 @@ import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.SessionManager;
 import com.mockplayer.session.ControlCommands;
+import com.mockplayer.session.QueryCommands;
+import com.mockplayer.session.CommandSupport;
 
 import net.minecraft.commands.Commands;
 
@@ -38,23 +40,8 @@ public class MockplayerNeoForgeClient {
     private static void registerCommands(RegisterClientCommandsEvent event) {
         var dispatcher = event.getDispatcher();
 
-        dispatcher.register(ControlCommands.buildCommandTree(new ControlCommands.CommandFactory<net.minecraft.commands.CommandSourceStack>() {
-            @Override
-            public com.mojang.brigadier.builder.LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> literal(String name) {
-                return Commands.literal(name);
-            }
-
-            @Override
-            public com.mojang.brigadier.builder.RequiredArgumentBuilder<net.minecraft.commands.CommandSourceStack, ?> argument(
-                    String name, com.mojang.brigadier.arguments.ArgumentType<?> type) {
-                return Commands.argument(name, type);
-            }
-
-            @Override
-            public void sendFeedback(net.minecraft.commands.CommandSourceStack source, net.minecraft.network.chat.Component message) {
-                source.sendSuccess(() -> message, false);
-            }
-        }));
+        dispatcher.register(ControlCommands.buildControlTree(factory()));
+        dispatcher.register(QueryCommands.buildQueryTree(factory()));
         dispatcher.register(Commands.literal("newplayer")
                 .then(Commands.argument("name", FakePlayerNameArgument.fakePlayerName())
                         .executes(ctx -> {
@@ -88,6 +75,27 @@ public class MockplayerNeoForgeClient {
                                             ctx.getSource().sendSuccess(() -> FakePlayerCommands.connectPlayer(name, host, port), false);
                                             return 1;
                                         })))));
+    }
+
+    /** 双端共用命令树工厂：NeoForge 提供 literal/argument/反馈函数。 */
+    private static CommandSupport.CommandFactory<net.minecraft.commands.CommandSourceStack> factory() {
+        return new CommandSupport.CommandFactory<net.minecraft.commands.CommandSourceStack>() {
+            @Override
+            public com.mojang.brigadier.builder.LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> literal(String name) {
+                return Commands.literal(name);
+            }
+
+            @Override
+            public com.mojang.brigadier.builder.RequiredArgumentBuilder<net.minecraft.commands.CommandSourceStack, ?> argument(
+                    String name, com.mojang.brigadier.arguments.ArgumentType<?> type) {
+                return Commands.argument(name, type);
+            }
+
+            @Override
+            public void sendFeedback(net.minecraft.commands.CommandSourceStack source, net.minecraft.network.chat.Component message) {
+                source.sendSuccess(() -> message, false);
+            }
+        };
     }
 
     private static void onClientTick(ClientTickEvent.Post event) {

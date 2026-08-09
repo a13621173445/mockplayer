@@ -2,10 +2,8 @@ package com.mockplayer.session;
 
 import com.mockplayer.api.Bot;
 import com.mockplayer.api.BotLifecycle;
-import com.mockplayer.api.MockplayerApi;
 import com.mockplayer.api.container.BotContainer;
 
-import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -16,9 +14,7 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 
-import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -31,40 +27,24 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.effect.MobEffect;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * /control 命令集的执行逻辑与 Tab 补全（平台无关）。
+ * /control 命令集的执行逻辑与 Tab 补全（平台无关）——只包含「动作」命令。
  *
  * 动作命令全部走 {@link com.mockplayer.api.action.BotActions}（真实网络包路径）；
- * 查询命令直接读 Bot / BotContainer / FakePlayerState / EventRecorder。
+ * 查询命令已迁移到 {@link QueryCommands}（/query 顶层命令，语义分离）。
  * 所有反馈消息走语言文件（en_us / zh_cn），颜色在代码端用 ChatFormatting 设置。
  *
  * 设计约束（主人拍板 2026-08-08）：
  * - 不做客户端全局身份切换（不碰 Minecraft.player/gameMode/level）
- * - 监听器（EventRecorder）不常驻：/control listen on 才挂到目标 bot 私有总线，off 摘除
  * - 全部参数可 Tab 补全
  */
 public class ControlCommands {
-
-    /** 假人名字显示样式：水蓝色高亮（原版玩家名风格）。 */
-    private static final ChatFormatting NAME_COLOR = ChatFormatting.AQUA;
-    /** 成功消息颜色。 */
-    private static final ChatFormatting SUCCESS_COLOR = ChatFormatting.GREEN;
-    /** 失败消息颜色。 */
-    private static final ChatFormatting FAIL_COLOR = ChatFormatting.RED;
-    /** 查询输出颜色。 */
-    private static final ChatFormatting INFO_COLOR = ChatFormatting.YELLOW;
-
-    /** 当前开启的事件监听器（bot 名 → recorder），listen off 时摘除并清除。 */
-    private static final Map<String, EventRecorder> RECORDERS = new ConcurrentHashMap<>();
 
     private ControlCommands() {
     }
@@ -72,15 +52,15 @@ public class ControlCommands {
     // ===== 通用辅助 =====
 
     private static MutableComponent playerName(String name) {
-        return Component.literal(name).withStyle(NAME_COLOR);
+        return CommandSupport.playerName(name);
     }
 
     private static Component fail(String key, Object... args) {
-        return Component.translatable(key, args).withStyle(FAIL_COLOR);
+        return CommandSupport.fail(key, args);
     }
 
     private static MutableComponent info(String key, Object... args) {
-        return Component.translatable(key, args).withStyle(INFO_COLOR);
+        return CommandSupport.info(key, args);
     }
 
     /** 动作成功反馈：动作名翻译 key（commands.mockplayer.control.action.<x>）+ 假人名字。 */
@@ -89,7 +69,8 @@ public class ControlCommands {
         args[0] = playerName(name);
         args[1] = Component.translatable("commands.mockplayer.control.action." + actionKey);
         System.arraycopy(extra, 0, args, 2, extra.length);
-        return Component.translatable("commands.mockplayer.control.success", args).withStyle(SUCCESS_COLOR);
+        return Component.translatable("commands.mockplayer.control.success", args)
+                .withStyle(CommandSupport.SUCCESS_COLOR);
     }
 
     /** 带内容的成功反馈（chat/command/renameItem）：模板含 %3$s 显示用户输入原文。 */
@@ -97,23 +78,18 @@ public class ControlCommands {
         return Component.translatable("commands.mockplayer.control.success.content",
                 playerName(name),
                 Component.translatable("commands.mockplayer.control.action." + actionKey),
-                content).withStyle(SUCCESS_COLOR);
+                content).withStyle(CommandSupport.SUCCESS_COLOR);
     }
 
     private static Bot findBot(String name) {
-        return MockplayerApi.bots().getBot(name).orElse(null);
+        return CommandSupport.findBot(name);
     }
 
     /** 取 bot + PLAYING 校验；失败返回反馈组件，null 表示成功拿到 bot。 */
     private static Component requirePlaying(String name) {
-        Bot bot = findBot(name);
-        if (bot == null) {
-            return fail("commands.mockplayer.control.not_found", playerName(name));
-        }
-        if (bot.getLifecycle() != BotLifecycle.PLAYING || bot.getLocalPlayer() == null) {
-            return fail("commands.mockplayer.control.not_playing", playerName(name));
-        }
-        return null;
+        return CommandSupport.requirePlaying(name,
+                "commands.mockplayer.control.not_found",
+                "commands.mockplayer.control.not_playing");
     }
 
     /** 实体名解析：null = 最近的非玩家实体；否则按名称匹配（精确，含 display name）。 */
@@ -157,14 +133,6 @@ public class ControlCommands {
                     .map(r -> (Holder<MobEffect>) r);
         } catch (Exception e) {
             return Optional.empty();
-        }
-    }
-
-    /** 主玩家聊天栏推送（EventRecorder 实时反馈用；命令回调/事件派发都在主线程）。 */
-    static void pushToChat(Component message) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player != null) {
-            mc.player.sendSystemMessage(message);
         }
     }
 
@@ -696,207 +664,7 @@ public class ControlCommands {
         return success("pickItemFromBlock", name, x + " " + y + " " + z);
     }
 
-    // ===== 查询命令 =====
-
-    public static Component list() {
-        List<Bot> bots = MockplayerApi.bots().getBots();
-        MutableComponent out = info("commands.mockplayer.control.list.header", bots.size());
-        for (Bot bot : bots) {
-            out.append(Component.literal("\n")).append(info("commands.mockplayer.control.list.entry",
-                    playerName(bot.getName()),
-                    bot.getOwner(),
-                    Component.translatable(lifecycleKey(bot.getLifecycle())),
-                    bot.getUUID().toString().substring(0, 8)));
-        }
-        return out;
-    }
-
-    private static String lifecycleKey(BotLifecycle lifecycle) {
-        return switch (lifecycle) {
-            case CONNECTING -> "commands.mockplayer.control.lifecycle.connecting";
-            case PLAYING -> "commands.mockplayer.control.lifecycle.playing";
-            case DISCONNECTED -> "commands.mockplayer.control.lifecycle.disconnected";
-        };
-    }
-
-    public static Component botInfo(String name) {
-        Bot bot = findBot(name);
-        if (bot == null) {
-            return fail("commands.mockplayer.control.not_found", playerName(name));
-        }
-        MutableComponent out = info("commands.mockplayer.control.info.header", playerName(name));
-        out.append(Component.literal("\n")).append(info("commands.mockplayer.control.info.uuid",
-                bot.getUUID().toString()));
-        out.append(Component.literal("\n")).append(info("commands.mockplayer.control.info.owner", bot.getOwner()));
-        out.append(Component.literal("\n")).append(info("commands.mockplayer.control.info.lifecycle",
-                Component.translatable(lifecycleKey(bot.getLifecycle()))));
-        if (bot.getLocalPlayer() != null) {
-            var p = bot.getLocalPlayer();
-            out.append(Component.literal("\n")).append(info("commands.mockplayer.control.info.position",
-                    String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f", p.getX(), p.getY(), p.getZ())));
-            out.append(Component.literal("\n")).append(info("commands.mockplayer.control.info.health",
-                    bot.getLocalPlayer().getHealth()));
-            out.append(Component.literal("\n")).append(info("commands.mockplayer.control.info.food",
-                    bot.getLocalPlayer().getFoodData().getFoodLevel()));
-            out.append(Component.literal("\n")).append(info("commands.mockplayer.control.info.xp",
-                    bot.getLocalPlayer().experienceLevel));
-            out.append(Component.literal("\n")).append(info("commands.mockplayer.control.info.dimension",
-                    bot.getLevel().dimension().identifier().toString()));
-            out.append(Component.literal("\n")).append(info("commands.mockplayer.control.info.online_count",
-                    bot.getOnlinePlayers().size()));
-        }
-        return out;
-    }
-
-    public static Component inventory(String name) {
-        Bot bot = findBot(name);
-        if (bot == null) {
-            return fail("commands.mockplayer.control.not_found", playerName(name));
-        }
-        if (bot.getLocalPlayer() == null) {
-            return fail("commands.mockplayer.control.not_playing", playerName(name));
-        }
-        net.minecraft.world.entity.player.Inventory inv = bot.getLocalPlayer().getInventory();
-        MutableComponent out = info("commands.mockplayer.control.inventory.header");
-        for (int i = 0; i < 36; i++) {
-            ItemStack stack = inv.getItem(i);
-            if (!stack.isEmpty()) {
-                out.append(Component.literal("\n")).append(info("commands.mockplayer.control.inventory.entry",
-                        i < 9 ? "[" + i + "]" : String.valueOf(i),
-                        stack.getHoverName(),
-                        stack.getCount()));
-            }
-        }
-        return out;
-    }
-
-    public static Component container(String name) {
-        Bot bot = findBot(name);
-        if (bot == null) {
-            return fail("commands.mockplayer.control.not_found", playerName(name));
-        }
-        Optional<BotContainer> c = bot.getContainer();
-        if (c.isEmpty()) {
-            // 模板含 %s（假人名字），必须传参数，否则输出残留字面 %s
-            return info("commands.mockplayer.control.container.none", playerName(name));
-        }
-        BotContainer container = c.get();
-        MutableComponent out = info("commands.mockplayer.control.container.header",
-                container.getTitle(),
-                container.getContainerId(),
-                container.getSize());
-        for (int i = 0; i < container.getSize(); i++) {
-            ItemStack stack = container.getSlot(i);
-            if (!stack.isEmpty()) {
-                out.append(Component.literal("\n")).append(info("commands.mockplayer.control.container.entry",
-                        i, stack.getHoverName(), stack.getCount()));
-            }
-        }
-        if (!container.getCarried().isEmpty()) {
-            out.append(Component.literal("\n")).append(info("commands.mockplayer.control.container.carried",
-                    container.getCarried().getHoverName(), container.getCarried().getCount()));
-        }
-        return out;
-    }
-
-    public static Component near(String name, double radius) {
-        Bot bot = findBot(name);
-        if (bot == null) {
-            return fail("commands.mockplayer.control.not_found", playerName(name));
-        }
-        if (bot.getLocalPlayer() == null) {
-            return fail("commands.mockplayer.control.not_playing", playerName(name));
-        }
-        List<Entity> entities = bot.getEntitiesNear(radius);
-        MutableComponent out = info("commands.mockplayer.control.near.header", entities.size(), radius);
-        for (Entity e : entities) {
-            out.append(Component.literal("\n")).append(info("commands.mockplayer.control.near.entry",
-                    e.getName(),
-                    net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString(),
-                    String.format(java.util.Locale.ROOT, "%.1f", Math.sqrt(e.distanceToSqr(bot.getLocalPlayer())))));
-        }
-        return out;
-    }
-
-    public static Component blockAt(String name, int x, int y, int z) {
-        Bot bot = findBot(name);
-        if (bot == null) {
-            return fail("commands.mockplayer.control.not_found", playerName(name));
-        }
-        BlockPos pos = new BlockPos(x, y, z);
-        return info("commands.mockplayer.control.block.entry",
-                x + " " + y + " " + z,
-                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(bot.getBlockState(pos).getBlock()).toString(),
-                bot.isBlockLoaded(pos));
-    }
-
-    public static Component online(String name) {
-        Bot bot = findBot(name);
-        if (bot == null) {
-            return fail("commands.mockplayer.control.not_found", playerName(name));
-        }
-        List<PlayerInfo> players = bot.getOnlinePlayers();
-        MutableComponent out = info("commands.mockplayer.control.online.header", players.size());
-        for (PlayerInfo info : players) {
-            out.append(Component.literal("\n")).append(info("commands.mockplayer.control.online.entry",
-                    info.getProfile().name(),
-                    info.getProfile().id().toString().substring(0, 8)));
-        }
-        return out;
-    }
-
-    public static Component chatHistory(String name) {
-        Bot bot = findBot(name);
-        if (bot == null) {
-            return fail("commands.mockplayer.control.not_found", playerName(name));
-        }
-        List<Component> history = bot instanceof BotImpl impl ? impl.session().getState().getChatHistory() : List.of();
-        MutableComponent out = info("commands.mockplayer.control.chat.header", history.size());
-        for (int i = Math.max(0, history.size() - 10); i < history.size(); i++) {
-            out.append(Component.literal("\n")).append(info("commands.mockplayer.control.chat.entry", history.get(i)));
-        }
-        return out;
-    }
-
-    public static Component listen(String name, boolean on) {
-        Bot bot = findBot(name);
-        if (bot == null) {
-            return fail("commands.mockplayer.control.not_found", playerName(name));
-        }
-        if (!(bot instanceof BotImpl impl)) {
-            return fail("commands.mockplayer.control.not_playing", playerName(name));
-        }
-        if (on) {
-            EventRecorder recorder = RECORDERS.computeIfAbsent(name, n -> new EventRecorder(name));
-            impl.events().addListener(recorder);
-            return info("commands.mockplayer.control.listen.on", playerName(name));
-        }
-        EventRecorder recorder = RECORDERS.remove(name);
-        if (recorder != null) {
-            impl.events().removeListener(recorder);
-        }
-        return info("commands.mockplayer.control.listen.off", playerName(name));
-    }
-
-    public static Component events(String name, int count) {
-        EventRecorder recorder = RECORDERS.get(name);
-        if (recorder == null) {
-            return info("commands.mockplayer.control.events.not_listening", playerName(name));
-        }
-        return recorder.formatEvents(count);
-    }
-
-    /** 当前监听的 recorder（查询/测试用；未监听返回 null）。 */
-    public static EventRecorder getRecorder(String name) {
-        return RECORDERS.get(name);
-    }
-
     // ===== Tab 补全 =====
-
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> botNames() {
-        return (ctx, builder) -> SharedSuggestionProvider.suggest(
-                SessionManager.getInstance().getFakePlayerNames(), builder);
-    }
 
     private static <S extends SharedSuggestionProvider> SuggestionProvider<S> fixed(String... values) {
         return (ctx, builder) -> SharedSuggestionProvider.suggest(List.of(values), builder);
@@ -1004,10 +772,6 @@ public class ControlCommands {
         };
     }
 
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> onOff() {
-        return fixed("on", "off");
-    }
-
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> oneAll() {
         return fixed("one", "all");
     }
@@ -1078,23 +842,12 @@ public class ControlCommands {
 
     // ===== 命令树构建（双端共用，平台只提供 literal/argument/反馈函数） =====
 
-    public interface CommandFactory<S> {
-        LiteralArgumentBuilder<S> literal(String name);
-
-        RequiredArgumentBuilder<S, ?> argument(String name, ArgumentType<?> type);
-
-        void sendFeedback(S source, Component message);
-    }
-
-    public static <S extends SharedSuggestionProvider> LiteralArgumentBuilder<S> buildCommandTree(CommandFactory<S> f) {
+    public static <S extends SharedSuggestionProvider> LiteralArgumentBuilder<S> buildControlTree(
+            CommandSupport.CommandFactory<S> f) {
         LiteralArgumentBuilder<S> root = f.literal("control");
-        root.then(f.literal("list").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), list());
-            return 1;
-        }));
 
         RequiredArgumentBuilder<S, ?> player = f.argument("player", FakePlayerNameArgument.fakePlayerName())
-                .suggests(botNames());
+                .suggests(CommandSupport.botNames());
 
         player.then(f.literal("move").then(f.argument("dir", StringArgumentType.word())
                 .suggests(directions())
@@ -1524,75 +1277,6 @@ public class ControlCommands {
                                                             "true".equals(StringArgumentType.getString(ctx, "includeData"))));
                                                     return 1;
                                                 }))))));
-
-        player.then(f.literal("info").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), botInfo(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("inventory").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), inventory(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("container").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), container(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("near")
-                .executes(ctx -> {
-                    f.sendFeedback(ctx.getSource(), near(StringArgumentType.getString(ctx, "player"), 10.0));
-                    return 1;
-                })
-                .then(f.argument("radius", DoubleArgumentType.doubleArg(0.0))
-                        .executes(ctx -> {
-                            f.sendFeedback(ctx.getSource(), near(
-                                    StringArgumentType.getString(ctx, "player"),
-                                    DoubleArgumentType.getDouble(ctx, "radius")));
-                            return 1;
-                        })));
-        player.then(f.literal("block")
-                .then(f.argument("x", IntegerArgumentType.integer())
-                        .suggests(coordX())
-                        .then(f.argument("y", IntegerArgumentType.integer())
-                                .suggests(coordY())
-                                .then(f.argument("z", IntegerArgumentType.integer())
-                                        .suggests(coordZ())
-                                        .executes(ctx -> {
-                                            String name = StringArgumentType.getString(ctx, "player");
-                                            f.sendFeedback(ctx.getSource(), blockAt(name,
-                                                    IntegerArgumentType.getInteger(ctx, "x"),
-                                                    IntegerArgumentType.getInteger(ctx, "y"),
-                                                    IntegerArgumentType.getInteger(ctx, "z")));
-                                            return 1;
-                                        })))));
-        player.then(f.literal("online").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), online(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("chatlog").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), chatHistory(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("listen")
-                .then(f.argument("mode", StringArgumentType.word())
-                        .suggests(onOff())
-                        .executes(ctx -> {
-                            String name = StringArgumentType.getString(ctx, "player");
-                            f.sendFeedback(ctx.getSource(), listen(name,
-                                    "on".equals(StringArgumentType.getString(ctx, "mode"))));
-                            return 1;
-                        })));
-        player.then(f.literal("events")
-                .executes(ctx -> {
-                    f.sendFeedback(ctx.getSource(), events(StringArgumentType.getString(ctx, "player"), 10));
-                    return 1;
-                })
-                .then(f.argument("count", IntegerArgumentType.integer(1, 50))
-                        .executes(ctx -> {
-                            f.sendFeedback(ctx.getSource(), events(
-                                    StringArgumentType.getString(ctx, "player"),
-                                    IntegerArgumentType.getInteger(ctx, "count")));
-                            return 1;
-                        })));
 
         root.then(player);
         return root;

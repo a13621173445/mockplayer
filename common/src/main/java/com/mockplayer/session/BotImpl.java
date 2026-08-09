@@ -194,6 +194,11 @@ public class BotImpl implements Bot {
         return this.getContainer();
     }
 
+    @Override
+    public com.mockplayer.api.BotMemoryInfo memoryInfo() {
+        return BotMemoryEstimator.estimate(this);
+    }
+
     // ===== 事件触发辅助（FakePlayListener / FakeSession / BotActionsImpl 调用） =====
 
     void fireOnSpawned() {

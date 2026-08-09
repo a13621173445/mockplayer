@@ -54,6 +54,8 @@ public class EventRecorder implements BotListener {
     private long moveCount;
     /** 实时推送次数（测试断言用）。 */
     private long pushCount;
+    /** 环形缓存条目字符串的精确字节（record 写入加、覆盖减）。 */
+    private long cacheBytes;
     /** onTick 距上次采样经过的 tick。 */
     private int ticksSinceSample;
     private double lastMoveX;
@@ -80,6 +82,11 @@ public class EventRecorder implements BotListener {
         return this.pushCount;
     }
 
+    /** 环形缓存条目字符串的精确字节（不包含数组槽位本身）。 */
+    public long getCacheBytes() {
+        return this.cacheBytes;
+    }
+
     /** 测试/查询用：当前缓存明细快照（最近在前）。 */
     public List<String> snapshot() {
         List<String> out = new ArrayList<>();
@@ -95,7 +102,11 @@ public class EventRecorder implements BotListener {
     /** 环形写入。 */
     private void record(String type, String summary) {
         String s = type + "|" + summary;
+        if (this.cache[this.cacheIndex] != null) {
+            this.cacheBytes -= ExactBytes.stringBytes(this.cache[this.cacheIndex]);
+        }
         this.cache[this.cacheIndex] = s;
+        this.cacheBytes += ExactBytes.stringBytes(s);
         this.cacheIndex = (this.cacheIndex + 1) % CACHE_SIZE;
         if (this.cacheCount < CACHE_SIZE) {
             this.cacheCount++;
@@ -106,8 +117,8 @@ public class EventRecorder implements BotListener {
     private void low(String type, String summary) {
         record(type, summary);
         this.pushCount++;
-        ControlCommands.pushToChat(Component.translatable("commands.mockplayer.control.event.push",
-                Component.translatable("commands.mockplayer.control.event." + type),
+        CommandSupport.pushToChat(Component.translatable("commands.mockplayer.query.event.push",
+                Component.translatable("commands.mockplayer.query.event." + type),
                 Component.literal(truncate(summary))));
     }
 
@@ -118,24 +129,24 @@ public class EventRecorder implements BotListener {
         return s.length() <= SUMMARY_MAX_LENGTH ? s : s.substring(0, SUMMARY_MAX_LENGTH) + "...";
     }
 
-    /** /control events 查询输出：最近 count 条 + 高频计数/最新位置。 */
+    /** /query events 查询输出：最近 count 条 + 高频计数/最新位置。 */
     public Component formatEvents(int count) {
         List<String> snap = snapshot();
-        MutableComponent out = Component.translatable("commands.mockplayer.control.events.header",
+        MutableComponent out = Component.translatable("commands.mockplayer.query.events.header",
                 Math.min(count, snap.size()));
         for (int i = 0; i < Math.min(count, snap.size()); i++) {
             String[] parts = snap.get(i).split("\\|", 2);
             String type = parts[0];
             String summary = parts.length > 1 ? parts[1] : "";
             out.append(Component.literal("\n")).append(Component.translatable(
-                    "commands.mockplayer.control.events.entry",
-                    Component.translatable("commands.mockplayer.control.event." + type),
+                    "commands.mockplayer.query.events.entry",
+                    Component.translatable("commands.mockplayer.query.event." + type),
                     Component.literal(summary)));
         }
         out.append(Component.literal("\n")).append(Component.translatable(
-                "commands.mockplayer.control.events.tick_count", this.tickCount));
+                "commands.mockplayer.query.events.tick_count", this.tickCount));
         out.append(Component.literal("\n")).append(Component.translatable(
-                "commands.mockplayer.control.events.move_count", this.moveCount,
+                "commands.mockplayer.query.events.move_count", this.moveCount,
                 String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f",
                         this.lastMoveX, this.lastMoveY, this.lastMoveZ)));
         return out;

@@ -1341,8 +1341,9 @@ public final class TestRunner {
         }
     }
 
-    // ===== control-commands：/control 遥控+查询命令集强测试（命令层走 ControlCommands，
-    // 底层真实网络包 + 服务端强断言；全部输出 i18n；Tab 补全逐位断言） =====
+    // ===== control-commands：/control 动作 + /query 查询分离强测试（命令层走
+    // ControlCommands / QueryCommands；底层真实网络包 + 服务端强断言；全部输出
+    // i18n；Tab 补全逐位断言；memory 为精确记账） =====
 
     private static boolean ccTreeChecked;
     private static boolean ccMoveStarted;
@@ -1468,6 +1469,33 @@ public final class TestRunner {
         }
     }
 
+    /** 双端共用命令树工厂（测试用，反馈丢弃）。 */
+    private static com.mockplayer.session.CommandSupport.CommandFactory<net.minecraft.commands.CommandSourceStack> ccFactory() {
+        return new com.mockplayer.session.CommandSupport.CommandFactory<net.minecraft.commands.CommandSourceStack>() {
+            @Override
+            public com.mojang.brigadier.builder.LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> literal(String name) {
+                return net.minecraft.commands.Commands.literal(name);
+            }
+
+            @Override
+            public com.mojang.brigadier.builder.RequiredArgumentBuilder<net.minecraft.commands.CommandSourceStack, ?> argument(
+                    String name, com.mojang.brigadier.arguments.ArgumentType<?> type) {
+                return net.minecraft.commands.Commands.argument(name, type);
+            }
+
+            @Override
+            public void sendFeedback(net.minecraft.commands.CommandSourceStack source,
+                                     net.minecraft.network.chat.Component message) {
+            }
+        };
+    }
+
+    /** 注册 /control + /query 双树（测试用）。 */
+    private static void ccRegisterAll(com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher) {
+        dispatcher.register(com.mockplayer.session.ControlCommands.buildControlTree(ccFactory()));
+        dispatcher.register(com.mockplayer.session.QueryCommands.buildQueryTree(ccFactory()));
+    }
+
     /** 收集组件 visit 展开后的全部样式片段（转义断言用）。 */
     private static java.util.List<net.minecraft.network.chat.Style> ccCollectStyles(net.minecraft.network.chat.Component c) {
         java.util.List<net.minecraft.network.chat.Style> styles = new java.util.ArrayList<>();
@@ -1504,24 +1532,7 @@ public final class TestRunner {
                     return;
                 }
                 var dispatcher = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
-                dispatcher.register(com.mockplayer.session.ControlCommands.buildCommandTree(
-                        new com.mockplayer.session.ControlCommands.CommandFactory<net.minecraft.commands.CommandSourceStack>() {
-                            @Override
-                            public com.mojang.brigadier.builder.LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> literal(String name) {
-                                return net.minecraft.commands.Commands.literal(name);
-                            }
-
-                            @Override
-                            public com.mojang.brigadier.builder.RequiredArgumentBuilder<net.minecraft.commands.CommandSourceStack, ?> argument(
-                                    String name, com.mojang.brigadier.arguments.ArgumentType<?> type) {
-                                return net.minecraft.commands.Commands.argument(name, type);
-                            }
-
-                            @Override
-                            public void sendFeedback(net.minecraft.commands.CommandSourceStack source,
-                                                     net.minecraft.network.chat.Component message) {
-                            }
-                        }));
+                ccRegisterAll(dispatcher);
                 var root = dispatcher.getRoot().getChildren();
                 var control = root.stream().filter(n -> n.getName().equals("control")).findFirst().orElse(null);
                 check("tree control root", control != null);
@@ -1530,7 +1541,8 @@ public final class TestRunner {
                     finishSuite();
                     return;
                 }
-                check("tree list", control.getChildren().stream().anyMatch(n -> n.getName().equals("list")));
+                check("tree control top has no list", control.getChildren().stream()
+                        .noneMatch(n -> n.getName().equals("list")));
                 var playerNode = control.getChildren().stream().filter(n -> n.getName().equals("player"))
                         .findFirst().orElse(null);
                 if (playerNode == null) {
@@ -1541,27 +1553,65 @@ public final class TestRunner {
                 java.util.Set<String> subs = playerNode.getChildren().stream()
                         .map(com.mojang.brigadier.tree.CommandNode::getName)
                         .collect(java.util.stream.Collectors.toSet());
-                java.util.List<String> expected = java.util.List.of(
+                java.util.List<String> actions = java.util.List.of(
                         "move", "stop", "sneak", "unsneak", "sprint", "unsprint", "jump",
                         "look", "lookAt", "turn", "attack", "stab", "sustainedAttack", "sustainedUse",
                         "stopSustained", "interact", "useItem", "releaseUsingItem", "useItemOn",
                         "placeBlock", "mineBlock", "attackBlock", "hotbar", "drop", "swapHands",
                         "mount", "dismount", "chat", "command", "wakeUp", "respawn", "editBook",
                         "close", "click", "button", "trade", "setSlot", "editSign", "setBeacon",
-                        "renameItem", "pickItemFromBlock",
-                        "info", "inventory", "container", "near", "block", "online", "chatlog", "listen", "events");
-                java.util.List<String> missing = new java.util.ArrayList<>(expected);
-                missing.removeAll(subs);
-                check("tree actions", missing.isEmpty(), "missing=" + missing);
+                        "renameItem", "pickItemFromBlock");
+                java.util.List<String> missingActions = new java.util.ArrayList<>(actions);
+                missingActions.removeAll(subs);
+                java.util.List<String> leakedQueries = subs.stream()
+                        .filter(s -> !actions.contains(s)).toList();
+                check("tree actions complete", missingActions.isEmpty(), "missing=" + missingActions);
+                check("tree control no query leak", leakedQueries.isEmpty(), "leaked=" + leakedQueries);
+                // /query 树：list + player 查询全集（含 memory）
+                var query = root.stream().filter(n -> n.getName().equals("query")).findFirst().orElse(null);
+                check("tree query root", query != null);
+                if (query == null) {
+                    fail("tree query missing");
+                    finishSuite();
+                    return;
+                }
+                check("tree query top list", query.getChildren().stream()
+                        .anyMatch(n -> n.getName().equals("list")));
+                var qPlayer = query.getChildren().stream().filter(n -> n.getName().equals("player"))
+                        .findFirst().orElse(null);
+                check("tree query player", qPlayer != null);
+                if (qPlayer == null) {
+                    fail("tree query player missing");
+                    finishSuite();
+                    return;
+                }
+                java.util.Set<String> qSubs = qPlayer.getChildren().stream()
+                        .map(com.mojang.brigadier.tree.CommandNode::getName)
+                        .collect(java.util.stream.Collectors.toSet());
+                java.util.List<String> queries = java.util.List.of(
+                        "info", "inventory", "container", "near", "block", "online", "chatlog",
+                        "listen", "events", "memory");
+                java.util.List<String> missingQueries = new java.util.ArrayList<>(queries);
+                missingQueries.removeAll(qSubs);
+                java.util.List<String> leakedActions = qSubs.stream()
+                        .filter(s -> !queries.contains(s)).toList();
+                check("tree query complete", missingQueries.isEmpty(), "missing=" + missingQueries);
+                check("tree query no action leak", leakedActions.isEmpty(), "leaked=" + leakedActions);
                 net.minecraft.commands.CommandSourceStack stack = server.createCommandSourceStack();
                 java.util.List<String> sugg = ccCompletions(dispatcher, stack, "control ");
-                check("tab bots+list", sugg.contains(botName) && sugg.contains("list"));
+                check("tab control bots only", sugg.contains(botName) && !sugg.contains("list"),
+                        "sugg=" + sugg);
+                sugg = ccCompletions(dispatcher, stack, "query ");
+                check("tab query bots+list", sugg.contains(botName) && sugg.contains("list"),
+                        "sugg=" + sugg);
+                sugg = ccCompletions(dispatcher, stack, "query " + botName + " ");
+                check("tab query subs", sugg.containsAll(queries), "sugg=" + sugg);
                 sugg = ccCompletions(dispatcher, stack, "control " + botName + " move ");
                 check("tab move dirs", sugg.containsAll(java.util.List.of("forward", "backward", "left", "right")));
                 sugg = ccCompletions(dispatcher, stack, "control " + botName + " hotbar ");
                 check("tab hotbar", sugg.contains("1") && sugg.contains("9"));
-                sugg = ccCompletions(dispatcher, stack, "control " + botName + " listen ");
-                check("tab listen", sugg.containsAll(java.util.List.of("on", "off")), "sugg=" + sugg);
+                sugg = ccCompletions(dispatcher, stack, "query " + botName + " listen ");
+                check("tab query listen", sugg.containsAll(java.util.List.of("on", "off")), "sugg=" + sugg);
                 sugg = ccCompletions(dispatcher, stack, "control " + botName + " useItem ");
                 check("tab hands", sugg.containsAll(java.util.List.of("mainhand", "offhand")));
                 sugg = ccCompletions(dispatcher, stack, "control " + botName + " placeBlock 0 0 0 ");
@@ -1579,14 +1629,15 @@ public final class TestRunner {
                 // i18n：关键 key 有翻译（getString 不等于 key 原文）
                 for (String key : java.util.List.of(
                         "commands.mockplayer.control.success", "commands.mockplayer.control.not_found",
-                        "commands.mockplayer.control.listen.on", "commands.mockplayer.control.event.onDamage",
-                        "commands.mockplayer.control.action.attack")) {
+                        "commands.mockplayer.control.action.attack", "commands.mockplayer.control.suggest.yaw",
+                        "commands.mockplayer.query.listen.on", "commands.mockplayer.query.events.not_listening",
+                        "commands.mockplayer.query.event.onDamage", "commands.mockplayer.query.memory.jvm")) {
                     check("i18n key " + key, !net.minecraft.network.chat.Component.translatable(key).getString().equals(key));
                 }
                 // list 查询
-                String listText = com.mockplayer.session.ControlCommands.list().getString();
+                String listText = com.mockplayer.session.QueryCommands.list().getString();
                 check("list contains bot", listText.contains(botName) && listText.contains("test"),
-                        "text=" + listText);
+                        "text=" + listText.replace("\n", "|"));
                 ccTreeChecked = true;
                 step = 1;
             }
@@ -1704,24 +1755,7 @@ public final class TestRunner {
                     ccHuskHealthBeforeTarget = ccHuskHealth;
                     // 实体名 Tab 补全（husk 在场）
                     var dispatcher = new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();
-                    dispatcher.register(com.mockplayer.session.ControlCommands.buildCommandTree(
-                            new com.mockplayer.session.ControlCommands.CommandFactory<net.minecraft.commands.CommandSourceStack>() {
-                                @Override
-                                public com.mojang.brigadier.builder.LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> literal(String name) {
-                                    return net.minecraft.commands.Commands.literal(name);
-                                }
-
-                                @Override
-                                public com.mojang.brigadier.builder.RequiredArgumentBuilder<net.minecraft.commands.CommandSourceStack, ?> argument(
-                                        String name, com.mojang.brigadier.arguments.ArgumentType<?> type) {
-                                    return net.minecraft.commands.Commands.argument(name, type);
-                                }
-
-                                @Override
-                                public void sendFeedback(net.minecraft.commands.CommandSourceStack source,
-                                                         net.minecraft.network.chat.Component message) {
-                                }
-                            }));
+                    ccRegisterAll(dispatcher);
                     java.util.List<String> sugg = ccCompletions(dispatcher, server.createCommandSourceStack(),
                             "control " + botName + " attack ");
                     check("tab entities contains type id", sugg.contains("husk"), "sugg=" + sugg);
@@ -2192,22 +2226,45 @@ public final class TestRunner {
                 }
                 if (waitTicks > 40 && !ccQueriesOk) {
                     ccQueriesOk = true;
-                    String containerText = com.mockplayer.session.ControlCommands.container(botName).getString();
-                    String infoText = com.mockplayer.session.ControlCommands.botInfo(botName).getString();
-                    String invText = com.mockplayer.session.ControlCommands.inventory(botName).getString();
-                    String nearText = com.mockplayer.session.ControlCommands.near(botName, 16.0).getString();
+                    String containerText = com.mockplayer.session.QueryCommands.container(botName).getString();
+                    String infoText = com.mockplayer.session.QueryCommands.botInfo(botName).getString();
+                    String invText = com.mockplayer.session.QueryCommands.inventory(botName).getString();
+                    String nearText = com.mockplayer.session.QueryCommands.near(botName, 16.0).getString();
                     var p = bot.getLocalPlayer();
-                    String blockText = com.mockplayer.session.ControlCommands.blockAt(
+                    String blockText = com.mockplayer.session.QueryCommands.blockAt(
                             botName, p.blockPosition().getX(), p.blockPosition().getY() - 1, p.blockPosition().getZ()).getString();
-                    String onlineText = com.mockplayer.session.ControlCommands.online(botName).getString();
-                    String chatText = com.mockplayer.session.ControlCommands.chatHistory(botName).getString();
+                    String onlineText = com.mockplayer.session.QueryCommands.online(botName).getString();
+                    String chatText = com.mockplayer.session.QueryCommands.chatHistory(botName).getString();
                     check("query container", containerText.contains("id="), "text=" + containerText);
-                    check("query info", infoText.contains(botName) && !infoText.contains("commands.mockplayer.control."));
+                    check("query info", infoText.contains(botName) && !infoText.contains("commands.mockplayer."));
                     check("query inventory", invText.contains(" x"), "text=" + invText);
                     check("query near", nearText.contains("villager"), "text=" + nearText);
                     check("query block", blockText.contains("minecraft:"), "text=" + blockText);
                     check("query online", onlineText.contains(mc.player.getGameProfile().name()) && onlineText.contains(botName));
                     check("query chat", chatText.contains("mockplayer-ctl-chat"));
+                    // 所有查询输出：不得残留 key 原文 / 字面 %s（模板参数必须传全）
+                    java.util.List<String> queryTexts = java.util.List.of(
+                            containerText, infoText, invText, nearText, blockText, onlineText, chatText);
+                    boolean noResidue = queryTexts.stream()
+                            .noneMatch(t -> t.contains("commands.mockplayer.") || t.contains("%s"));
+                    check("query outputs no key/%s residue", noResidue, "texts=" + queryTexts);
+                    // memory 精确记账强测：JVM 真实值 + Mod 侧精确字节
+                    var mem = bot.memoryInfo();
+                    check("memory jvm used", mem.jvmUsedBytes() > 0);
+                    check("memory jvm max", mem.jvmMaxBytes() >= mem.jvmUsedBytes());
+                    check("memory bot count", mem.botCount() >= 1);
+                    check("memory chat exact", mem.chatBytes() > 0, "bytes=" + mem.chatBytes());
+                    check("memory sound exact", mem.soundBytes() >= 0);
+                    check("memory particle exact", mem.particleBytes() >= 0);
+                    check("memory packet count", mem.packetCount() > 0, "count=" + mem.packetCount());
+                    check("memory online exact", mem.onlinePlayersBytes() > 0, "bytes=" + mem.onlinePlayersBytes());
+                    check("memory inventory exact", mem.inventoryBytes() > 0, "bytes=" + mem.inventoryBytes());
+                    check("memory entity count", mem.entityCount() > 0, "count=" + mem.entityCount());
+                    check("memory chunk count", mem.chunkCount() > 0, "count=" + mem.chunkCount());
+                    String memText = com.mockplayer.session.QueryCommands.memory(botName).getString();
+                    check("memory text", memText.contains("JVM") && memText.contains(botName)
+                                    && !memText.contains("commands.mockplayer.query."),
+                            "text=" + memText.replace("\n", "|"));
                     // 容器交互命令强测：拿起主手石头 → 放入箱子槽 0 → 服务端 BlockEntity 证据
                     ccClickPutSent = true;
                     waitTicks = 0;
@@ -2236,6 +2293,10 @@ public final class TestRunner {
                         ccClickPutVerified = true;
                         check("container click put item", ccClickPutItemInChest,
                                 "chest0=" + ccClickPutItemInChest);
+                        // 箱子开着 + 槽 0 有石头 → 容器序列化物品数据字节必须 > 0（精确记账）
+                        var mem2 = bot.memoryInfo();
+                        check("memory container exact after put", mem2.containerBytes() > 0,
+                                "bytes=" + mem2.containerBytes());
                         // 容器用完必须关闭：走 /control close 命令路径（强测命令本身）
                         com.mockplayer.session.ControlCommands.close(botName);
                         ccCloseSent = true;
@@ -2261,7 +2322,8 @@ public final class TestRunner {
                 if (ccCloseChecked && !ccListenOn) {
                     ccListenOn = true;
                     waitTicks = 0;
-                    String onText = com.mockplayer.session.ControlCommands.listen(botName, true).getString();
+                    check("memory event cache zero before listen", bot.memoryInfo().eventCacheBytes() == 0);
+                    String onText = com.mockplayer.session.QueryCommands.listen(botName, true).getString();
                     check("listen on feedback", onText.contains(botName), "text=" + onText);
                     if (!ccListenDamaged) {
                         ccListenDamaged = true;
@@ -2270,27 +2332,29 @@ public final class TestRunner {
                     }
                 }
                 if (ccListenDamaged && !ccEventsHasDamage) {
-                    com.mockplayer.session.EventRecorder recorder = com.mockplayer.session.ControlCommands.getRecorder(botName);
+                    com.mockplayer.session.EventRecorder recorder = com.mockplayer.session.QueryCommands.getRecorder(botName);
                     ccEventsHasDamage = recorder != null && recorder.getPushCount() >= 1
                             && recorder.snapshot().stream().anyMatch(s -> s.startsWith("onDamage|"));
                 }
                 if (ccEventsHasDamage) {
                     check("listen recorded+push damage event", true);
+                    check("memory event cache exact after damage", bot.memoryInfo().eventCacheBytes() > 0);
                     if (!ccListenOff) {
                         ccListenOff = true;
-                        String offText = com.mockplayer.session.ControlCommands.listen(botName, false).getString();
+                        String offText = com.mockplayer.session.QueryCommands.listen(botName, false).getString();
                         check("listen off feedback", offText.contains(botName), "text=" + offText);
-                        check("listen off removes recorder", com.mockplayer.session.ControlCommands.getRecorder(botName) == null);
-                        String notText = com.mockplayer.session.ControlCommands.events(botName, 10).getString();
+                        check("listen off removes recorder", com.mockplayer.session.QueryCommands.getRecorder(botName) == null);
+                        check("memory event cache zero after off", bot.memoryInfo().eventCacheBytes() == 0);
+                        String notText = com.mockplayer.session.QueryCommands.events(botName, 10).getString();
                         check("events after off says not listening", notText.contains(botName), "text=" + notText);
                         step = 17;
                     }
                 } else if (++waitTicks > 200) {
-                    com.mockplayer.session.EventRecorder recorder = com.mockplayer.session.ControlCommands.getRecorder(botName);
+                    com.mockplayer.session.EventRecorder recorder = com.mockplayer.session.QueryCommands.getRecorder(botName);
                     fail("listen timeout recorder=" + (recorder != null)
                             + " push=" + (recorder != null ? recorder.getPushCount() : -1)
                             + " snap=" + (recorder != null ? recorder.snapshot().stream().limit(5).toList() : "[]"));
-                    com.mockplayer.session.ControlCommands.listen(botName, false);
+                    com.mockplayer.session.QueryCommands.listen(botName, false);
                     step = 17;
                 }
             }
@@ -2386,7 +2450,7 @@ public final class TestRunner {
                     boolean allI18n = true;
                     for (net.minecraft.network.chat.Component c : outputs) {
                         String s = c.getString();
-                        if (s.isBlank() || s.contains("commands.mockplayer.control.")) {
+                        if (s.isBlank() || s.contains("commands.mockplayer.") || s.contains("%s")) {
                             allI18n = false;
                             System.out.println("[mocktest] non-i18n output: " + s);
                         }
@@ -2412,7 +2476,7 @@ public final class TestRunner {
                     check("escape name no style inject", ccNoInjectedStyle(escapeNameOut, true),
                             "styles=" + ccCollectStyles(escapeNameOut));
                     // container.none 模板 %s 必须被替换：输出含假人名字、不得残留字面 %s
-                    String noneText = com.mockplayer.session.ControlCommands.container(botName).getString();
+                    String noneText = com.mockplayer.session.QueryCommands.container(botName).getString();
                     check("container none text", noneText.contains(botName) && !noneText.contains("%s"),
                             "text=" + noneText);
                     // 清掉 outputs 里 move/jump 等持续输入，否则假人带着前进+跳跃进入挖掘测试

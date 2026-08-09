@@ -20,8 +20,12 @@
 - `/control <player> <action>`：遥控假人
   - 动作：移动、跳跃、潜行、疾跑、攻击、交互、使用物品、挖掘/放置方块、容器交互、
     骑乘/解除骑乘、聊天/执行命令、睡觉、重生、写书/告示牌、信标、物品改名等
-  - 查询：列表、信息、物品栏、容器、附近实体、方块、在线玩家、聊天记录、事件记录
-  - 监听：`/control <player> listen on/off` 实时推送假人事件
+- `/query <player> <query>`：查询假人状态（与 `/control` 分离，不改变假人状态）
+  - 查询：`list`、`info`、`inventory`、`container`、`near [r]`、`block x y z`、
+    `online`、`chatlog`、`memory`
+  - 监听：`/query <player> listen on/off` 实时推送假人事件，
+    `/query <player> events [n]` 查看最近事件缓存
+  - `memory`：JVM 堆为真实值，Mod 侧跟踪字节为精确记账，原版世界内部报实体/区块数
 
 ## 环境
 

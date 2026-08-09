@@ -138,4 +138,14 @@ public interface Bot {
      * @return {@code Optional<BotContainer>}，未打开界面则为 empty
      */
     Optional<BotContainer> getScreen();
+
+    /**
+     * 假人内存信息（JVM 堆真实值 + Mod 侧跟踪估算 + level 实体/区块数）。
+     *
+     * 口径：JVM 字段来自 Runtime（真实值）；per-bot 字段只统计本 mod 管理的结构，
+     * 是估算，不包含原版 ClientLevel 内部对象（详见 {@link BotMemoryInfo}）。
+     *
+     * @return 内存信息（未 PLAYING 时 level 统计为 0，其余字段仍有效）
+     */
+    BotMemoryInfo memoryInfo();
 }

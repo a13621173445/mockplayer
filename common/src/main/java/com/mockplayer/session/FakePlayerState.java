@@ -17,6 +17,8 @@ public class FakePlayerState {
 
     /** 假人收到的聊天消息（供未来指令解析/AI 使用） */
     private final List<Component> chatHistory = new CopyOnWriteArrayList<>();
+    /** 聊天历史保留文本的精确字节（记账：addChat 加、淘汰减）。 */
+    private long chatBytes;
 
     /** 假人血量（0-20） */
     private float health = 20.0F;
@@ -30,15 +32,23 @@ public class FakePlayerState {
     private boolean onGround = true;
 
     public void addChat(Component message) {
+        String text = message.getString();
         this.chatHistory.add(message);
+        this.chatBytes += ExactBytes.stringBytes(text);
         // 限制历史长度，防内存泄漏
         while (this.chatHistory.size() > 200) {
-            this.chatHistory.remove(0);
+            Component removed = this.chatHistory.remove(0);
+            this.chatBytes -= ExactBytes.stringBytes(removed.getString());
         }
     }
 
     public List<Component> getChatHistory() {
         return this.chatHistory;
+    }
+
+    /** 聊天历史保留文本的精确字节（不含 Component 包装对象本身）。 */
+    public long getChatBytes() {
+        return this.chatBytes;
     }
 
     public void setHealth(float health) {
@@ -203,12 +213,16 @@ public class FakePlayerState {
      * 存最近 20 条，供 AI / /control 读取环境声音变化。
      */
     private final java.util.List<net.minecraft.network.chat.Component> soundLog = new CopyOnWriteArrayList<>();
+    /** 音效日志保留文本的精确字节。 */
+    private long soundBytes;
 
     public void recordSound(String description, double x, double y, double z) {
-        this.soundLog.add(net.minecraft.network.chat.Component.literal(
-                String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f %s", x, y, z, description)));
+        String text = String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f %s", x, y, z, description);
+        this.soundLog.add(net.minecraft.network.chat.Component.literal(text));
+        this.soundBytes += ExactBytes.stringBytes(text);
         while (this.soundLog.size() > 20) {
-            this.soundLog.remove(0);
+            net.minecraft.network.chat.Component removed = this.soundLog.remove(0);
+            this.soundBytes -= ExactBytes.stringBytes(removed.getString());
         }
     }
 
@@ -216,20 +230,34 @@ public class FakePlayerState {
         return this.soundLog;
     }
 
+    /** 音效日志保留文本的精确字节。 */
+    public long getSoundBytes() {
+        return this.soundBytes;
+    }
+
     /**
      * 记录假人应感知的粒子事件（假人不渲染到主玩家屏幕，严格零污染）。
      */
     private final java.util.List<net.minecraft.network.chat.Component> particleLog = new CopyOnWriteArrayList<>();
+    /** 粒子日志保留文本的精确字节。 */
+    private long particleBytes;
 
     public void recordParticle(String description, double x, double y, double z) {
-        this.particleLog.add(net.minecraft.network.chat.Component.literal(
-                String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f %s", x, y, z, description)));
+        String text = String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f %s", x, y, z, description);
+        this.particleLog.add(net.minecraft.network.chat.Component.literal(text));
+        this.particleBytes += ExactBytes.stringBytes(text);
         while (this.particleLog.size() > 20) {
-            this.particleLog.remove(0);
+            net.minecraft.network.chat.Component removed = this.particleLog.remove(0);
+            this.particleBytes -= ExactBytes.stringBytes(removed.getString());
         }
     }
 
     public java.util.List<net.minecraft.network.chat.Component> getParticleLog() {
         return this.particleLog;
+    }
+
+    /** 粒子日志保留文本的精确字节。 */
+    public long getParticleBytes() {
+        return this.particleBytes;
     }
 }
