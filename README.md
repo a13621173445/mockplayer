@@ -47,12 +47,23 @@
 `config/mockplayer.json` 的 `commands` 对象里改名，与其他模组冲突时直接改配置：
 
 ```json
-{ "commands": { "control": "control", "query": "query" } }
+{
+  "commands": {
+    "control": "control",
+    "query": "query",
+    "newplayer": "newplayer",
+    "delplayer": "delplayer",
+    "connect": "connect"
+  }
+}
 ```
 
 - 命令名留空 = 禁用该命令
 - 非法值（空格/超长/非法字符）或启用项之间重名会自动回退默认名
-- 装有 YACL 时可在模组列表的「配置」界面修改全部设置，保存后立即热重载，无需重进游戏
+- 其余设置（聊天/音效/粒子日志保留条数、事件缓存与采样参数等）同样在
+  `config/mockplayer.json` 或 GUI 中修改
+- YACL 是可选依赖：装有 YACL 时可在模组列表的「配置」界面修改全部设置，
+  保存后立即热重载，无需重进游戏；不装 YACL 时无图形界面，直接手改 JSON 即可
 - 改完 JSON 后重进游戏生效
 
 ## 环境
