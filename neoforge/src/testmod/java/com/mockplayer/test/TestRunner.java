@@ -4802,6 +4802,7 @@ public final class TestRunner {
                 step = 3;
             }
             case 3 -> {
+                i18nConfigLangChecks();
                 boolean yaclPresent;
                 try {
                     Class.forName("dev.isxander.yacl3.api.YetAnotherConfigLib");
@@ -4817,6 +4818,8 @@ public final class TestRunner {
                 mc.gui.setScreen(screen);
                 check("yacl screen opened", mc.gui.screen() == screen);
                 check("screen holds bound config", screen.config() == MockplayerConfig.get());
+                check("screen title translated", !screen.getTitle().getString()
+                        .equals("config.mockplayer.title"));
                 cfgScreen = screen;
                 step = 4;
             }
@@ -4858,6 +4861,8 @@ public final class TestRunner {
                 MissingYaclScreen missing = new MissingYaclScreen(null);
                 mc.gui.setScreen(missing);
                 check("missing-yacl screen opened", mc.gui.screen() == missing);
+                check("missing-yacl title translated", !missing.getTitle().getString()
+                        .equals("config.mockplayer.missing_yacl.title"));
                 missing.onClose();
                 check("missing-yacl screen closed", mc.gui.screen() == null);
                 cfgScreen = null;
@@ -4919,6 +4924,50 @@ public final class TestRunner {
         }
         cfgDir = null;
         cfgFile = null;
+    }
+
+    /** 语言文件级 i18n 强测：en/zh 的 config.* key 集合一致、值非空、无字面 %s。 */
+    private static void i18nConfigLangChecks() {
+        try {
+            com.google.gson.JsonObject en = parseLang("en_us.json");
+            com.google.gson.JsonObject zh = parseLang("zh_cn.json");
+            java.util.Set<String> enKeys = new java.util.TreeSet<>();
+            java.util.Set<String> zhKeys = new java.util.TreeSet<>();
+            en.entrySet().forEach(e -> {
+                if (e.getKey().startsWith("config.mockplayer.")) {
+                    enKeys.add(e.getKey());
+                }
+            });
+            zh.entrySet().forEach(e -> {
+                if (e.getKey().startsWith("config.mockplayer.")) {
+                    zhKeys.add(e.getKey());
+                }
+            });
+            check("config i18n key sets identical (en/zh)", enKeys.equals(zhKeys),
+                    "en=" + enKeys.size() + " zh=" + zhKeys.size());
+            check("config i18n values non-empty",
+                    enKeys.stream().allMatch(k -> !en.get(k).getAsString().isBlank())
+                            && zhKeys.stream().allMatch(k -> !zh.get(k).getAsString().isBlank()));
+            check("config i18n no literal %s",
+                    enKeys.stream().noneMatch(k -> en.get(k).getAsString().contains("%s"))
+                            && zhKeys.stream().noneMatch(k -> zh.get(k).getAsString().contains("%s")));
+        } catch (Exception e) {
+            check("config i18n lang files parse", false, e.toString());
+        }
+    }
+
+    /** 读语言文件（走游戏 ResourceManager，双端 dev 环境都能拿到 common 资源）。 */
+    private static com.google.gson.JsonObject parseLang(String fileName) throws java.io.IOException {
+        var location = net.minecraft.resources.Identifier.fromNamespaceAndPath(
+                "mockplayer", "lang/" + fileName);
+        var resource = net.minecraft.client.Minecraft.getInstance().getResourceManager()
+                .getResource(location);
+        if (resource.isEmpty()) {
+            throw new java.io.IOException("missing lang file " + fileName);
+        }
+        try (var reader = resource.get().openAsReader()) {
+            return com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
+        }
     }
 
     // ===== 断言与结果 =====
