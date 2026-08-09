@@ -12,6 +12,7 @@ import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.SessionManager;
+import com.mockplayer.session.BatchCommands;
 import com.mockplayer.session.ControlCommands;
 import com.mockplayer.session.QueryCommands;
 import com.mockplayer.session.CommandSupport;
@@ -91,7 +92,8 @@ public class MockplayerClient implements ClientModInitializer {
                             String name = StringArgumentType.getString(ctx, "name");
                             ctx.getSource().sendFeedback(FakePlayerCommands.newPlayer(name));
                             return 1;
-                        }));
+                        }))
+                .then(BatchCommands.newPlayerBatchNode(factory()));
     }
 
     private static LiteralArgumentBuilder<FabricClientCommandSource> delPlayerTree(String rootName) {
@@ -102,7 +104,8 @@ public class MockplayerClient implements ClientModInitializer {
                             String name = StringArgumentType.getString(ctx, "name");
                             ctx.getSource().sendFeedback(FakePlayerCommands.delPlayer(name));
                             return 1;
-                        }));
+                        }))
+                .then(BatchCommands.delPlayerBatchNode(factory()));
     }
 
     private static LiteralArgumentBuilder<FabricClientCommandSource> connectTree(String rootName) {

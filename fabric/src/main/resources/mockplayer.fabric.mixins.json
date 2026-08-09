@@ -16,7 +16,8 @@
     "MixinEntityRenderer",
     "MixinLocalPlayer",
     "MixinMinecraft",
-    "MixinMultiPlayerGameMode"
+    "MixinMultiPlayerGameMode",
+    "MixinServerLoginPacketListenerImpl"
   ],
   "server": [],
   "injectors": {

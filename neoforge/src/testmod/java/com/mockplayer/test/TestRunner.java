@@ -52,13 +52,13 @@ import java.util.Optional;
  */
 public final class TestRunner {
 
-    private static final long TIMEOUT_MS = 120_000;
+    private static final long TIMEOUT_MS = 180_000;
 
     /** 全部套件（suite=all / IDE 默认入口时按序连续跑） */
     private static final List<String> ALL_SUITES = List.of(
             "api-smoke", "api-full", "use-items", "containers", "containers-all", "crafting", "furnace",
             "combat-stab", "combat-sprint", "enchanting", "merchant", "gui-actions", "listener-events", "control-commands",
-            "config", "debug-name-tag");
+            "batch", "config", "debug-name-tag");
 
     private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }
 
@@ -93,6 +93,7 @@ public final class TestRunner {
             case "gui-actions" -> "tbot-gui";
             case "listener-events" -> "tbot-le";
             case "control-commands" -> "tbot-ctl";
+            case "batch" -> "tbot-bat";
             case "config" -> "tbot-cfg";
             case "debug-name-tag" -> "tbot-dbg";
             default -> "tbot";
@@ -247,6 +248,7 @@ public final class TestRunner {
             case "gui-actions" -> runGuiActions(mc);
             case "listener-events" -> runListenerEvents(mc);
             case "control-commands" -> runControlCommands(mc);
+            case "batch" -> runBatch(mc);
             case "config" -> runConfig(mc);
             case "debug-name-tag" -> runDebugNameTag(mc);
             default -> {
@@ -1477,6 +1479,8 @@ public final class TestRunner {
     private static boolean ccMineTestSynced;
     private static boolean ccMineTestDone;
     private static boolean ccMineStopSent;
+    /** case 18 的 drop/swap 等动作包是否已确认在服务端处理完（防延迟包清掉 replace 的石镐）。 */
+    private static boolean ccMineFlushDone;
     private static int ccMineTestTicks;
     private static volatile boolean ccMineSpReady;
     private static volatile BlockPos ccMineStone1;
@@ -1500,6 +1504,9 @@ public final class TestRunner {
     private static volatile boolean ccMineStone1Air;
     private static volatile boolean ccMineStone2Still;
     private static volatile String ccMineMainHand = "?";
+    private static volatile int ccMineServerSlot = -1;
+    private static volatile String ccMineServerHotbar = "?";
+    private static volatile String ccMineAfterReplace = "?";
     private static volatile float ccMineDigSpeed = -1.0F;
     private static volatile boolean ccMineCorrectTool = false;
     private static volatile float ccMineDestroyProgressRate = -1.0F;
@@ -2698,6 +2705,16 @@ public final class TestRunner {
                 }
             }
             case 19 -> { // 挖掘时间原版锁定 + stopSustained 取消挖掘（服务端证据）
+                if (!ccMineFlushDone) {
+                    // 先让 case 18 的 drop/swapHands 等延迟动作包在服务端处理完：
+                    // 否则 replace 石镐后旧包才到达，服务端会把刚放好的石镐丢/换掉
+                    // （drop 本地移除不回显 → 客户端有镐、服务端槽空，mine sync 假失败）
+                    if (++waitTicks > 40) {
+                        ccMineFlushDone = true;
+                        waitTicks = 0;
+                    }
+                    return;
+                }
                 if (!ccMineTestSet) {
                     ccMineTestSet = true;
                     waitTicks = 0;
@@ -2727,6 +2744,9 @@ public final class TestRunner {
                         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
                                 // give 不覆盖主手（selected 槽还有木棍），必须 replace 才保证用石镐挖
                                 "item replace entity " + botName + " weapon.mainhand with minecraft:stone_pickaxe");
+                        // 立即快照：replace 刚执行完时的服务端主手（判断是被清空还是 replace 失败）
+                        ccMineAfterReplace = sp.getMainHandItem().is(net.minecraft.world.item.Items.STONE_PICKAXE)
+                                ? "pickaxe" : String.valueOf(sp.getMainHandItem().getItem());
                     });
                 } else if (!ccMineTestSynced) {
                     if (!ccMineSpReady || ccMineStone1 == null) {
@@ -2748,6 +2768,12 @@ public final class TestRunner {
                             var sp = server.getPlayerList().getPlayerByName(botName);
                             ccMineServerPickaxe = sp != null
                                     && sp.getMainHandItem().is(net.minecraft.world.item.Items.STONE_PICKAXE);
+                            ccMineMainHand = sp != null ? String.valueOf(sp.getMainHandItem().getItem()) : "sp-null";
+                            ccMineServerSlot = sp != null ? sp.getInventory().getSelectedSlot() : -1;
+                            ccMineServerHotbar = sp != null
+                                    ? sp.getInventory().getItem(0) + "|" + sp.getInventory().getItem(1)
+                                            + "|" + sp.getInventory().getItem(2)
+                                    : "sp-null";
                             if (sp != null) {
                                 double dx = sp.getX() - ccMineLastX;
                                 double dy = sp.getY() - ccMineLastY;
@@ -2763,7 +2789,15 @@ public final class TestRunner {
                             // 主手未就绪或位置仍在漂移（respawn 同步中）：继续等
                             ccMineStableTicks = 0;
                             if (waitTicks > 300) {
-                                fail("mine test sync timeout (server pickaxe/stable)");
+                                fail("mine test sync timeout (server pickaxe/stable) clientHand="
+                                        + bot.getLocalPlayer().getMainHandItem().getItem()
+                                        + " serverPickaxe=" + ccMineServerPickaxe
+                                        + " serverHand=" + ccMineMainHand
+                                        + " serverSlot=" + ccMineServerSlot
+                                        + " serverHotbar=" + ccMineServerHotbar
+                                        + " afterReplace=" + ccMineAfterReplace
+                                        + " moving=" + ccMineServerMoving
+                                        + " ticks=" + waitTicks);
                                 step = 20;
                             }
                             return;
@@ -5337,6 +5371,126 @@ public final class TestRunner {
         return null;
     }
 
+    // ===== batch：批量假人生成/移除命令（性能测试，TDD） =====
+
+    private static boolean batchCreateFailed;
+    private static boolean batchDeleteFailed;
+    private static long batchWaitStart;
+
+    private static void runBatch(Minecraft mc) {
+        MinecraftServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            fail("no singleplayer server");
+            finishSuite();
+            return;
+        }
+        switch (step) {
+            case 0 -> { // 上限/前缀校验 + 批量创建 5 个
+                check("batch max count default 100",
+                        com.mockplayer.config.MockplayerConfig.get().getBatchMaxCount() == 100);
+                String tooMany = com.mockplayer.session.FakePlayerCommands
+                        .newPlayerBatch("tbotbz", 1000, 0, 4).getString();
+                check("batch too many rejected", !tooMany.contains("commands."), "out=" + tooMany);
+                String badPrefix = com.mockplayer.session.FakePlayerCommands
+                        .newPlayerBatch("x".repeat(20), 2, 0, 4).getString();
+                check("batch invalid prefix rejected",
+                        !badPrefix.contains("commands.") && MockplayerApi.bots().getBots().stream()
+                                .noneMatch(b -> b.getName().startsWith("xxxxxxxx")), "out=" + badPrefix);
+                String started = com.mockplayer.session.FakePlayerCommands
+                        .newPlayerBatch("tbotb", 5, 0, 2).getString();
+                check("batch create started", !started.contains("commands."), "out=" + started);
+                batchWaitStart = System.currentTimeMillis();
+                step = 1;
+            }
+            case 1 -> { // 等 5 个全部 PLAYING
+                var created = MockplayerApi.bots().getBots().stream()
+                        .filter(b -> b.getName().startsWith("tbotb_")).toList();
+                if (created.size() == 5 && created.stream()
+                        .allMatch(b -> b.getLifecycle() == BotLifecycle.PLAYING)) {
+                    check("batch created 5 playing", true);
+                    check("batch names complete",
+                            created.stream().map(com.mockplayer.api.Bot::getName).toList()
+                                    .containsAll(java.util.List.of("tbotb_1", "tbotb_2", "tbotb_3",
+                                            "tbotb_4", "tbotb_5")));
+                    step = 2;
+                } else if (!batchCreateFailed
+                        && System.currentTimeMillis() - batchWaitStart > 170_000) {
+                    batchCreateFailed = true;
+                    fail("batch create timeout count=" + created.size()
+                            + " summary=" + com.mockplayer.session.BatchCommands.lastSummary());
+                    step = 7;
+                }
+            }
+            case 2 -> { // 重名跳过：再批量 2 个同名 → created=0 skipped=2
+                String out = com.mockplayer.session.FakePlayerCommands
+                        .newPlayerBatch("tbotb", 2, 0, 2).getString();
+                check("batch duplicate started", !out.contains("commands."), "out=" + out);
+                batchWaitStart = System.currentTimeMillis();
+                step = 3;
+            }
+            case 3 -> { // 等汇总：created=0 skipped=2 failed=0
+                var s = com.mockplayer.session.BatchCommands.lastSummary();
+                if (s != null && s.created() == 0 && s.skipped() == 2 && s.failed() == 0) {
+                    check("batch duplicate skip summary", true);
+                    step = 4;
+                } else if (System.currentTimeMillis() - batchWaitStart > 170_000) {
+                    fail("batch duplicate summary timeout s=" + s);
+                    step = 7;
+                }
+            }
+            case 4 -> { // dry-run 删除：只列不删
+                long before = MockplayerApi.bots().getBots().stream()
+                        .filter(b -> b.getName().startsWith("tbotb_")).count();
+                String dry = com.mockplayer.session.FakePlayerCommands
+                        .delPlayerBatch("tbotb", true).getString();
+                long after = MockplayerApi.bots().getBots().stream()
+                        .filter(b -> b.getName().startsWith("tbotb_")).count();
+                check("batch dry lists 5", dry.contains("5"), "out=" + dry);
+                check("batch dry does not remove", after == 5 && before == 5);
+                step = 5;
+            }
+            case 5 -> { // 真删：删前缀 → 剩 0
+                String del = com.mockplayer.session.FakePlayerCommands
+                        .delPlayerBatch("tbotb", false).getString();
+                check("batch delete executed", !del.contains("commands."), "out=" + del);
+                batchWaitStart = System.currentTimeMillis();
+                step = 6;
+            }
+            case 6 -> {
+                long left = MockplayerApi.bots().getBots().stream()
+                        .filter(b -> b.getName().startsWith("tbotb_")).count();
+                boolean serverLeft = false;
+                for (int i = 1; i <= 5; i++) {
+                    if (server.getPlayerList().getPlayerByName("tbotb_" + i) != null) {
+                        serverLeft = true;
+                    }
+                }
+                if (left == 0 && !serverLeft) {
+                    check("batch delete removed all", true);
+                    step = 7;
+                } else if (!batchDeleteFailed
+                        && System.currentTimeMillis() - batchWaitStart > 170_000) {
+                    batchDeleteFailed = true;
+                    fail("batch delete timeout left=" + left + " serverLeft=" + serverLeft);
+                    step = 7;
+                }
+            }
+            case 7 -> { // 边界：API 创建的假人（owner=command 伪造）不被批量删除
+                var apiBot = MockplayerApi.bots().createBot(
+                        com.mockplayer.api.BotProfile.of("tbotbapi", "command"));
+                check("batch boundary api bot created", apiBot != null);
+                String dry = com.mockplayer.session.FakePlayerCommands
+                        .delPlayerBatch("tbotbapi", true).getString();
+                check("batch boundary dry not match", !dry.contains("tbotbapi"), "out=" + dry);
+                com.mockplayer.session.FakePlayerCommands.delPlayerBatch("tbotbapi", false);
+                check("batch boundary api bot survives",
+                        MockplayerApi.bots().getBot("tbotbapi").isPresent());
+                MockplayerApi.bots().removeBot("tbotbapi", "command");
+                finishSuite();
+            }
+        }
+    }
+
     // ===== debug-name-tag：F3 调试信息标签（配置开关 + 格式化 + 联动） =====
 
     private static net.minecraft.core.BlockPos dntChestPos;
@@ -5703,7 +5857,7 @@ public final class TestRunner {
         records.clear();
         botName = botNameFor(suite);
         for (Bot b : MockplayerApi.bots().getBots()) {
-            MockplayerApi.bots().removeBot(b.getName(), "test");
+            MockplayerApi.bots().removeBot(b.getName(), "command");
         }
         bot = null;
         ccTreeChecked = false;
@@ -5787,6 +5941,7 @@ public final class TestRunner {
         ccMineTestSynced = false;
         ccMineTestDone = false;
         ccMineStopSent = false;
+        ccMineFlushDone = false;
         ccMineTestTicks = 0;
         ccMineSpReady = false;
         ccMineStone1 = null;

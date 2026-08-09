@@ -52,6 +52,7 @@ public class SessionManager {
      */
     public void tick() {
         this.manager.tick();
+        BatchCommands.tick(); // 批量创建队列（tick 驱动）
     }
 
     /**

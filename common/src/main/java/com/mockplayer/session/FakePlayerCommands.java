@@ -72,6 +72,16 @@ public class FakePlayerCommands {
         };
     }
 
+    /** 批量创建假人（性能测试；委托 BatchCommands，只管理 CORE）。 */
+    public static Component newPlayerBatch(String prefix, int count, int intervalTicks, int concurrency) {
+        return BatchCommands.newPlayerBatch(prefix, count, intervalTicks, concurrency);
+    }
+
+    /** 批量删除假人（性能测试；dry=true 只列不删，只管理 CORE）。 */
+    public static Component delPlayerBatch(String prefixOrAll, boolean dry) {
+        return BatchCommands.delPlayerBatch(prefixOrAll, dry);
+    }
+
     /**
      * 执行 /connect 命令：让已存在的假人直接连接到指定服务器（不存在不新建）。
      *

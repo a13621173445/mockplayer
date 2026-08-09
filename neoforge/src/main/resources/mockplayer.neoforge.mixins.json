@@ -18,7 +18,8 @@
     "MixinMinecraft",
     "MixinMultiPlayerGameMode",
     "MixinRegistryManager",
-    "MixinConfigSync"
+    "MixinConfigSync",
+    "MixinServerLoginPacketListenerImpl"
   ],
   "server": [],
   "injectors": {

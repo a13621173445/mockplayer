@@ -15,6 +15,7 @@ import com.mockplayer.config.ModConfigScreenFactory;
 import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.SessionManager;
+import com.mockplayer.session.BatchCommands;
 import com.mockplayer.session.ControlCommands;
 import com.mockplayer.session.QueryCommands;
 import com.mockplayer.session.CommandSupport;
@@ -110,7 +111,8 @@ public class MockplayerNeoForgeClient {
                             String name = StringArgumentType.getString(ctx, "name");
                             ctx.getSource().sendSuccess(() -> FakePlayerCommands.newPlayer(name), false);
                             return 1;
-                        }));
+                        }))
+                .then(BatchCommands.newPlayerBatchNode(factory()));
     }
 
     private static LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> delPlayerTree(String rootName) {
@@ -121,7 +123,8 @@ public class MockplayerNeoForgeClient {
                             String name = StringArgumentType.getString(ctx, "name");
                             ctx.getSource().sendSuccess(() -> FakePlayerCommands.delPlayer(name), false);
                             return 1;
-                        }));
+                        }))
+                .then(BatchCommands.delPlayerBatchNode(factory()));
     }
 
     private static LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> connectTree(String rootName) {

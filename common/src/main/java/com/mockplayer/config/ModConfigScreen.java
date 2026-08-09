@@ -88,6 +88,10 @@ public final class ModConfigScreen extends YACLScreen {
                                         ModConfig.DEFAULT_FAKE_PLAYER_CHUNK_RADIUS,
                                         ModConfig.MIN_FAKE_PLAYER_CHUNK_RADIUS, ModConfig.MAX_FAKE_PLAYER_CHUNK_RADIUS,
                                         cfg::getFakePlayerChunkRadius, cfg::setFakePlayerChunkRadius))
+                                .option(intOption("batchMaxCount",
+                                        ModConfig.DEFAULT_BATCH_MAX_COUNT,
+                                        ModConfig.MIN_BATCH_MAX_COUNT, ModConfig.MAX_BATCH_MAX_COUNT,
+                                        cfg::getBatchMaxCount, cfg::setBatchMaxCount))
                                 .build())
                         .build())
                 .category(ConfigCategory.createBuilder()

@@ -68,6 +68,13 @@ public class ModConfig {
 
     private int fakePlayerChunkRadius = DEFAULT_FAKE_PLAYER_CHUNK_RADIUS;
 
+    /** 单次批量创建假人数量上限（性能测试保护）。 */
+    public static final int DEFAULT_BATCH_MAX_COUNT = 100;
+    public static final int MIN_BATCH_MAX_COUNT = 1;
+    public static final int MAX_BATCH_MAX_COUNT = 1000;
+
+    private int batchMaxCount = DEFAULT_BATCH_MAX_COUNT;
+
     public int getChatHistoryLimit() {
         return this.chatHistoryLimit;
     }
@@ -163,6 +170,14 @@ public class ModConfig {
         this.fakePlayerChunkRadius = fakePlayerChunkRadius;
     }
 
+    public int getBatchMaxCount() {
+        return this.batchMaxCount;
+    }
+
+    public void setBatchMaxCount(int batchMaxCount) {
+        this.batchMaxCount = batchMaxCount;
+    }
+
     /** 越界字段回退默认（非法值不保留，保证配置文件永远可手改且不崩）。 */
     public void normalize() {
         this.chatHistoryLimit = clampInt(this.chatHistoryLimit,
@@ -181,6 +196,8 @@ public class ModConfig {
                 MIN_EVENT_MOVE_SAMPLE_DISTANCE, MAX_EVENT_MOVE_SAMPLE_DISTANCE, DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE);
         this.fakePlayerChunkRadius = clampInt(this.fakePlayerChunkRadius,
                 MIN_FAKE_PLAYER_CHUNK_RADIUS, MAX_FAKE_PLAYER_CHUNK_RADIUS, DEFAULT_FAKE_PLAYER_CHUNK_RADIUS);
+        this.batchMaxCount = clampInt(this.batchMaxCount,
+                MIN_BATCH_MAX_COUNT, MAX_BATCH_MAX_COUNT, DEFAULT_BATCH_MAX_COUNT);
         this.commands = ModCommands.normalize(this.commands);
     }
 
