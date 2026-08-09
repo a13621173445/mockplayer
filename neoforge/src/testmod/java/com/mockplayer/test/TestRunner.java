@@ -572,10 +572,6 @@ public final class TestRunner {
                         }
                         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
                                 "give " + botName + " minecraft:dirt 1");
-                        if (sp != null) {
-                            System.out.println("[mocktest] diag giveAfter slot0=" + sp.getInventory().getItem(0)
-                                    + " dirtCount=" + sp.getInventory().countItem(net.minecraft.world.item.Items.DIRT));
-                        }
                         server.getLevel(Level.OVERWORLD).setBlock(afPlacePos, Blocks.AIR.defaultBlockState(), 3);
                     });
                 }
@@ -596,9 +592,6 @@ public final class TestRunner {
                     check("placeBlock placed dirt (server)", true);
                     step = 6;
                 } else if (++waitTicks > 400) {
-                    server.execute(() -> System.out.println("[mocktest] diag place pos="
-                            + server.getLevel(Level.OVERWORLD).getBlockState(afPlacePos)
-                            + " clientHand=" + bot.getLocalPlayer().getMainHandItem()));
                     fail("placeBlock timeout");
                     step = 6;
                 }
@@ -621,10 +614,6 @@ public final class TestRunner {
                     }
                     // 服务端已挖掉：等假人 level 同步 air → tickMining 的 continueDestroyBlock 返回 false → fire 事件
                 } else if (++waitTicks > 400) {
-                    server.execute(() -> System.out.println("[mocktest] diag mine server="
-                            + server.getLevel(Level.OVERWORLD).getBlockState(afPlacePos)
-                            + " client=" + bot.getBlockState(afPlacePos)
-                            + " loaded=" + bot.isBlockLoaded(afPlacePos)));
                     fail("mineBlock timeout");
                     step = 7;
                 }
@@ -663,13 +652,6 @@ public final class TestRunner {
                     check("setSlot slot0 stone (client)", container.get().getSlot(0).is(net.minecraft.world.item.Items.STONE));
                     step = 9;
                 } else if (++waitTicks > 200) {
-                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
-                    net.minecraft.server.level.ServerLevel lv = server.getLevel(Level.OVERWORLD);
-                    System.out.println("[mocktest] diag chest server=" + lv.getBlockState(afChestPos)
-                            + " client=" + bot.getBlockState(afChestPos)
-                            + " dirtPos=" + lv.getBlockState(afPlacePos)
-                            + " awaiting=" + (sp != null && isAwaitingPosition(sp))
-                            + " serverMenu=" + (sp != null ? sp.containerMenu : "null"));
                     fail("container open timeout");
                     step = 9;
                 }
@@ -2271,14 +2253,6 @@ public final class TestRunner {
                     check("dismount", true);
                     step = 15;
                 } else if (waitTicks > 220) {
-                    server.execute(() -> {
-                        var sp = server.getPlayerList().getPlayerByName(botName);
-                        System.out.println("[mocktest] diag mount/dismount vehicle="
-                                + (sp != null ? String.valueOf(sp.getVehicle()) : "no-sp")
-                                + " moved=" + ccCartMoved + " startX=" + ccCartStartX
-                                + " x=" + (sp != null ? sp.getX() : -1)
-                                + " pushed=" + ccCartPushed + " checked=" + ccMountChecked);
-                    });
                     fail("mount/dismount timeout");
                     step = 15;
                 }
@@ -2633,9 +2607,6 @@ public final class TestRunner {
                             // 主手未就绪或位置仍在漂移（respawn 同步中）：继续等
                             ccMineStableTicks = 0;
                             if (waitTicks > 300) {
-                                System.out.println("[mocktest] diag mine sync serverPickaxe="
-                                        + ccMineServerPickaxe + " moving=" + ccMineServerMoving
-                                        + " clientHand=" + bot.getLocalPlayer().getMainHandItem());
                                 fail("mine test sync timeout (server pickaxe/stable)");
                                 step = 20;
                             }
@@ -3981,17 +3952,6 @@ public final class TestRunner {
                     waitTicks = 0;
                     step = 7;
                 } else if (++waitTicks > 300) {
-                    // 诊断：超时打印假人移动/疾跑状态
-                    server.execute(() -> {
-                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
-                        if (sp != null) {
-                            System.out.println("[mocktest] diag sprint sp=" + sp.position()
-                                    + " onGround=" + sp.onGround()
-                                    + " sprinting=" + sp.isSprinting()
-                                    + " base=" + fakeMoveBaseX + "," + fakeMoveBaseZ
-                                    + " below=" + sp.level().getBlockState(sp.blockPosition().below()).getBlock());
-                        }
-                    });
                     fail("sprint movement timeout (fake didn't move)");
                     step = 7;
                 }
@@ -5187,7 +5147,6 @@ public final class TestRunner {
                 // 渲染路径验证：Mixin 在真实渲染帧里对假人注入多行 scoreText
                 if (dntRenderCount() == 0) {
                     if (++waitTicks > 100) {
-                        System.out.println("[mocktest] diag render count=" + dntRenderCount());
                         fail("debug render path never executed");
                         step = 3;
                     }
