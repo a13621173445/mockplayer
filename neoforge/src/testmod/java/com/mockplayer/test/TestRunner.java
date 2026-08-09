@@ -1435,6 +1435,9 @@ public final class TestRunner {
     private static int ccMountStableTicks;
     private static boolean ccDismountSent;
     private static volatile boolean ccDismounted;
+    private static volatile double ccCartStartX;
+    private static volatile boolean ccCartMoved;
+    private static boolean ccCartPushed;
     private static BlockPos ccChestPos;
     private static boolean ccChestSet;
     private static boolean ccChestClicked;
@@ -2183,17 +2186,20 @@ public final class TestRunner {
                     step = 14;
                 }
             }
-            case 14 -> { // mount 矿车 + 骑乘一段时间后 dismount
+            case 14 -> { // mount 矿车 + 移动中 dismount
                 if (!ccRailSet) {
                     ccRailSet = true;
                     waitTicks = 0;
                     server.execute(() -> {
                         var p = bot.getLocalPlayer();
                         var cartPos = p.blockPosition().offset(2, 0, 0);
-                        // 铁轨上召唤矿车：矿车稳定停靠，不会因坠落/碰撞被服务端自动弹出乘客（旧场景假绿根因）
-                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
-                                "setblock " + cartPos.getX() + " " + cartPos.getY() + " " + cartPos.getZ()
-                                        + " minecraft:rail");
+                        // 5 格直线平轨：矿车静止停靠（不会因坠落/碰撞被服务端自动弹出乘客），
+                        // 骑乘稳定后 data merge 给 Motion 让矿车滑行（覆盖「移动中下马」）
+                        for (int i = 0; i < 5; i++) {
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    "setblock " + (cartPos.getX() + i) + " " + cartPos.getY() + " " + cartPos.getZ()
+                                            + " minecraft:rail");
+                        }
                         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
                                 String.format("summon minecraft:minecart %.2f %.2f %.2f",
                                         cartPos.getX() + 0.5, cartPos.getY() + 0.0, cartPos.getZ() + 0.5));
@@ -2208,21 +2214,46 @@ public final class TestRunner {
                     ccMounted = sp != null && sp.getVehicle() != null;
                 });
                 if (ccMounted && !ccMountChecked) {
-                    // 稳定骑乘验证：连续 60 tick（3 秒）服务端仍骑乘才认定上马成功，
-                    // 覆盖「骑乘一段时间后再下马」；也排除「矿车坠落/碰撞被服务端自动弹出乘客」假绿。
-                    // 注：26.2 骑乘矿车实测无法被动力轨/Motion/斜轨推进（服务端不驱动），
-                    // 「移动中下马」无法稳定构造，见 TODO #5。
-                    if (++ccMountStableTicks >= 60) {
+                    // 稳定骑乘验证：连续 20 tick 服务端仍骑乘才认定上马成功，
+                    // 排除「矿车坠落/碰撞被服务端自动弹出乘客」造成的假绿
+                    if (++ccMountStableTicks >= 20) {
                         ccMountStableTicks = 0;
                         ccMountChecked = true;
                         check("mount minecart", true);
-                        if (!ccDismountSent) {
-                            ccDismountSent = true;
-                            com.mockplayer.session.ControlCommands.dismount(botName);
-                        }
+                        server.execute(() -> {
+                            var sp = server.getPlayerList().getPlayerByName(botName);
+                            if (sp != null) {
+                                ccCartStartX = sp.getX();
+                            }
+                        });
                     }
                 } else {
                     ccMountStableTicks = 0;
+                }
+                // 骑乘中给矿车速度：data merge Motion（骑乘后设置，summon 时给会被骑乘初始化重置）
+                if (ccMountChecked && !ccDismountSent && !ccCartPushed) {
+                    ccCartPushed = true;
+                    server.execute(() -> {
+                        var sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null && sp.getVehicle() != null) {
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    "data merge entity " + sp.getVehicle().getUUID()
+                                            + " {Motion:[0.6d,0.0d,0.0d]}");
+                        }
+                    });
+                }
+                if (ccMountChecked && !ccDismountSent) {
+                    server.execute(() -> {
+                        var sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null && sp.getVehicle() != null) {
+                            ccCartMoved = Math.abs(sp.getX() - ccCartStartX) > 0.5;
+                        }
+                    });
+                    if (ccCartMoved) {
+                        ccDismountSent = true;
+                        waitTicks = 0;
+                        com.mockplayer.session.ControlCommands.dismount(botName);
+                    }
                 }
                 server.execute(() -> {
                     var sp = server.getPlayerList().getPlayerByName(botName);
@@ -2230,9 +2261,18 @@ public final class TestRunner {
                 });
                 // 必须先 mount 成功才允许 dismount PASS：没上马时 getVehicle()==null 恒真，会假绿
                 if (ccDismounted && ccMountChecked) {
+                    check("dismount while moving", ccCartMoved);
                     check("dismount", true);
                     step = 15;
                 } else if (waitTicks > 220) {
+                    server.execute(() -> {
+                        var sp = server.getPlayerList().getPlayerByName(botName);
+                        System.out.println("[mocktest] diag mount/dismount vehicle="
+                                + (sp != null ? String.valueOf(sp.getVehicle()) : "no-sp")
+                                + " moved=" + ccCartMoved + " startX=" + ccCartStartX
+                                + " x=" + (sp != null ? sp.getX() : -1)
+                                + " pushed=" + ccCartPushed + " checked=" + ccMountChecked);
+                    });
                     fail("mount/dismount timeout");
                     step = 15;
                 }
@@ -5252,6 +5292,9 @@ public final class TestRunner {
         ccMountStableTicks = 0;
         ccDismountSent = false;
         ccDismounted = false;
+        ccCartStartX = 0;
+        ccCartMoved = false;
+        ccCartPushed = false;
         ccChestPos = null;
         ccChestSet = false;
         ccChestClicked = false;
