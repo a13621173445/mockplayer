@@ -33,7 +33,8 @@ public class SessionManager {
      * @return true 创建成功，false 重名
      */
     public boolean createFakePlayer(String name) {
-        return this.manager.createBot(BotProfile.of(name, BotManagerImpl.COMMAND_OWNER)) != null;
+        // 命令入口：走内部 CORE 路径（受命令/配置管理）
+        return this.manager.createCoreBot(BotProfile.of(name, BotManagerImpl.COMMAND_OWNER)) != null;
     }
 
     /**

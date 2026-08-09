@@ -35,6 +35,17 @@ public class BotManagerImpl implements BotManager {
 
     @Override
     public Bot createBot(BotProfile profile) {
+        // 公共 API：固定标记 API（外部/附属 mod 创建，不受本 mod 命令/配置管理，
+        // 即使调用方伪造 owner="command" 也无法变成 CORE）
+        return this.createBotInternal(profile, com.mockplayer.api.BotSource.API);
+    }
+
+    /** 本 mod 命令创建路径（/newplayer、批量命令）：标记 CORE，受命令/配置管理。 */
+    Bot createCoreBot(BotProfile profile) {
+        return this.createBotInternal(profile, com.mockplayer.api.BotSource.CORE);
+    }
+
+    private Bot createBotInternal(BotProfile profile, com.mockplayer.api.BotSource source) {
         if (profile == null) {
             return null;
         }
@@ -44,6 +55,7 @@ public class BotManagerImpl implements BotManager {
         }
         FakeSession session = new FakeSession(name);
         session.setOwner(profile.owner());
+        session.setSource(source);
         BotImpl bot = new BotImpl(session, profile.owner());
         session.setBot(bot);
         for (BotListener listener : this.globalListeners) {

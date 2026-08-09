@@ -52,6 +52,8 @@ public class FakeSession {
     private net.minecraft.client.multiplayer.TransferState pendingTransfer;
     /** 创建者标识（BotManagerImpl 创建时写入）："command" = 主玩家命令；外部 mod 用自己 modId */
     private String owner = BotManagerImpl.COMMAND_OWNER;
+    /** 创建来源：CORE = 本 mod 命令创建；API = 外部/附属 mod 经公共 API 创建（默认）。 */
+    private volatile com.mockplayer.api.BotSource source = com.mockplayer.api.BotSource.API;
     /** 关联的 Bot 实现（BotManagerImpl 创建时写入，驱动事件/动作） */
     private BotImpl bot;
     /** 死亡后是否自动重生（默认 true = 产品行为不变；测试可关闭以验证 respawn 命令） */
@@ -71,6 +73,16 @@ public class FakeSession {
     /** 创建者标识 */
     public String getOwner() {
         return this.owner;
+    }
+
+    public com.mockplayer.api.BotSource getSource() {
+        return this.source;
+    }
+
+    void setSource(com.mockplayer.api.BotSource source) {
+        if (source != null) {
+            this.source = source;
+        }
     }
 
     /** 设置关联 Bot（BotManagerImpl.createBot 调用） */

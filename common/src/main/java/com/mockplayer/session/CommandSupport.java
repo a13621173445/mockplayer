@@ -53,7 +53,10 @@ public final class CommandSupport {
     }
 
     static Bot findBot(String name) {
-        return MockplayerApi.bots().getBot(name).orElse(null);
+        // 管理边界：只认本 mod 命令创建的假人（CORE），API/附属创建的不可见
+        return MockplayerApi.bots().getBot(name)
+                .filter(b -> b.source() == com.mockplayer.api.BotSource.CORE)
+                .orElse(null);
     }
 
     /** 取 bot + PLAYING 校验；失败返回反馈组件，null 表示成功拿到 bot。 */
@@ -79,7 +82,10 @@ public final class CommandSupport {
     /** 假人名字补全（/control 与 /query 的 player 参数共用）。 */
     static <S extends SharedSuggestionProvider> SuggestionProvider<S> botNames() {
         return (ctx, builder) -> SharedSuggestionProvider.suggest(
-                SessionManager.getInstance().getFakePlayerNames(), builder);
+                MockplayerApi.bots().getBots().stream()
+                        .filter(b -> b.source() == com.mockplayer.api.BotSource.CORE)
+                        .map(com.mockplayer.api.Bot::getName)
+                        .toList(), builder);
     }
 
     /** 固定候选补全。 */

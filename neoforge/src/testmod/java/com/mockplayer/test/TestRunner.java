@@ -284,10 +284,13 @@ public final class TestRunner {
             return null;
         }
         if (server.getPlayerList().getPlayerByName(botName) != null) {
-            MockplayerApi.bots().removeBot(botName, "test");
+            MockplayerApi.bots().removeBot(botName, "command");
             return null;
         }
-        bot = MockplayerApi.bots().createBot(BotProfile.of(botName, "test"));
+        // 走真实命令路径创建（source=CORE，受本 mod 命令/配置管理）
+        MockplayerApi.bots().removeBot(botName, "command");
+        com.mockplayer.session.FakePlayerCommands.newPlayer(botName);
+        bot = MockplayerApi.bots().getBot(botName).orElse(null);
         // 套件开始：清理上一个套件残留的非玩家实体（husk/村民/马/箭/掉落物等）——连跑稳定
         MinecraftServer srv = server;
         srv.execute(() -> srv.getCommands().performPrefixedCommand(
@@ -312,7 +315,8 @@ public final class TestRunner {
                     check("getLocalPlayer != null", bot.getLocalPlayer() != null);
                     check("getLevel != null", bot.getLevel() != null);
                     check("getGameMode != null", bot.getGameMode() != null);
-                    check("getOwner == test", "test".equals(bot.getOwner()));
+                    // 管理 bot 走真实命令路径创建：owner = "command"（CORE）
+                    check("getOwner == command", "command".equals(bot.getOwner()));
                     step = 2;
                 }
             }
@@ -408,6 +412,20 @@ public final class TestRunner {
             }
             case 8 -> {
                 check("getContainer empty (no menu open)", bot.getContainer().isEmpty());
+                // 管理边界：公共 API 创建的假人（即使伪造 owner="command"）不被本 mod 命令管理
+                var boundaryApiBot = MockplayerApi.bots().createBot(
+                        com.mockplayer.api.BotProfile.of("tbot-api-b", "command"));
+                check("boundary api bot created", boundaryApiBot != null);
+                String boundaryList = com.mockplayer.session.QueryCommands.list().getString();
+                check("boundary api bot not in query list",
+                        !boundaryList.contains("tbot-api-b"), "list=" + boundaryList);
+                String boundaryDel = com.mockplayer.session.FakePlayerCommands.delPlayer("tbot-api-b").getString();
+                check("boundary delplayer refuses api bot",
+                        MockplayerApi.bots().getBot("tbot-api-b").isPresent(), "del=" + boundaryDel);
+                check("boundary core bot in query list",
+                        boundaryList.contains(botName), "list=" + boundaryList);
+                // 清理：API 层 removeBot + command 特权仍可删（命令层不删它）
+                MockplayerApi.bots().removeBot("tbot-api-b", "command");
                 // 新原语冒烟：无环境空操作不崩（drop/mount/dismount/持续攻击使用）
                 bot.actions().drop(0, false);
                 bot.actions().mount(true);
@@ -416,8 +434,8 @@ public final class TestRunner {
                 bot.actions().sustainedUse(null);
                 bot.actions().stopSustained();
                 check("new primitives no-crash", true);
-                check("removeBot own owner", MockplayerApi.bots().removeBot(botName, "test") == RemoveResult.REMOVED);
-                check("removeBot not found", MockplayerApi.bots().removeBot(botName, "test") == RemoveResult.NOT_FOUND);
+                check("removeBot own owner", MockplayerApi.bots().removeBot(botName, "command") == RemoveResult.REMOVED);
+                check("removeBot not found", MockplayerApi.bots().removeBot(botName, "command") == RemoveResult.NOT_FOUND);
                 finishSuite();
             }
         }
@@ -675,11 +693,12 @@ public final class TestRunner {
                 // BotManager / MockplayerApi：getBot/getBots/getBots(owner)/allBots
                 check("getBot found", MockplayerApi.bots().getBot(botName).isPresent());
                 check("getBots contains", MockplayerApi.bots().getBots().stream().anyMatch(b -> botName.equals(b.getName())));
-                check("getBots(owner=test) contains", MockplayerApi.bots().getBots("test").stream().anyMatch(b -> botName.equals(b.getName())));
+                // 管理 bot 由命令路径创建：owner = "command"
+                check("getBots(owner=command) contains", MockplayerApi.bots().getBots("command").stream().anyMatch(b -> botName.equals(b.getName())));
                 check("allBots contains", MockplayerApi.allBots().stream().anyMatch(b -> botName.equals(b.getName())));
                 // removeBot 幂等
-                check("removeBot owner ok", MockplayerApi.bots().removeBot(botName, "test") == RemoveResult.REMOVED);
-                check("removeBot not found", MockplayerApi.bots().removeBot(botName, "test") == RemoveResult.NOT_FOUND);
+                check("removeBot owner ok", MockplayerApi.bots().removeBot(botName, "command") == RemoveResult.REMOVED);
+                check("removeBot not found", MockplayerApi.bots().removeBot(botName, "command") == RemoveResult.NOT_FOUND);
                 finishSuite();
             }
         }
@@ -1359,7 +1378,7 @@ public final class TestRunner {
                 }
             }
             case 23 -> {
-                MockplayerApi.bots().removeBot(botName, "test");
+                MockplayerApi.bots().removeBot(botName, "command");
                 finishSuite();
             }
         }
@@ -1748,7 +1767,8 @@ public final class TestRunner {
                 }
                 // list 查询
                 String listText = com.mockplayer.session.QueryCommands.list().getString();
-                check("list contains bot", listText.contains(botName) && listText.contains("test"),
+                // 管理 bot 由命令路径创建：owner = "command"
+                check("list contains bot", listText.contains(botName) && listText.contains("command"),
                         "text=" + listText.replace("\n", "|"));
                 ccTreeChecked = true;
                 step = 1;
@@ -3211,7 +3231,7 @@ public final class TestRunner {
                 }
             }
             case 8 -> {
-                MockplayerApi.bots().removeBot(botName, "test");
+                MockplayerApi.bots().removeBot(botName, "command");
                 finishSuite();
             }
         }
@@ -3709,7 +3729,7 @@ public final class TestRunner {
                         .anyMatch(p -> p.getProfile().name().equals("tbot-le2"));
                 if (le2Seen && !leRemove2Done) {
                     leRemove2Done = true;
-                    MockplayerApi.bots().removeBot("tbot-le2", "test"); // 第二个假人离开 → 主假人 onPlayerLeft
+                    MockplayerApi.bots().removeBot("tbot-le2", "command"); // 第二个假人离开 → 主假人 onPlayerLeft
                 }
                 if (leCounts.getOrDefault("onDisconnected", 0) >= 1 && leCounts.getOrDefault("onPlayerLeft", 0) >= 1) {
                     check("onDisconnected", true);
@@ -3905,7 +3925,7 @@ public final class TestRunner {
                 }
             }
             case 15 -> {
-                MockplayerApi.bots().removeBot(botName, "test");
+                MockplayerApi.bots().removeBot(botName, "command");
                 finishSuite();
             }
         }
@@ -4076,7 +4096,7 @@ public final class TestRunner {
             }
             case 6 -> {
                 removeHusks(server);
-                MockplayerApi.bots().removeBot(botName, "test");
+                MockplayerApi.bots().removeBot(botName, "command");
                 finishSuite();
             }
         }
@@ -4252,7 +4272,7 @@ public final class TestRunner {
             }
             case 9 -> {
                 removeHusks(server);
-                MockplayerApi.bots().removeBot(botName, "test");
+                MockplayerApi.bots().removeBot(botName, "command");
                 finishSuite();
             }
         }
@@ -4581,7 +4601,7 @@ public final class TestRunner {
                 }
             }
             case 7 -> {
-                MockplayerApi.bots().removeBot(botName, "test");
+                MockplayerApi.bots().removeBot(botName, "command");
                 finishSuite();
             }
         }
@@ -4707,7 +4727,7 @@ public final class TestRunner {
                 }
             }
             case 9 -> {
-                MockplayerApi.bots().removeBot(botName, "test");
+                MockplayerApi.bots().removeBot(botName, "command");
                 finishSuite();
             }
         }
@@ -4819,7 +4839,7 @@ public final class TestRunner {
                 }
             }
             case 9 -> {
-                MockplayerApi.bots().removeBot(botName, "test");
+                MockplayerApi.bots().removeBot(botName, "command");
                 finishSuite();
             }
         }
@@ -4953,7 +4973,7 @@ public final class TestRunner {
                 }
             }
             case 10 -> {
-                MockplayerApi.bots().removeBot(botName, "test");
+                MockplayerApi.bots().removeBot(botName, "command");
                 finishSuite();
             }
         }
@@ -5082,7 +5102,7 @@ public final class TestRunner {
                 server.execute(() -> {
                     server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill @e[type=minecraft:villager]");
                 });
-                MockplayerApi.bots().removeBot(botName, "test");
+                MockplayerApi.bots().removeBot(botName, "command");
                 finishSuite();
             }
         }
@@ -5443,7 +5463,7 @@ public final class TestRunner {
             case 4 -> {
                 mc.debugEntries.setOverlayVisible(false);
                 MockplayerConfig.save(new ModConfig());
-                MockplayerApi.bots().removeBot(botName, "test");
+                MockplayerApi.bots().removeBot(botName, "command");
                 finishSuite();
             }
         }
@@ -5651,6 +5671,11 @@ public final class TestRunner {
 
     /** 当前套件收尾：写结果 JSON → 推进下一个套件（world 已在，直接 RUN）或全部完成退出 */
     private static void finishSuite() {
+        // 清理当前套件 bot，避免残留干扰后续套件（幂等：已删则 NOT_FOUND 无害）
+        if (bot != null) {
+            com.mockplayer.api.MockplayerApi.bots().removeBot(bot.getName(), "command");
+            bot = null;
+        }
         long elapsed = System.currentTimeMillis() - suiteStart;
         writeResultJson(elapsed);
         boolean passed = records.stream().allMatch(Record::passed);

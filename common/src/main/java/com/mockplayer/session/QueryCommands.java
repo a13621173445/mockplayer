@@ -43,7 +43,10 @@ public class QueryCommands {
     // ===== 查询命令 =====
 
     public static Component list() {
-        List<Bot> bots = com.mockplayer.api.MockplayerApi.bots().getBots();
+        // 管理边界：只列本 mod 命令创建的假人（CORE），API/附属创建的不可见
+        List<Bot> bots = com.mockplayer.api.MockplayerApi.bots().getBots().stream()
+                .filter(b -> b.source() == com.mockplayer.api.BotSource.CORE)
+                .toList();
         MutableComponent out = CommandSupport.info("commands.mockplayer.query.list.header", bots.size());
         for (Bot bot : bots) {
             out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.list.entry",

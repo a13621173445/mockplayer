@@ -41,8 +41,8 @@ public class FakePlayerCommands {
             return Component.translatable("commands.mockplayer.newplayer.not_in_server")
                     .withStyle(FAIL_COLOR);
         }
-        // 命令创建：owner="command"（特权）
-        if (com.mockplayer.api.MockplayerApi.bots().createBot(
+        // 命令创建：走内部 CORE 路径（受命令/配置管理）；owner="command"（特权）
+        if (((BotManagerImpl) com.mockplayer.api.MockplayerApi.bots()).createCoreBot(
                 com.mockplayer.api.BotProfile.of(name, BotManagerImpl.COMMAND_OWNER)) != null) {
             return Component.translatable("commands.mockplayer.newplayer.success", playerName(name))
                     .withStyle(SUCCESS_COLOR);
@@ -53,9 +53,15 @@ public class FakePlayerCommands {
     }
 
     /**
-     * 执行 /delplayer 命令（命令特权，可删除任何 owner 的假人）。
+     * 执行 /delplayer 命令：只管理本 mod 命令创建的假人（source == CORE）。
+     * 外部 / 附属 mod 经 API 创建的假人一律不可见、不可删除。
      */
     public static Component delPlayer(String name) {
+        var existing = com.mockplayer.api.MockplayerApi.bots().getBot(name);
+        if (existing.isEmpty() || existing.get().source() != com.mockplayer.api.BotSource.CORE) {
+            return Component.translatable("commands.mockplayer.delplayer.fail", playerName(name))
+                    .withStyle(FAIL_COLOR);
+        }
         return switch (com.mockplayer.api.MockplayerApi.bots().removeBot(name, BotManagerImpl.COMMAND_OWNER)) {
             case REMOVED -> Component.translatable("commands.mockplayer.delplayer.success", playerName(name))
                     .withStyle(SUCCESS_COLOR);
@@ -80,6 +86,11 @@ public class FakePlayerCommands {
             return Component.translatable("commands.mockplayer.connect.not_found", playerName(name))
                     .withStyle(FAIL_COLOR);
         }
+        if (session.getSource() != com.mockplayer.api.BotSource.CORE) {
+            // 只管理本 mod 命令创建的假人：API 创建的假人（含附属 mod）不响应 /connect
+            return Component.translatable("commands.mockplayer.connect.not_found", playerName(name))
+                    .withStyle(FAIL_COLOR);
+        }
         if (port < 1 || port > 65535) {
             return Component.translatable("commands.mockplayer.connect.invalid_port")
                     .withStyle(FAIL_COLOR);
@@ -97,7 +108,10 @@ public class FakePlayerCommands {
      */
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> fakePlayerNames() {
         return (ctx, builder) -> SharedSuggestionProvider.suggest(
-                SessionManager.getInstance().getFakePlayerNames(), builder);
+                com.mockplayer.api.MockplayerApi.bots().getBots().stream()
+                        .filter(b -> b.source() == com.mockplayer.api.BotSource.CORE)
+                        .map(com.mockplayer.api.Bot::getName)
+                        .toList(), builder);
     }
 
     /**

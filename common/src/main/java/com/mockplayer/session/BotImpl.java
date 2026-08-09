@@ -111,6 +111,11 @@ public class BotImpl implements Bot {
     }
 
     @Override
+    public com.mockplayer.api.BotSource source() {
+        return this.session.getSource();
+    }
+
+    @Override
     public BotLifecycle getLifecycle() {
         if (this.session.getFakePlayer() != null && this.session.isConnected()) {
             return BotLifecycle.PLAYING;

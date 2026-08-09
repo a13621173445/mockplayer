@@ -47,6 +47,14 @@ public interface Bot {
     String getOwner();
 
     /**
+     * 创建来源：CORE = 本 mod 命令创建（受命令/配置管理）；API = 外部/附属
+     * mod 经公共 API 创建（不受本 mod 命令/配置管理）。
+     *
+     * @return BotSource
+     */
+    BotSource source();
+
+    /**
      * 当前生命周期状态。
      *
      * @return BotLifecycle
