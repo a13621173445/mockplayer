@@ -14,7 +14,8 @@ import java.util.Locale;
  * 假人 F3 调试信息标签（名字标签下方一行）。
  *
  * 输入：配置开关 debugOverlayEnabled + F3 调试信息可见（DebugScreenOverlay）
- * 输出：多行 Component（每行带颜色）：❤血量 🍗饱食度 💾内存(KB/MB) 🏃速度(m/s) 📦容器标题
+ * 输出：多行 Component（每行带颜色）：❤血量 🍗饱食度(饱和度) 同一行，
+ * 💾内存(KB/MB) 🏃速度(m/s) 📦容器标题 各自一行
  *
  * 只读假人状态，零主玩家污染；无 player 时返回 null（渲染层不显示）。
  * emoji/数值/单位拼接为通用符号（语言无关），容器标题用原版翻译组件。
@@ -53,8 +54,15 @@ public final class DebugNameTagInfo {
             return null;
         }
         MutableComponent line = Component.literal("");
-        appendLine(line, "❤" + Math.round(bot.getLocalPlayer().getHealth()), ChatFormatting.RED);
-        appendLine(line, "🍗" + bot.getLocalPlayer().getFoodData().getFoodLevel(), ChatFormatting.GOLD);
+        // 血量 + 饥饿度(饱和度) 同一行：❤20 🍗20(14)
+        MutableComponent stats = Component.literal(
+                "❤" + Math.round(bot.getLocalPlayer().getHealth()))
+                .withStyle(ChatFormatting.RED);
+        stats.append(Component.literal(" 🍗"
+                + bot.getLocalPlayer().getFoodData().getFoodLevel()
+                + "(" + Math.round(bot.getLocalPlayer().getFoodData().getSaturationLevel()) + ")")
+                .withStyle(ChatFormatting.GOLD));
+        line.append(stats);
         appendLine(line, "💾" + formatBytes(bot.memoryInfo().trackedBytes()), ChatFormatting.AQUA);
         double speed = bot.getLocalPlayer().getDeltaMovement().horizontalDistance() * 20.0;
         appendLine(line, "🏃" + String.format(Locale.ROOT, "%.1f", speed) + " m/s", ChatFormatting.GREEN);

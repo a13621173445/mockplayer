@@ -5104,11 +5104,13 @@ public final class TestRunner {
                 check("debug tag non-empty", info != null && !info.getString().isBlank());
                 if (info != null) {
                     java.util.List<net.minecraft.network.chat.Component> rows = info.getSiblings();
-                    check("debug tag multi-line", rows.size() >= 4, "rows=" + rows.size());
-                    check("debug tag health row", rows.stream().anyMatch(r ->
-                            r.getString().startsWith("❤" + Math.round(bot.getLocalPlayer().getHealth()))));
-                    check("debug tag food row", rows.stream().anyMatch(r ->
-                            r.getString().startsWith("🍗" + bot.getLocalPlayer().getFoodData().getFoodLevel())));
+                    int health = Math.round(bot.getLocalPlayer().getHealth());
+                    int food = bot.getLocalPlayer().getFoodData().getFoodLevel();
+                    int sat = Math.round(bot.getLocalPlayer().getFoodData().getSaturationLevel());
+                    check("debug tag multi-line", rows.size() >= 3, "rows=" + rows.size());
+                    check("debug tag health+food row", rows.stream().anyMatch(r ->
+                            r.getString().startsWith("❤" + health)
+                                    && r.getString().contains("🍗" + food + "(" + sat + ")")));
                     check("debug tag memory row", rows.stream().anyMatch(r ->
                             r.getString().startsWith("💾")
                                     && (r.getString().contains("KB") || r.getString().contains("MB"))));
