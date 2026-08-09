@@ -13,6 +13,12 @@ public class MockplayerTestMod implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        String noYacl = System.getProperty("mockplayer.noyacl");
+        if (noYacl != null && !noYacl.isBlank()) {
+            // 无 YACL 冒烟：独立轻量入口，不触碰 TestRunner（TestRunner 编译期引用 YACL）
+            ClientTickEvents.END_CLIENT_TICK.register(mc -> NoYaclSmoke.tick(mc));
+            return;
+        }
         String suite = System.getProperty("mockplayer.test");
         if (suite == null || suite.isBlank()) {
             return;

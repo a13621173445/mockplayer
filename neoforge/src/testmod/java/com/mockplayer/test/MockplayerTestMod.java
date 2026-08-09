@@ -22,6 +22,13 @@ public class MockplayerTestMod {
         if (FMLEnvironment.getDist() != Dist.CLIENT) {
             return;
         }
+        String noYacl = System.getProperty("mockplayer.noyacl");
+        if (noYacl != null && !noYacl.isBlank()) {
+            // 无 YACL 冒烟：独立轻量入口，不触碰 TestRunner（TestRunner 编译期引用 YACL）
+            NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post e) ->
+                    NoYaclSmoke.tick(Minecraft.getInstance()));
+            return;
+        }
         String suite = System.getProperty("mockplayer.test");
         if (suite == null || suite.isBlank()) {
             return;

@@ -2,12 +2,20 @@ plugins {
     id 'multiloader-loader'
     id 'net.fabricmc.fabric-loom'
 }
+
+configurations {
+    // YACL 可选界面库：只按 run 注入到带界面的运行环境（noYaclClient 不注入 = 真无 YACL 冒烟）
+    yaclDevRuntime
+}
+
 dependencies {
     minecraft("com.mojang:minecraft:${minecraft_version}")
     implementation("net.fabricmc:fabric-loader:${fabric_loader_version}")
     implementation("net.fabricmc.fabric-api:fabric-api:${fabric_version}")
-    // YACL 配置界面 + ModMenu 模组列表入口（均为可选依赖：mods.toml / fabric.mod.json 只标 suggests）
-    implementation("dev.isxander:yet-another-config-lib:${yacl_version}-fabric")
+    // YACL 配置界面（可选依赖）：编译期 compileOnly，运行期按 run 注入 yaclDevRuntime
+    compileOnly("dev.isxander:yet-another-config-lib:${yacl_version}-fabric")
+    yaclDevRuntime("dev.isxander:yet-another-config-lib:${yacl_version}-fabric")
+    // ModMenu 模组列表入口（可选依赖：fabric.mod.json 只标 suggests）
     implementation("com.terraformersmc:modmenu:${modmenu_version}")
 }
 
@@ -42,6 +50,15 @@ loom {
             // 命令行 -Psuite=api-smoke 单套件；缺省 all = 全部套件
             property('mockplayer.test', project.findProperty('suite') ?: 'all')
         }
+        noYaclClient {
+            client()
+            setConfigName('Fabric NoYacl Test')
+            ideConfigGenerated(false)
+            runDir('runs/client')
+            source(sourceSets.testmod)
+            // 无 YACL 冒烟：本 run 不注入 yaclDevRuntime，验证可选依赖守卫
+            property('mockplayer.noyacl', '1')
+        }
         server {
             server()
             setConfigName('Fabric Server')
@@ -49,6 +66,14 @@ loom {
             runDir('runs/server')
         }
     }
+}
+
+// YACL 只注入正常 client/testClient；noYaclClient 不注入（loom run task 是 JavaExec，可按任务加 classpath）
+tasks.named('runClient', JavaExec) {
+    classpath(configurations.yaclDevRuntime)
+}
+tasks.named('runTestClient', JavaExec) {
+    classpath(configurations.yaclDevRuntime)
 }
 
 // Implement mcgradleconventions loader attribute

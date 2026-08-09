@@ -1,7 +1,7 @@
 package com.mockplayer.fabric;
 
 import com.mockplayer.config.MissingYaclScreen;
-import com.mockplayer.config.ModConfigScreen;
+import com.mockplayer.config.ModConfigScreenFactory;
 
 import com.terraformersmc.modmenu.api.ConfigScreenFactory;
 import com.terraformersmc.modmenu.api.ModMenuApi;
@@ -14,18 +14,17 @@ import net.fabricmc.loader.api.FabricLoader;
  * 输入：玩家在模组列表点「配置」
  * 输出：有 YACL → YACL 配置界面；无 YACL → 原版兜底提示界面（配置仍可手改 JSON）
  *
- * YACL 引用全部藏在 ModConfigScreen 里，且先用 isModLoaded 短路，
- * 缺 YACL 时不会触发 NoClassDefFoundError。
+ * YACL 引用全部藏在 ModConfigScreen 里；本类及其 lambda 只引用零 YACL 的
+ * ModConfigScreenFactory（反射桥），缺 YACL 时类加载验证不会碰 YACL 类。
  */
 public class ModMenuIntegration implements ModMenuApi {
 
     @Override
     public ConfigScreenFactory<?> getModConfigScreenFactory() {
         return parent -> {
-            if (FabricLoader.getInstance().isModLoaded("yet_another_config_lib_v3")) {
-                return new ModConfigScreen(parent);
-            }
-            return new MissingYaclScreen(parent);
+            net.minecraft.client.gui.screens.Screen screen =
+                    ModConfigScreenFactory.create(parent);
+            return screen != null ? screen : new MissingYaclScreen(parent);
         };
     }
 }

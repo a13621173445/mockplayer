@@ -4,7 +4,8 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 
 import com.mockplayer.Constants;
-import com.mockplayer.config.ModConfigScreen;
+import com.mockplayer.config.MissingYaclScreen;
+import com.mockplayer.config.ModConfigScreenFactory;
 import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.SessionManager;
@@ -43,7 +44,12 @@ public class MockplayerNeoForgeClient {
         if (ModList.get().isLoaded("yet_another_config_lib_v3")) {
             container.registerExtensionPoint(IConfigScreenFactory.class,
                     (java.util.function.Supplier<IConfigScreenFactory>)
-                            () -> (modContainer, parent) -> new ModConfigScreen(parent));
+                            () -> (modContainer, parent) -> {
+                                // 反射桥：类加载验证不直接引用 YACL 类，缺 YACL 也不会 NoClassDefFoundError
+                                net.minecraft.client.gui.screens.Screen screen =
+                                        ModConfigScreenFactory.create(parent);
+                                return screen != null ? screen : new MissingYaclScreen(parent);
+                            });
         }
     }
 

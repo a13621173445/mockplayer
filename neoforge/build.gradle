@@ -59,6 +59,14 @@ neoForge {
             // IDE 右上角跑（无 -Psuite）默认 all = 全部套件；命令行 -Psuite=api-smoke 单套件
             systemProperty('mockplayer.test', project.findProperty('suite') ?: 'all')
         }
+        noYaclClient {
+            client()
+            gameDirectory = this.mkdir(this.file('runs/client'))
+            disableIdeRun()
+            loadedMods = [mods."${mod_id}", mods."${mod_id}_test"]
+            // 无 YACL 冒烟：本 run 不注入 yaclDevRuntime，验证可选依赖守卫
+            systemProperty('mockplayer.noyacl', '1')
+        }
         data {
             clientData()
             gameDirectory = this.mkdir(this.file('runs/data'))
@@ -74,9 +82,28 @@ neoForge {
     }
 }
 
+configurations {
+    // YACL 可选界面库：只按 run 注入到带界面的运行环境（noYaclClient 不注入 = 真无 YACL 冒烟）
+    yaclDevRuntime
+}
+
 dependencies {
-    // YACL 配置界面（可选依赖：mods.toml 标 optional，玩家不装也有配置文件兜底）
-    implementation("dev.isxander:yet-another-config-lib:${yacl_version}-neoforge")
+    // YACL 配置界面（可选依赖）：编译期 compileOnly，运行期按 run 注入 yaclDevRuntime
+    compileOnly("dev.isxander:yet-another-config-lib:${yacl_version}-neoforge")
+    yaclDevRuntime("dev.isxander:yet-another-config-lib:${yacl_version}-neoforge")
+}
+
+// YACL 只注入正常 client/testClient；noYaclClient 不注入。
+// 必须加进 classpathProvider（与 implementation 同一条集合）而不是 JavaExec.classpath：
+// JavaExec.classpath 追加在最前面，YACL 嵌套的 gson 会顶掉 MC 自带 Gson（NoSuchMethodError）。
+// afterEvaluate 保证排在 moddev 的 runtimeClasspath 之后（游戏库在前，类解析顺序正确）。
+project.afterEvaluate {
+    tasks.named('runClient') {
+        getClasspathProvider().from(configurations.yaclDevRuntime)
+    }
+    tasks.named('runTestClient') {
+        getClasspathProvider().from(configurations.yaclDevRuntime)
+    }
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
