@@ -6,6 +6,13 @@ import com.mockplayer.api.BotProfile;
 import com.mockplayer.api.MockplayerApi;
 import com.mockplayer.api.RemoveResult;
 import com.mockplayer.api.container.BotContainer;
+import com.mockplayer.config.MissingYaclScreen;
+import com.mockplayer.config.ModConfig;
+import com.mockplayer.config.ModConfigIO;
+import com.mockplayer.config.ModConfigScreen;
+import com.mockplayer.config.MockplayerConfig;
+import com.mockplayer.session.EventRecorder;
+import com.mockplayer.session.FakePlayerState;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -26,8 +33,12 @@ import net.minecraft.world.level.levelgen.presets.WorldPresets;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -45,7 +56,8 @@ public final class TestRunner {
     /** 全部套件（suite=all / IDE 默认入口时按序连续跑） */
     private static final List<String> ALL_SUITES = List.of(
             "api-smoke", "api-full", "use-items", "containers", "containers-all", "crafting", "furnace",
-            "combat-stab", "combat-sprint", "enchanting", "merchant", "gui-actions", "listener-events", "control-commands");
+            "combat-stab", "combat-sprint", "enchanting", "merchant", "gui-actions", "listener-events", "control-commands",
+            "config");
 
     private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }
 
@@ -78,6 +90,7 @@ public final class TestRunner {
             case "gui-actions" -> "tbot-gui";
             case "listener-events" -> "tbot-le";
             case "control-commands" -> "tbot-ctl";
+            case "config" -> "tbot-cfg";
             default -> "tbot";
         };
     }
@@ -217,6 +230,7 @@ public final class TestRunner {
             case "gui-actions" -> runGuiActions(mc);
             case "listener-events" -> runListenerEvents(mc);
             case "control-commands" -> runControlCommands(mc);
+            case "config" -> runConfig(mc);
             default -> {
                 fail("unknown suite: " + suite);
                 finishSuite();
@@ -703,7 +717,6 @@ public final class TestRunner {
     private static boolean uiSnowGiven;
     private static boolean uiSnowUsed;
     private static volatile boolean uiSnowballServer;
-    private static volatile boolean uiSnowballVisibleToMain;
     private static volatile boolean uiSnowServer;
     private static boolean uiOffhandGiven;
     private static boolean uiOffhandUsed;
@@ -1013,25 +1026,36 @@ public final class TestRunner {
                     bot.getLocalPlayer().getInventory().setSelectedSlot(0);
                     bot.actions().useItem(net.minecraft.world.InteractionHand.MAIN_HAND);
                 }
-                server.execute(() -> {
-                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
-                    if (sp != null) {
-                        // 服务端 + 主玩家视角：丢雪球对主玩家可见（雪球实体出现在主玩家 level）
-                        uiSnowballServer = !sp.level().getEntitiesOfClass(
-                                net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball.class,
-                                new net.minecraft.world.phys.AABB(sp.position().add(-16, -8, -16), sp.position().add(16, 8, 16))).isEmpty();
-                        uiSnowballVisibleToMain = !mc.level.getEntitiesOfClass(
-                                net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball.class,
-                                new net.minecraft.world.phys.AABB(sp.position().add(-16, -8, -16), sp.position().add(16, 8, 16))).isEmpty();
+                if (!uiSnowballServer) {
+                    // 第一阶段：等服务端出现雪球实体
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            uiSnowballServer = !sp.level().getEntitiesOfClass(
+                                    net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball.class,
+                                    new net.minecraft.world.phys.AABB(sp.position().add(-16, -8, -16), sp.position().add(16, 8, 16))).isEmpty();
+                        }
+                    });
+                    if (uiSnowballServer) {
+                        check("snowball thrown (server)", true);
+                        waitTicks = 0;
+                    } else if (++waitTicks > 200) {
+                        fail("snowball not thrown timeout");
+                        step = 11;
                     }
-                });
-                if (uiSnowballServer) {
-                    check("snowball thrown (server)", true);
-                    check("snowball throw visible to main player", uiSnowballVisibleToMain);
-                    step = 11;
-                } else if (++waitTicks > 200) {
-                    fail("snowball not thrown timeout");
-                    step = 11;
+                } else {
+                    // 第二阶段：等主玩家客户端 level 同步到雪球实体（客户端实体同步有延迟，单次读会偶发 miss）
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    boolean visibleToMain = sp != null && !mc.level.getEntitiesOfClass(
+                            net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball.class,
+                            new net.minecraft.world.phys.AABB(sp.position().add(-16, -8, -16), sp.position().add(16, 8, 16))).isEmpty();
+                    if (visibleToMain) {
+                        check("snowball throw visible to main player", true);
+                        step = 11;
+                    } else if (++waitTicks > 100) {
+                        fail("snowball visible to main player timeout");
+                        step = 11;
+                    }
                 }
             }
             // ===== 副手使用：副手持盾 useItem(OFF_HAND) → 服务端格挡（isUsingItem + offhand 盾） =====
@@ -4733,6 +4757,170 @@ public final class TestRunner {
         }
     }
 
+    // ===== config：ModConfigIO 读写往返/默认值/非法值回退/手改 JSON + YACL 界面打开/保存落盘 =====
+
+    private static Path cfgDir;
+    private static Path cfgFile;
+    private static ModConfigScreen cfgScreen;
+
+    private static void runConfig(Minecraft mc) {
+        switch (step) {
+            case 0 -> {
+                if (cfgDir == null) {
+                    try {
+                        cfgDir = Files.createTempDirectory("mocktest-config");
+                        cfgFile = cfgDir.resolve("mockplayer.json");
+                    } catch (IOException e) {
+                        fail("create temp config dir");
+                        finishSuite();
+                        return;
+                    }
+                }
+                ModConfig defaults = new ModConfig();
+                check("missing file -> defaults", configEquals(defaults, ModConfigIO.load(cfgFile)));
+                ModConfigIO.save(cfgFile, defaults);
+                check("save->load round trip", configEquals(defaults, ModConfigIO.load(cfgFile)));
+                step = 1;
+            }
+            case 1 -> {
+                // 手改 JSON（只写部分字段）：改过的字段生效，缺的字段补默认
+                writeConfigRaw("{\"chatHistoryLimit\": 77}");
+                ModConfig loaded = ModConfigIO.load(cfgFile);
+                check("hand-edit applied", loaded.getChatHistoryLimit() == 77);
+                check("missing fields defaulted", loaded.getEventCacheSize() == ModConfig.DEFAULT_EVENT_CACHE_SIZE
+                        && loaded.getEventMoveSampleDistance() == ModConfig.DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE);
+                step = 2;
+            }
+            case 2 -> {
+                // 非法值（类型错/越界/负值/超上限）→ 全部回退默认；损坏文件也回退默认
+                writeConfigRaw("{\"chatHistoryLimit\":\"abc\",\"soundLogLimit\":-5,\"particleLogLimit\":99999,"
+                        + "\"eventCacheSize\":3,\"eventSummaryMaxLength\":1000000,"
+                        + "\"eventTickSampleInterval\":0,\"eventMoveSampleDistance\":999}");
+                check("invalid values fallback", configEquals(new ModConfig(), ModConfigIO.load(cfgFile)));
+                writeConfigRaw("not a json object");
+                check("corrupt file fallback", configEquals(new ModConfig(), ModConfigIO.load(cfgFile)));
+                step = 3;
+            }
+            case 3 -> {
+                boolean yaclPresent;
+                try {
+                    Class.forName("dev.isxander.yacl3.api.YetAnotherConfigLib");
+                    yaclPresent = true;
+                } catch (ClassNotFoundException e) {
+                    yaclPresent = false;
+                }
+                check("yacl available in test env", yaclPresent);
+                check("yacl mod id loaded", net.neoforged.fml.ModList.get()
+                        .isLoaded("yet_another_config_lib_v3"));
+                MockplayerConfig.reload();
+                ModConfigScreen screen = new ModConfigScreen(null);
+                mc.gui.setScreen(screen);
+                check("yacl screen opened", mc.gui.screen() == screen);
+                check("screen holds bound config", screen.config() == MockplayerConfig.get());
+                cfgScreen = screen;
+                step = 4;
+            }
+            case 4 -> {
+                // 模拟修改控件：requestSet 改一个 int 选项 → finishOrSave 应用并落盘
+                ModConfigScreen screen = cfgScreen;
+                dev.isxander.yacl3.api.Option<Integer> intOption = firstIntegerOption(screen);
+                check("integer option found", intOption != null);
+                if (intOption != null) {
+                    int before = intOption.binding().getValue();
+                    intOption.requestSet(before + 1);
+                    check("pending change registered", screen.pendingChanges());
+                    screen.finishOrSave();
+                    check("option applied to config", intOption.binding().getValue() == before + 1);
+                    check("config file written", ModConfigIO.load(MockplayerConfig.path()).getChatHistoryLimit() == before + 1);
+                    MockplayerConfig.save(new ModConfig());
+                    check("config restored", ModConfigIO.load(MockplayerConfig.path()).getChatHistoryLimit()
+                            == ModConfig.DEFAULT_CHAT_HISTORY_LIMIT);
+                }
+                step = 5;
+            }
+            case 5 -> {
+                // 配置真实生效（消费者）：聊天历史上限 + 事件缓存容量
+                MockplayerConfig.get().setChatHistoryLimit(10);
+                FakePlayerState state = new FakePlayerState();
+                for (int i = 0; i < 15; i++) {
+                    state.addChat(Component.literal("msg-" + i));
+                }
+                check("chat limit applied to state", state.getChatHistory().size() == 10);
+                MockplayerConfig.get().setEventCacheSize(10);
+                MockplayerConfig.get().setEventTickSampleInterval(1);
+                EventRecorder recorder = new EventRecorder("cfg-recorder");
+                for (int i = 0; i < 15; i++) {
+                    recorder.onTick(null);
+                }
+                check("event cache size applied", recorder.snapshot().size() == 10);
+                MockplayerConfig.save(new ModConfig());
+                // 兜底界面（无 YACL 场景的纯原版 Screen）可打开/关闭
+                MissingYaclScreen missing = new MissingYaclScreen(null);
+                mc.gui.setScreen(missing);
+                check("missing-yacl screen opened", mc.gui.screen() == missing);
+                missing.onClose();
+                check("missing-yacl screen closed", mc.gui.screen() == null);
+                cfgScreen = null;
+                deleteConfigTempDir();
+                finishSuite();
+            }
+        }
+    }
+
+    /** 找第一个 Integer 类型的选项（界面树顺序 = 构建顺序，首个即 chatHistoryLimit）。 */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static dev.isxander.yacl3.api.Option<Integer> firstIntegerOption(ModConfigScreen screen) {
+        for (dev.isxander.yacl3.api.ConfigCategory category : screen.config.categories()) {
+            for (dev.isxander.yacl3.api.OptionGroup group : category.groups()) {
+                for (dev.isxander.yacl3.api.Option<?> option : group.options()) {
+                    if (option.binding().getValue() instanceof Integer) {
+                        return (dev.isxander.yacl3.api.Option) option;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** 写原始 JSON 到临时配置文件（模拟玩家手改）。 */
+    private static void writeConfigRaw(String json) {
+        try {
+            Files.writeString(cfgFile, json, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            fail("write config json");
+        }
+    }
+
+    /** 配置全字段相等（含 double 精确比较）。 */
+    private static boolean configEquals(ModConfig a, ModConfig b) {
+        return a.getChatHistoryLimit() == b.getChatHistoryLimit()
+                && a.getSoundLogLimit() == b.getSoundLogLimit()
+                && a.getParticleLogLimit() == b.getParticleLogLimit()
+                && a.getEventCacheSize() == b.getEventCacheSize()
+                && a.getEventSummaryMaxLength() == b.getEventSummaryMaxLength()
+                && a.getEventTickSampleInterval() == b.getEventTickSampleInterval()
+                && Double.compare(a.getEventMoveSampleDistance(), b.getEventMoveSampleDistance()) == 0;
+    }
+
+    /** 删除测试专用临时目录（只删自己创建的 mocktest-config-*，不碰用户数据）。 */
+    private static void deleteConfigTempDir() {
+        if (cfgDir == null) {
+            return;
+        }
+        try (var walk = Files.walk(cfgDir)) {
+            walk.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.delete(p);
+                } catch (IOException ignored) {
+                }
+            });
+        } catch (IOException e) {
+            System.out.println("[mocktest] failed to delete config temp dir: " + e);
+        }
+        cfgDir = null;
+        cfgFile = null;
+    }
+
     // ===== 断言与结果 =====
 
     private static void check(String name, boolean ok) {
@@ -4936,6 +5124,11 @@ public final class TestRunner {
         furnaceGiven = false;
         furnaceClicked = false;
         furnaceCharcoal = false;
+        cfgDir = null;
+        cfgFile = null;
+        cfgScreen = null;
+        // 配置兜底复位：防止 config 套件中途失败把非默认值泄漏给后续套件
+        MockplayerConfig.save(new ModConfig());
     }
 
     /** 写当前套件结果 JSON（runs/client/test-results/<suite>.json），含耗时 */

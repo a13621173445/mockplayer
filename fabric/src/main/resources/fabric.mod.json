@@ -20,6 +20,9 @@
         ],
         "client": [
             "com.mockplayer.fabric.MockplayerClient"
+        ],
+        "modmenu": [
+            "com.mockplayer.fabric.ModMenuIntegration"
         ]
     },
     "mixins": [
@@ -32,6 +35,9 @@
         "fabric-api": "*",
         "minecraft": "~${minecraft_version}",
         "java": ">=${java_version}"
+    },
+    "suggests": {
+        "modmenu": "*",
+        "yet_another_config_lib_v3": "*"
     }
 }
-  

@@ -1,0 +1,137 @@
+package com.mockplayer.config;
+
+/**
+ * Mockplayer 客户端配置（纯数据类，零第三方依赖）。
+ *
+ * 输入：config/mockplayer.json（玩家可手改，缺字段/非法值由 ModConfigIO 回退默认）
+ * 输出：运行时常量（FakePlayerState 日志上限、EventRecorder 事件缓存/采样参数）
+ *
+ * 默认值与历史硬编码常量一致，保证升级后行为不变。
+ */
+public class ModConfig {
+
+    /** 聊天历史保留条数。 */
+    public static final int DEFAULT_CHAT_HISTORY_LIMIT = 200;
+    public static final int MIN_CHAT_HISTORY_LIMIT = 10;
+    public static final int MAX_CHAT_HISTORY_LIMIT = 1000;
+
+    /** 音效日志保留条数。 */
+    public static final int DEFAULT_SOUND_LOG_LIMIT = 20;
+    public static final int MIN_SOUND_LOG_LIMIT = 10;
+    public static final int MAX_SOUND_LOG_LIMIT = 500;
+
+    /** 粒子日志保留条数。 */
+    public static final int DEFAULT_PARTICLE_LOG_LIMIT = 20;
+    public static final int MIN_PARTICLE_LOG_LIMIT = 10;
+    public static final int MAX_PARTICLE_LOG_LIMIT = 500;
+
+    /** /query listen on 的事件环形缓存条数。 */
+    public static final int DEFAULT_EVENT_CACHE_SIZE = 50;
+    public static final int MIN_EVENT_CACHE_SIZE = 10;
+    public static final int MAX_EVENT_CACHE_SIZE = 500;
+
+    /** 事件推送摘要最大长度（防刷屏）。 */
+    public static final int DEFAULT_EVENT_SUMMARY_MAX_LENGTH = 120;
+    public static final int MIN_EVENT_SUMMARY_MAX_LENGTH = 20;
+    public static final int MAX_EVENT_SUMMARY_MAX_LENGTH = 500;
+
+    /** onTick 高频事件采样间隔（tick）。 */
+    public static final int DEFAULT_EVENT_TICK_SAMPLE_INTERVAL = 20;
+    public static final int MIN_EVENT_TICK_SAMPLE_INTERVAL = 1;
+    public static final int MAX_EVENT_TICK_SAMPLE_INTERVAL = 200;
+
+    /** onMove 高频事件采样位移阈值（方块）。 */
+    public static final double DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE = 0.5;
+    public static final double MIN_EVENT_MOVE_SAMPLE_DISTANCE = 0.1;
+    public static final double MAX_EVENT_MOVE_SAMPLE_DISTANCE = 10.0;
+
+    private int chatHistoryLimit = DEFAULT_CHAT_HISTORY_LIMIT;
+    private int soundLogLimit = DEFAULT_SOUND_LOG_LIMIT;
+    private int particleLogLimit = DEFAULT_PARTICLE_LOG_LIMIT;
+    private int eventCacheSize = DEFAULT_EVENT_CACHE_SIZE;
+    private int eventSummaryMaxLength = DEFAULT_EVENT_SUMMARY_MAX_LENGTH;
+    private int eventTickSampleInterval = DEFAULT_EVENT_TICK_SAMPLE_INTERVAL;
+    private double eventMoveSampleDistance = DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE;
+
+    public int getChatHistoryLimit() {
+        return this.chatHistoryLimit;
+    }
+
+    public void setChatHistoryLimit(int chatHistoryLimit) {
+        this.chatHistoryLimit = chatHistoryLimit;
+    }
+
+    public int getSoundLogLimit() {
+        return this.soundLogLimit;
+    }
+
+    public void setSoundLogLimit(int soundLogLimit) {
+        this.soundLogLimit = soundLogLimit;
+    }
+
+    public int getParticleLogLimit() {
+        return this.particleLogLimit;
+    }
+
+    public void setParticleLogLimit(int particleLogLimit) {
+        this.particleLogLimit = particleLogLimit;
+    }
+
+    public int getEventCacheSize() {
+        return this.eventCacheSize;
+    }
+
+    public void setEventCacheSize(int eventCacheSize) {
+        this.eventCacheSize = eventCacheSize;
+    }
+
+    public int getEventSummaryMaxLength() {
+        return this.eventSummaryMaxLength;
+    }
+
+    public void setEventSummaryMaxLength(int eventSummaryMaxLength) {
+        this.eventSummaryMaxLength = eventSummaryMaxLength;
+    }
+
+    public int getEventTickSampleInterval() {
+        return this.eventTickSampleInterval;
+    }
+
+    public void setEventTickSampleInterval(int eventTickSampleInterval) {
+        this.eventTickSampleInterval = eventTickSampleInterval;
+    }
+
+    public double getEventMoveSampleDistance() {
+        return this.eventMoveSampleDistance;
+    }
+
+    public void setEventMoveSampleDistance(double eventMoveSampleDistance) {
+        this.eventMoveSampleDistance = eventMoveSampleDistance;
+    }
+
+    /** 越界字段回退默认（非法值不保留，保证配置文件永远可手改且不崩）。 */
+    public void normalize() {
+        this.chatHistoryLimit = clampInt(this.chatHistoryLimit,
+                MIN_CHAT_HISTORY_LIMIT, MAX_CHAT_HISTORY_LIMIT, DEFAULT_CHAT_HISTORY_LIMIT);
+        this.soundLogLimit = clampInt(this.soundLogLimit,
+                MIN_SOUND_LOG_LIMIT, MAX_SOUND_LOG_LIMIT, DEFAULT_SOUND_LOG_LIMIT);
+        this.particleLogLimit = clampInt(this.particleLogLimit,
+                MIN_PARTICLE_LOG_LIMIT, MAX_PARTICLE_LOG_LIMIT, DEFAULT_PARTICLE_LOG_LIMIT);
+        this.eventCacheSize = clampInt(this.eventCacheSize,
+                MIN_EVENT_CACHE_SIZE, MAX_EVENT_CACHE_SIZE, DEFAULT_EVENT_CACHE_SIZE);
+        this.eventSummaryMaxLength = clampInt(this.eventSummaryMaxLength,
+                MIN_EVENT_SUMMARY_MAX_LENGTH, MAX_EVENT_SUMMARY_MAX_LENGTH, DEFAULT_EVENT_SUMMARY_MAX_LENGTH);
+        this.eventTickSampleInterval = clampInt(this.eventTickSampleInterval,
+                MIN_EVENT_TICK_SAMPLE_INTERVAL, MAX_EVENT_TICK_SAMPLE_INTERVAL, DEFAULT_EVENT_TICK_SAMPLE_INTERVAL);
+        this.eventMoveSampleDistance = clampDouble(this.eventMoveSampleDistance,
+                MIN_EVENT_MOVE_SAMPLE_DISTANCE, MAX_EVENT_MOVE_SAMPLE_DISTANCE, DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE);
+    }
+
+    private static int clampInt(int value, int min, int max, int fallback) {
+        return value >= min && value <= max ? value : fallback;
+    }
+
+    private static double clampDouble(double value, double min, double max, double fallback) {
+        return value >= min && value <= max ? value : fallback;
+    }
+}

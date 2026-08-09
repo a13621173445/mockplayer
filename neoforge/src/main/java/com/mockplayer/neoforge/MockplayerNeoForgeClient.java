@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 
 import com.mockplayer.Constants;
+import com.mockplayer.config.ModConfigScreen;
 import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.SessionManager;
@@ -15,10 +16,13 @@ import net.minecraft.commands.Commands;
 
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
 
 /**
@@ -28,13 +32,19 @@ import net.neoforged.neoforge.common.NeoForge;
 @Mod(value = Constants.MOD_ID, dist = Dist.CLIENT)
 public class MockplayerNeoForgeClient {
 
-    public MockplayerNeoForgeClient(IEventBus modBus) {
+    public MockplayerNeoForgeClient(IEventBus modBus, ModContainer container) {
         // RegisterClientCommandsEvent / ClientTickEvent.Post / ClientPlayerNetworkEvent.LoggingOut 都是
         // GAME 事件（发在 NeoForge.EVENT_BUS），不是 IModBusEvent——注册到 mod bus 会抛
         // "This bus only accepts subclasses of IModBusEvent"。必须注册到 NeoForge.EVENT_BUS。
         NeoForge.EVENT_BUS.addListener(MockplayerNeoForgeClient::registerCommands);
         NeoForge.EVENT_BUS.addListener(MockplayerNeoForgeClient::onClientTick);
         NeoForge.EVENT_BUS.addListener(MockplayerNeoForgeClient::onPlayerLogout);
+        // YACL 可选：缺 YACL 时模组列表不出现「配置」按钮，配置仍可手改 JSON（零崩溃）
+        if (ModList.get().isLoaded("yet_another_config_lib_v3")) {
+            container.registerExtensionPoint(IConfigScreenFactory.class,
+                    (java.util.function.Supplier<IConfigScreenFactory>)
+                            () -> (modContainer, parent) -> new ModConfigScreen(parent));
+        }
     }
 
     private static void registerCommands(RegisterClientCommandsEvent event) {

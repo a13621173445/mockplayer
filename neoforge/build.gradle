@@ -74,6 +74,11 @@ neoForge {
     }
 }
 
+dependencies {
+    // YACL 配置界面（可选依赖：mods.toml 标 optional，玩家不装也有配置文件兜底）
+    implementation("dev.isxander:yet-another-config-lib:${yacl_version}-neoforge")
+}
+
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 // Implement mcgradleconventions loader attribute

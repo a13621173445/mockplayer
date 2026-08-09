@@ -5,6 +5,15 @@ plugins {
     id 'net.neoforged.moddev' version '2.0.141' apply false
 }
 
+allprojects {
+    repositories {
+        // YACL 官方 Maven（可选配置界面库）
+        maven { url = uri('https://maven.isxander.dev/releases') }
+        // ModMenu 官方 Maven（Fabric 可选模组列表入口）
+        maven { url = uri('https://maven.terraformersmc.com/releases') }
+    }
+}
+
 // Pin the Gradle distribution to the Tencent mirror so `gradlew wrapper` / the IDE
 // never overwrites distributionUrl back to services.gradle.org (slow/blocked in CN).
 tasks.wrapper {

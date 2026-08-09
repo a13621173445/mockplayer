@@ -2,6 +2,7 @@ package com.mockplayer.session;
 
 import com.mockplayer.api.Bot;
 import com.mockplayer.api.event.BotListener;
+import com.mockplayer.config.MockplayerConfig;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.BlockPos;
@@ -34,18 +35,17 @@ import java.util.List;
  */
 public class EventRecorder implements BotListener {
 
-    /** 环形缓存容量。 */
-    private static final int CACHE_SIZE = 50;
-    /** onTick 采样间隔（tick）：20 = 约 1 秒一条。 */
-    private static final int TICK_SAMPLE_INTERVAL = 20;
-    /** onMove 采样位移阈值（方块）。 */
-    private static final double MOVE_SAMPLE_DISTANCE = 0.5;
-    /** 推送摘要最大长度（防刷屏）。 */
-    private static final int SUMMARY_MAX_LENGTH = 120;
-
     private final String botName;
     /** 环形缓存：明细字符串（type + 摘要），查询时才翻译/上色。 */
-    private final String[] cache = new String[CACHE_SIZE];
+    private final String[] cache;
+    /** 环形缓存容量（配置文件 eventCacheSize，监听开始时读取）。 */
+    private final int cacheSize;
+    /** 推送摘要最大长度（配置文件 eventSummaryMaxLength）。 */
+    private final int summaryMaxLength;
+    /** onTick 采样间隔（tick，配置文件 eventTickSampleInterval）。 */
+    private final int tickSampleInterval;
+    /** onMove 采样位移阈值（方块，配置文件 eventMoveSampleDistance）。 */
+    private final double moveSampleDistance;
     private int cacheIndex;
     private int cacheCount;
     /** onTick 触发总数。 */
@@ -64,6 +64,12 @@ public class EventRecorder implements BotListener {
 
     public EventRecorder(String botName) {
         this.botName = botName;
+        var cfg = MockplayerConfig.get();
+        this.cacheSize = cfg.getEventCacheSize();
+        this.cache = new String[this.cacheSize];
+        this.summaryMaxLength = cfg.getEventSummaryMaxLength();
+        this.tickSampleInterval = cfg.getEventTickSampleInterval();
+        this.moveSampleDistance = cfg.getEventMoveSampleDistance();
     }
 
     public String getBotName() {
@@ -90,8 +96,8 @@ public class EventRecorder implements BotListener {
     /** 测试/查询用：当前缓存明细快照（最近在前）。 */
     public List<String> snapshot() {
         List<String> out = new ArrayList<>();
-        for (int i = 0; i < Math.min(this.cacheCount, CACHE_SIZE); i++) {
-            int idx = (this.cacheIndex - 1 - i + CACHE_SIZE) % CACHE_SIZE;
+        for (int i = 0; i < Math.min(this.cacheCount, this.cacheSize); i++) {
+            int idx = (this.cacheIndex - 1 - i + this.cacheSize) % this.cacheSize;
             if (this.cache[idx] != null) {
                 out.add(this.cache[idx]);
             }
@@ -107,8 +113,8 @@ public class EventRecorder implements BotListener {
         }
         this.cache[this.cacheIndex] = s;
         this.cacheBytes += ExactBytes.stringBytes(s);
-        this.cacheIndex = (this.cacheIndex + 1) % CACHE_SIZE;
-        if (this.cacheCount < CACHE_SIZE) {
+        this.cacheIndex = (this.cacheIndex + 1) % this.cacheSize;
+        if (this.cacheCount < this.cacheSize) {
             this.cacheCount++;
         }
     }
@@ -122,11 +128,11 @@ public class EventRecorder implements BotListener {
                 Component.literal(truncate(summary))));
     }
 
-    private static String truncate(String s) {
+    private String truncate(String s) {
         if (s == null) {
             return "";
         }
-        return s.length() <= SUMMARY_MAX_LENGTH ? s : s.substring(0, SUMMARY_MAX_LENGTH) + "...";
+        return s.length() <= this.summaryMaxLength ? s : s.substring(0, this.summaryMaxLength) + "...";
     }
 
     /** /query events 查询输出：最近 count 条 + 高频计数/最新位置。 */
@@ -305,7 +311,7 @@ public class EventRecorder implements BotListener {
     @Override
     public void onTick(Bot bot) {
         this.tickCount++;
-        if (++this.ticksSinceSample >= TICK_SAMPLE_INTERVAL) {
+        if (++this.ticksSinceSample >= this.tickSampleInterval) {
             this.ticksSinceSample = 0;
             String pos = bot != null && bot.getLocalPlayer() != null
                     ? String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f hp=%.1f",
@@ -327,8 +333,8 @@ public class EventRecorder implements BotListener {
         double dx = p.getX() - this.lastMoveX;
         double dy = p.getY() - this.lastMoveY;
         double dz = p.getZ() - this.lastMoveZ;
-        if (Math.abs(dx) >= MOVE_SAMPLE_DISTANCE || Math.abs(dy) >= MOVE_SAMPLE_DISTANCE
-                || Math.abs(dz) >= MOVE_SAMPLE_DISTANCE) {
+        if (Math.abs(dx) >= this.moveSampleDistance || Math.abs(dy) >= this.moveSampleDistance
+                || Math.abs(dz) >= this.moveSampleDistance) {
             record("onMove", String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f", p.getX(), p.getY(), p.getZ()));
         }
         this.lastMoveX = p.getX();

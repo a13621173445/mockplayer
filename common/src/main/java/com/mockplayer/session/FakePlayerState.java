@@ -1,5 +1,7 @@
 package com.mockplayer.session;
 
+import com.mockplayer.config.MockplayerConfig;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -36,7 +38,8 @@ public class FakePlayerState {
         this.chatHistory.add(message);
         this.chatBytes += ExactBytes.stringBytes(text);
         // 限制历史长度，防内存泄漏
-        while (this.chatHistory.size() > 200) {
+        int limit = MockplayerConfig.get().getChatHistoryLimit();
+        while (this.chatHistory.size() > limit) {
             Component removed = this.chatHistory.remove(0);
             this.chatBytes -= ExactBytes.stringBytes(removed.getString());
         }
@@ -220,7 +223,8 @@ public class FakePlayerState {
         String text = String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f %s", x, y, z, description);
         this.soundLog.add(net.minecraft.network.chat.Component.literal(text));
         this.soundBytes += ExactBytes.stringBytes(text);
-        while (this.soundLog.size() > 20) {
+        int limit = MockplayerConfig.get().getSoundLogLimit();
+        while (this.soundLog.size() > limit) {
             net.minecraft.network.chat.Component removed = this.soundLog.remove(0);
             this.soundBytes -= ExactBytes.stringBytes(removed.getString());
         }
@@ -246,7 +250,8 @@ public class FakePlayerState {
         String text = String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f %s", x, y, z, description);
         this.particleLog.add(net.minecraft.network.chat.Component.literal(text));
         this.particleBytes += ExactBytes.stringBytes(text);
-        while (this.particleLog.size() > 20) {
+        int limit = MockplayerConfig.get().getParticleLogLimit();
+        while (this.particleLog.size() > limit) {
             net.minecraft.network.chat.Component removed = this.particleLog.remove(0);
             this.particleBytes -= ExactBytes.stringBytes(removed.getString());
         }
