@@ -58,7 +58,7 @@ public final class TestRunner {
     private static final List<String> ALL_SUITES = List.of(
             "api-smoke", "api-full", "use-items", "containers", "containers-all", "crafting", "furnace",
             "combat-stab", "combat-sprint", "enchanting", "merchant", "gui-actions", "listener-events", "control-commands",
-            "config");
+            "config", "debug-name-tag");
 
     private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }
 
@@ -92,6 +92,7 @@ public final class TestRunner {
             case "listener-events" -> "tbot-le";
             case "control-commands" -> "tbot-ctl";
             case "config" -> "tbot-cfg";
+            case "debug-name-tag" -> "tbot-dbg";
             default -> "tbot";
         };
     }
@@ -232,6 +233,7 @@ public final class TestRunner {
             case "listener-events" -> runListenerEvents(mc);
             case "control-commands" -> runControlCommands(mc);
             case "config" -> runConfig(mc);
+            case "debug-name-tag" -> runDebugNameTag(mc);
             default -> {
                 fail("unknown suite: " + suite);
                 finishSuite();
@@ -1468,7 +1470,11 @@ public final class TestRunner {
     private static volatile boolean ccMineCorrectTool = false;
     private static volatile float ccMineDestroyProgressRate = -1.0F;
     private static volatile boolean ccMineServerPickaxe;
-    private static volatile boolean ccMineServerOnGround;
+    private static volatile boolean ccMineServerMoving;
+    private static volatile double ccMineLastX;
+    private static volatile double ccMineLastY;
+    private static volatile double ccMineLastZ;
+    private static int ccMineStableTicks;
     private static boolean ccMineStopWaitDone;
     private static boolean ccListenOn;
     private static boolean ccListenDamaged;
@@ -2612,18 +2618,32 @@ public final class TestRunner {
                             var sp = server.getPlayerList().getPlayerByName(botName);
                             ccMineServerPickaxe = sp != null
                                     && sp.getMainHandItem().is(net.minecraft.world.item.Items.STONE_PICKAXE);
-                            // 服务端玩家必须落地：空中挖掘速度 ×1/5（原版惩罚），会拉长挖掘时间
-                            ccMineServerOnGround = sp != null && sp.onGround();
+                            if (sp != null) {
+                                double dx = sp.getX() - ccMineLastX;
+                                double dy = sp.getY() - ccMineLastY;
+                                double dz = sp.getZ() - ccMineLastZ;
+                                // 0.05 阈值容忍微小浮点抖动（服务端位置更新粒度）
+                                ccMineServerMoving = Math.abs(dx) + Math.abs(dy) + Math.abs(dz) > 0.05;
+                                ccMineLastX = sp.getX();
+                                ccMineLastY = sp.getY();
+                                ccMineLastZ = sp.getZ();
+                            }
                         });
-                        if (!ccMineServerPickaxe || !ccMineServerOnGround) {
-                            // 主手或落地状态未就绪：继续等（waitTicks 自然增长，超时走 sync timeout）
-                            if (waitTicks > 200) {
+                        if (!ccMineServerPickaxe || ccMineServerMoving) {
+                            // 主手未就绪或位置仍在漂移（respawn 同步中）：继续等
+                            ccMineStableTicks = 0;
+                            if (waitTicks > 300) {
                                 System.out.println("[mocktest] diag mine sync serverPickaxe="
-                                        + ccMineServerPickaxe + " serverOnGround=" + ccMineServerOnGround
+                                        + ccMineServerPickaxe + " moving=" + ccMineServerMoving
                                         + " clientHand=" + bot.getLocalPlayer().getMainHandItem());
-                                fail("mine test sync timeout (server pickaxe/ground)");
+                                fail("mine test sync timeout (server pickaxe/stable)");
                                 step = 20;
                             }
+                            return;
+                        }
+                        if (++ccMineStableTicks < 20) {
+                            // 服务端位置连续 20 tick 稳定才开挖（等物理/onGround 收敛，
+                            // 挖掘中移动会破坏原版时间锁定；0.05 阈值容忍浮点抖动）
                             return;
                         }
                         ccMineTestSynced = true;
@@ -4926,6 +4946,12 @@ public final class TestRunner {
                 writeConfigRaw("{\"commands\":[]}");
                 check("commands wrong type falls back",
                         "control".equals(ModConfigIO.load(cfgFile).getCommandName("control")));
+                // debugOverlayEnabled：默认 false / 手改 true / 非布尔回退
+                check("debug overlay default on", new ModConfig().isDebugOverlayEnabled());
+                writeConfigRaw("{\"debugOverlayEnabled\": false}");
+                check("debug overlay hand-edit", !ModConfigIO.load(cfgFile).isDebugOverlayEnabled());
+                writeConfigRaw("{\"debugOverlayEnabled\": \"yes\"}");
+                check("debug overlay non-boolean falls back", ModConfigIO.load(cfgFile).isDebugOverlayEnabled());
                 step = 3;
             }
             case 3 -> {
@@ -4956,20 +4982,25 @@ public final class TestRunner {
                 dev.isxander.yacl3.api.Option<Integer> intOption = firstIntegerOption(screen);
                 dev.isxander.yacl3.api.Option<String> queryOption = findStringOption(screen, "query");
                 dev.isxander.yacl3.api.Option<String> controlOption = findStringOption(screen, "control");
+                dev.isxander.yacl3.api.Option<Boolean> debugOption = findBooleanOption(screen);
                 check("integer option found", intOption != null);
                 check("query option found", queryOption != null);
                 check("control option found", controlOption != null);
-                if (intOption != null && queryOption != null && controlOption != null) {
+                check("debug option found", debugOption != null);
+                if (intOption != null && queryOption != null && controlOption != null && debugOption != null) {
                     int before = intOption.binding().getValue();
                     intOption.requestSet(before + 1);
                     queryOption.requestSet("qry");
+                    debugOption.requestSet(false);
                     check("pending change registered", screen.pendingChanges());
                     screen.finishOrSave();
                     check("int option applied to config", intOption.binding().getValue() == before + 1);
                     check("command rename applied to config", MockplayerConfig.get().getCommandName("query").equals("qry"));
+                    check("debug overlay applied to config", !MockplayerConfig.get().isDebugOverlayEnabled());
                     ModConfig saved = ModConfigIO.load(MockplayerConfig.path());
                     check("config file written", saved.getChatHistoryLimit() == before + 1
-                            && "qry".equals(saved.getCommandName("query")));
+                            && "qry".equals(saved.getCommandName("query"))
+                            && !saved.isDebugOverlayEnabled());
                     // 热重载：不重进游戏，dispatcher 两层都更新
                     check("hot reload old root removed (active)", !hasActiveRoot("query"));
                     check("hot reload new root registered (active)", hasActiveRoot("qry"));
@@ -5068,6 +5099,185 @@ public final class TestRunner {
         return null;
     }
 
+    /** 找第一个 Boolean 类型选项（当前唯一是 debugOverlayEnabled）。 */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static dev.isxander.yacl3.api.Option<Boolean> findBooleanOption(ModConfigScreen screen) {
+        for (dev.isxander.yacl3.api.ConfigCategory category : screen.config.categories()) {
+            for (dev.isxander.yacl3.api.OptionGroup group : category.groups()) {
+                for (dev.isxander.yacl3.api.Option<?> option : group.options()) {
+                    if (option.binding().getValue() instanceof Boolean) {
+                        return (dev.isxander.yacl3.api.Option) option;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    // ===== debug-name-tag：F3 调试信息标签（配置开关 + 格式化 + 联动） =====
+
+    private static net.minecraft.core.BlockPos dntChestPos;
+    private static boolean dntChestSet;
+    private static boolean dntOpened;
+
+    private static void runDebugNameTag(Minecraft mc) {
+        MinecraftServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            fail("no singleplayer server");
+            finishSuite();
+            return;
+        }
+        switch (step) {
+            case 0 -> {
+                prepareBot(server);
+                if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
+                    step = 1;
+                }
+            }
+            case 1 -> {
+                // 确保运行期与文件都是默认配置（旧文件可能残留旧默认 false）
+                MockplayerConfig.save(new ModConfig());
+                dntResetRender();
+                // 多行格式化：血量/饱食度/内存/速度各占一行；无容器不含 📦
+                net.minecraft.network.chat.Component info =
+                        com.mockplayer.session.DebugNameTagInfo.format(bot);
+                check("debug tag non-empty", info != null && !info.getString().isBlank());
+                if (info != null) {
+                    java.util.List<net.minecraft.network.chat.Component> rows = info.getSiblings();
+                    check("debug tag multi-line", rows.size() >= 4, "rows=" + rows.size());
+                    check("debug tag health row", rows.stream().anyMatch(r ->
+                            r.getString().startsWith("❤" + Math.round(bot.getLocalPlayer().getHealth()))));
+                    check("debug tag food row", rows.stream().anyMatch(r ->
+                            r.getString().startsWith("🍗" + bot.getLocalPlayer().getFoodData().getFoodLevel())));
+                    check("debug tag memory row", rows.stream().anyMatch(r ->
+                            r.getString().startsWith("💾")
+                                    && (r.getString().contains("KB") || r.getString().contains("MB"))));
+                    check("debug tag speed row", rows.stream().anyMatch(r ->
+                            r.getString().startsWith("🏃") && r.getString().contains("m/s")));
+                    check("debug tag colored health", rows.stream().anyMatch(r ->
+                            r.getString().startsWith("❤") && r.getStyle().getColor() != null));
+                    check("debug tag no container", rows.stream()
+                            .noneMatch(r -> r.getString().startsWith("📦")));
+                }
+                check("debug tag null for null bot",
+                        com.mockplayer.session.DebugNameTagInfo.format(null) == null);
+                // shouldShow 联动：默认启用 + F3 开 → true；配置关 → false；F3 关 → false
+                mc.debugEntries.setOverlayVisible(true);
+                check("shouldShow true by default (F3 + config on)",
+                        com.mockplayer.session.DebugNameTagInfo.shouldShow());
+                MockplayerConfig.get().setDebugOverlayEnabled(false);
+                check("shouldShow false when config off",
+                        !com.mockplayer.session.DebugNameTagInfo.shouldShow());
+                MockplayerConfig.get().setDebugOverlayEnabled(true);
+                mc.debugEntries.setOverlayVisible(false);
+                check("shouldShow false when F3 off",
+                        !com.mockplayer.session.DebugNameTagInfo.shouldShow());
+                // 恢复默认配置（默认启用），F3 留开供真实截图
+                MockplayerConfig.save(new ModConfig());
+                mc.debugEntries.setOverlayVisible(true);
+                step = 2;
+            }
+            case 2 -> {
+                // 保持主玩家看向假人：视锥剔除会把视野外的假人跳过 extract，
+                // 必须让假人进视野才能被真实渲染
+                if (mc.player != null && bot.getLocalPlayer() != null) {
+                    mc.player.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,
+                            bot.getLocalPlayer().position());
+                }
+                // 渲染路径验证：Mixin 在真实渲染帧里对假人注入多行 scoreText
+                if (dntRenderCount() == 0) {
+                    if (++waitTicks > 100) {
+                        System.out.println("[mocktest] diag render count=" + dntRenderCount());
+                        fail("debug render path never executed");
+                        step = 3;
+                    }
+                    return;
+                }
+                check("debug render path executed", dntRenderCount() > 0,
+                        "count=" + dntRenderCount());
+                String injected = dntLastScoreText();
+                check("debug scoreText injected", injected != null && injected.contains("❤"),
+                        "injected=" + injected);
+                waitTicks = 0;
+                step = 3;
+            }
+            case 3 -> {
+                // 开容器后 format 含 📦 与容器标题
+                if (!dntChestSet) {
+                    dntChestSet = true;
+                    dntChestPos = bot.getLocalPlayer().blockPosition().offset(2, 0, 0);
+                    net.minecraft.core.BlockPos p = dntChestPos;
+                    server.execute(() -> server.getLevel(Level.OVERWORLD).setBlock(p, Blocks.CHEST.defaultBlockState(), 3));
+                }
+                if (!dntOpened && bot.getBlockState(dntChestPos).is(Blocks.CHEST)) {
+                    dntOpened = true;
+                    bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(dntChestPos));
+                    net.minecraft.world.phys.BlockHitResult hit = new net.minecraft.world.phys.BlockHitResult(
+                            net.minecraft.world.phys.Vec3.atCenterOf(dntChestPos), Direction.WEST, dntChestPos, false);
+                    bot.getGameMode().useItemOn(bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
+                }
+                if (bot.getContainer().isPresent()) {
+                    java.util.List<net.minecraft.network.chat.Component> rows =
+                            com.mockplayer.session.DebugNameTagInfo.format(bot).getSiblings();
+                    check("debug tag container shown", rows.stream()
+                            .anyMatch(r -> r.getString().startsWith("📦")));
+                    check("debug tag container title", rows.stream().anyMatch(r ->
+                            r.getString().contains(bot.getContainer().get().getTitle().getString())));
+                    bot.getContainer().ifPresent(c -> c.close());
+                    step = 4;
+                } else if (++waitTicks > 200) {
+                    fail("debug tag container open timeout");
+                    step = 4;
+                }
+            }
+            case 4 -> {
+                mc.debugEntries.setOverlayVisible(false);
+                MockplayerConfig.save(new ModConfig());
+                MockplayerApi.bots().removeBot(botName, "test");
+                finishSuite();
+            }
+        }
+    }
+
+    /** 反射读渲染探针计数（生产默认不记录，测试属性开启）。 */
+    private static int dntRenderCount() {
+        try {
+            java.lang.reflect.Field f = com.mockplayer.session.DebugNameTagInfo.class
+                    .getDeclaredField("renderCount");
+            f.setAccessible(true);
+            return f.getInt(null);
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /** 反射读最近注入的 scoreText。 */
+    private static String dntLastScoreText() {
+        try {
+            java.lang.reflect.Field f = com.mockplayer.session.DebugNameTagInfo.class
+                    .getDeclaredField("lastRendered");
+            f.setAccessible(true);
+            return (String) f.get(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 反射清零渲染探针（套件隔离）。 */
+    private static void dntResetRender() {
+        try {
+            java.lang.reflect.Field f = com.mockplayer.session.DebugNameTagInfo.class
+                    .getDeclaredField("renderCount");
+            f.setAccessible(true);
+            f.setInt(null, 0);
+            java.lang.reflect.Field l = com.mockplayer.session.DebugNameTagInfo.class
+                    .getDeclaredField("lastRendered");
+            l.setAccessible(true);
+            l.set(null, null);
+        } catch (Exception ignored) {
+        }
+    }
+
     /** NeoForge 注册层 dispatcher（ClientCommandHandler.commands）是否含根命令。 */
     private static boolean hasActiveRoot(String name) {
         var dispatcher = net.neoforged.neoforge.client.ClientCommandHandler.getDispatcher();
@@ -5108,7 +5318,8 @@ public final class TestRunner {
                 && a.getEventCacheSize() == b.getEventCacheSize()
                 && a.getEventSummaryMaxLength() == b.getEventSummaryMaxLength()
                 && a.getEventTickSampleInterval() == b.getEventTickSampleInterval()
-                && Double.compare(a.getEventMoveSampleDistance(), b.getEventMoveSampleDistance()) == 0;
+                && Double.compare(a.getEventMoveSampleDistance(), b.getEventMoveSampleDistance()) == 0
+                && a.isDebugOverlayEnabled() == b.isDebugOverlayEnabled();
     }
 
     /** 删除测试专用临时目录（只删自己创建的 mocktest-config-*，不碰用户数据）。 */
@@ -5325,7 +5536,11 @@ public final class TestRunner {
         ccMineCorrectTool = false;
         ccMineDestroyProgressRate = -1.0F;
         ccMineServerPickaxe = false;
-        ccMineServerOnGround = false;
+        ccMineServerMoving = false;
+        ccMineLastX = 0;
+        ccMineLastY = 0;
+        ccMineLastZ = 0;
+        ccMineStableTicks = 0;
         ccMineStopWaitDone = false;
         ccListenOn = false;
         ccListenDamaged = false;
@@ -5385,6 +5600,9 @@ public final class TestRunner {
         cfgDir = null;
         cfgFile = null;
         cfgScreen = null;
+        dntChestPos = null;
+        dntChestSet = false;
+        dntOpened = false;
         // 配置兜底复位：防止 config 套件中途失败把非默认值泄漏给后续套件
         MockplayerConfig.save(new ModConfig());
     }

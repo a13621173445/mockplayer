@@ -26,6 +26,12 @@ sourceSets {
         compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
         runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
     }
+    noyacl {
+        compileClasspath += sourceSets.testmod.compileClasspath + sourceSets.testmod.output
+        runtimeClasspath += sourceSets.testmod.runtimeClasspath.filter { f ->
+            !f.name.contains("yet-another-config-lib")
+        }
+    }
 }
 
 loom {
@@ -49,13 +55,16 @@ loom {
             // IDE 右上角用 .idea/runConfigurations/Fabric_Test.xml（Gradle 任务 :fabric:runTestClient -Psuite=all）
             // 命令行 -Psuite=api-smoke 单套件；缺省 all = 全部套件
             property('mockplayer.test', project.findProperty('suite') ?: 'all')
+            // 渲染路径验证探针（生产默认关闭，仅测试开启，记录 Mixin 注入证据）
+            property('mockplayer.debugRenderProbe', 'true')
         }
         noYaclClient {
             client()
             setConfigName('Fabric NoYacl Test')
             ideConfigGenerated(false)
             runDir('runs/client')
-            source(sourceSets.testmod)
+            // classpath 用不含 YACL 的 noyacl sourceSet（无 YACL 冒烟保持真实）
+            source(sourceSets.noyacl)
             // 无 YACL 冒烟：本 run 不注入 yaclDevRuntime，验证可选依赖守卫
             property('mockplayer.noyacl', '1')
         }
@@ -68,14 +77,11 @@ loom {
     }
 }
 
-// YACL 只注入正常 client/testClient；noYaclClient 不注入（loom run task 是 JavaExec，可按任务加 classpath）
-tasks.named('runClient', JavaExec) {
-    classpath(configurations.yaclDevRuntime)
+// YACL 进 main runtimeClasspath：Gradle run 与 loom 生成的 IDE run config 都自动带，
+// 配置界面在 IDE 启动时可用
+configurations.named('runtimeClasspath') {
+    extendsFrom(configurations.yaclDevRuntime)
 }
-tasks.named('runTestClient', JavaExec) {
-    classpath(configurations.yaclDevRuntime)
-}
-
 // Implement mcgradleconventions loader attribute
 def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
 ['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements', 'includeInternal', 'modCompileClasspath'].each { variant ->

@@ -13,6 +13,7 @@
     "MixinClientConfigurationPacketListenerImpl",
     "MixinConnection",
     "MixinClientCommonPacketListenerImpl",
+    "MixinEntityRenderer",
     "MixinLocalPlayer",
     "MixinMinecraft",
     "MixinMultiPlayerGameMode"

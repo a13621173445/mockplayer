@@ -10,6 +10,7 @@ import dev.isxander.yacl3.api.utils.OptionUtils;
 import dev.isxander.yacl3.api.controller.DoubleFieldControllerBuilder;
 import dev.isxander.yacl3.api.controller.IntegerFieldControllerBuilder;
 import dev.isxander.yacl3.api.controller.StringControllerBuilder;
+import dev.isxander.yacl3.api.controller.TickBoxControllerBuilder;
 import dev.isxander.yacl3.gui.YACLScreen;
 
 import net.minecraft.client.gui.screens.Screen;
@@ -78,6 +79,11 @@ public final class ModConfigScreen extends YACLScreen {
                                         ModConfig.DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE,
                                         ModConfig.MIN_EVENT_MOVE_SAMPLE_DISTANCE, ModConfig.MAX_EVENT_MOVE_SAMPLE_DISTANCE,
                                         cfg::getEventMoveSampleDistance, cfg::setEventMoveSampleDistance))
+                                .build())
+                        .group(OptionGroup.createBuilder()
+                                .name(Component.translatable("config.mockplayer.group.debug"))
+                                .option(booleanOption("debugOverlayEnabled", false,
+                                        cfg::isDebugOverlayEnabled, cfg::setDebugOverlayEnabled))
                                 .build())
                         .build())
                 .category(ConfigCategory.createBuilder()
@@ -158,6 +164,18 @@ public final class ModConfigScreen extends YACLScreen {
                         Component.translatable("config.mockplayer.command." + key + ".description")))
                 .binding(key, getter, setter)
                 .controller(option -> StringControllerBuilder.create(option))
+                .build();
+    }
+
+    /** 布尔开关：名称/描述/绑定/TickBox。 */
+    private static Option<Boolean> booleanOption(String key, boolean fallback,
+                                                 Supplier<Boolean> getter, Consumer<Boolean> setter) {
+        return Option.<Boolean>createBuilder()
+                .name(Component.translatable("config.mockplayer.option." + key))
+                .description(OptionDescription.of(
+                        Component.translatable("config.mockplayer.option." + key + ".description")))
+                .binding(fallback, getter, setter)
+                .controller(option -> TickBoxControllerBuilder.create(option))
                 .build();
     }
 }

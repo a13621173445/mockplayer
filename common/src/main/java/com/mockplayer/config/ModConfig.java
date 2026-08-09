@@ -58,6 +58,8 @@ public class ModConfig {
     private double eventMoveSampleDistance = DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE;
     /** 根命令名配置（字段固定，值可改/可禁用；默认 = 现在的名字）。 */
     private Map<String, String> commands = new LinkedHashMap<>(ModCommands.defaults());
+    /** F3 调试信息打开时，在假人名字下方显示额外信息（血量/饱食度/内存/速度/容器）。 */
+    private boolean debugOverlayEnabled = true;
 
     public int getChatHistoryLimit() {
         return this.chatHistoryLimit;
@@ -136,6 +138,14 @@ public class ModConfig {
         this.commands = commands != null
                 ? new LinkedHashMap<>(commands)
                 : new LinkedHashMap<>(ModCommands.defaults());
+    }
+
+    public boolean isDebugOverlayEnabled() {
+        return this.debugOverlayEnabled;
+    }
+
+    public void setDebugOverlayEnabled(boolean debugOverlayEnabled) {
+        this.debugOverlayEnabled = debugOverlayEnabled;
     }
 
     /** 越界字段回退默认（非法值不保留，保证配置文件永远可手改且不崩）。 */

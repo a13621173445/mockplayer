@@ -41,6 +41,7 @@ public class FakeLocalPlayer extends LocalPlayer {
         super(minecraft, level, connection, stats, recipeBook, lastSentInput, wasSprinting, chatAbilities);
     }
 
+
     /** 同步假人自己的游戏模式（FakePlayListener 调用） */
     public void setFakeGameType(GameType type) {
         this.fakeGameType = type;

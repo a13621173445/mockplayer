@@ -63,6 +63,11 @@ public final class ModConfigIO {
                     ModConfig.DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE,
                     ModConfig.MIN_EVENT_MOVE_SAMPLE_DISTANCE, ModConfig.MAX_EVENT_MOVE_SAMPLE_DISTANCE));
             config.setCommands(readCommands(root));
+            // 缺失/非法 → 保持构造默认（true，功能默认启用）
+            if (root.has("debugOverlayEnabled") && root.get("debugOverlayEnabled").isJsonPrimitive()
+                    && root.get("debugOverlayEnabled").getAsJsonPrimitive().isBoolean()) {
+                config.setDebugOverlayEnabled(root.get("debugOverlayEnabled").getAsBoolean());
+            }
         } catch (Exception e) {
             // 文件损坏/非 JSON 对象 → 整体回退默认，不崩客户端
             return new ModConfig();
@@ -87,6 +92,7 @@ public final class ModConfigIO {
         normalized.setEventTickSampleInterval(config.getEventTickSampleInterval());
         normalized.setEventMoveSampleDistance(config.getEventMoveSampleDistance());
         normalized.setCommands(config.getCommands());
+        normalized.setDebugOverlayEnabled(config.isDebugOverlayEnabled());
         normalized.normalize();
 
         try {
@@ -151,4 +157,5 @@ public final class ModConfigIO {
         }
         return raw;
     }
+
 }
