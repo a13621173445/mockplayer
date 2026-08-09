@@ -68,6 +68,9 @@ public final class ModConfigIO {
                     && root.get("debugOverlayEnabled").getAsJsonPrimitive().isBoolean()) {
                 config.setDebugOverlayEnabled(root.get("debugOverlayEnabled").getAsBoolean());
             }
+            config.setFakePlayerChunkRadius(readInt(root, "fakePlayerChunkRadius",
+                    ModConfig.DEFAULT_FAKE_PLAYER_CHUNK_RADIUS,
+                    ModConfig.MIN_FAKE_PLAYER_CHUNK_RADIUS, ModConfig.MAX_FAKE_PLAYER_CHUNK_RADIUS));
         } catch (Exception e) {
             // 文件损坏/非 JSON 对象 → 整体回退默认，不崩客户端
             return new ModConfig();
@@ -93,6 +96,7 @@ public final class ModConfigIO {
         normalized.setEventMoveSampleDistance(config.getEventMoveSampleDistance());
         normalized.setCommands(config.getCommands());
         normalized.setDebugOverlayEnabled(config.isDebugOverlayEnabled());
+        normalized.setFakePlayerChunkRadius(config.getFakePlayerChunkRadius());
         normalized.normalize();
 
         try {

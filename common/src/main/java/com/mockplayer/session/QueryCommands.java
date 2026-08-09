@@ -114,6 +114,16 @@ public class QueryCommands {
         return out;
     }
 
+    /** 查询假人当前区块加载半径。 */
+    public static Component chunk(String name) {
+        Bot bot = CommandSupport.findBot(name);
+        if (bot == null) {
+            return CommandSupport.fail("commands.mockplayer.query.not_found", CommandSupport.playerName(name));
+        }
+        return CommandSupport.info("commands.mockplayer.query.chunk",
+                CommandSupport.playerName(name), bot.getChunkRadius());
+    }
+
     public static Component container(String name) {
         Bot bot = CommandSupport.findBot(name);
         if (bot == null) {
@@ -320,6 +330,10 @@ public class QueryCommands {
         }));
         player.then(f.literal("inventory").executes(ctx -> {
             f.sendFeedback(ctx.getSource(), inventory(StringArgumentType.getString(ctx, "player")));
+            return 1;
+        }));
+        player.then(f.literal("chunk").executes(ctx -> {
+            f.sendFeedback(ctx.getSource(), chunk(StringArgumentType.getString(ctx, "player")));
             return 1;
         }));
         player.then(f.literal("container").executes(ctx -> {

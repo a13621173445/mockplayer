@@ -127,6 +127,8 @@ public interface BotActions {
     /**
      * 攻击实体（挥拳/武器）。
      *
+     * <p>执行前自动看向目标实体（一次性 lookAt，不保存持续朝向状态）。
+     *
      * @param target 目标实体
      */
     void attack(Entity target);
@@ -142,6 +144,8 @@ public interface BotActions {
     /**
      * 右键交互实体（村民交易/喂食/骑乘/开门等）。
      *
+     * <p>执行前自动看向目标实体。
+     *
      * @param target 目标实体
      */
     void interact(Entity target);
@@ -149,12 +153,16 @@ public interface BotActions {
     /**
      * 左键打方块（一次破坏进度）。
      *
+     * <p>执行前自动看向方块中心。
+     *
      * @param pos 方块位置
      */
     void attackBlock(BlockPos pos);
 
     /**
      * 开始挖掘方块（持续挖掘由 gameMode 自动累积进度并发 START/STOP 包）。
+     *
+     * <p>执行前与持续挖掘期间自动看向方块中心。
      *
      * @param pos 方块位置
      */
@@ -176,6 +184,8 @@ public interface BotActions {
     /**
      * 右键交互方块（开箱/点门/放方块前的位置）。
      *
+     * <p>执行前自动看向被点击的方块中心。
+     *
      * @param pos  方块位置
      * @param side 交互的面
      */
@@ -184,10 +194,24 @@ public interface BotActions {
     /**
      * 放置方块（手持方块对准 pos 的 side 面放置；与 useItemOn 同通道，独立语义原语）。
      *
+     * <p>实际放置位置与原版 BlockPlaceContext 一致：点击可替换方块（空气/水等）→ 放 pos 本身；
+     * 点击实心方块 → 放 pos.relative(side)。执行前自动看向实际放置位置。
+     *
      * @param pos  相邻方块位置
      * @param side 放置的面
      */
     void placeBlock(BlockPos pos, Direction side);
+
+    /**
+     * 直接指定被放置方块位置：内部自动找最近的不可替换相邻方块作支撑，点击其朝向
+     * target 的面完成放置（原语等价 placeBlock(支撑块, 反方向)）；找不到支撑块时
+     * 不放置。
+     *
+     * <p>执行前自动看向 target 中心。
+     *
+     * @param target 被放置方块的位置
+     */
+    void placeBlockAt(BlockPos target);
 
     /**
      * 丢弃当前选中槽位的物品（1 个）。

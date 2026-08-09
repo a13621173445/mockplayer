@@ -61,6 +61,13 @@ public class ModConfig {
     /** F3 调试信息打开时，在假人名字下方显示额外信息（血量/饱食度/内存/速度/容器）。 */
     private boolean debugOverlayEnabled = true;
 
+    /** 假人默认区块加载半径（节约性能：默认最低 2，范围 1-32）。 */
+    public static final int DEFAULT_FAKE_PLAYER_CHUNK_RADIUS = 2;
+    public static final int MIN_FAKE_PLAYER_CHUNK_RADIUS = 1;
+    public static final int MAX_FAKE_PLAYER_CHUNK_RADIUS = 32;
+
+    private int fakePlayerChunkRadius = DEFAULT_FAKE_PLAYER_CHUNK_RADIUS;
+
     public int getChatHistoryLimit() {
         return this.chatHistoryLimit;
     }
@@ -148,6 +155,14 @@ public class ModConfig {
         this.debugOverlayEnabled = debugOverlayEnabled;
     }
 
+    public int getFakePlayerChunkRadius() {
+        return this.fakePlayerChunkRadius;
+    }
+
+    public void setFakePlayerChunkRadius(int fakePlayerChunkRadius) {
+        this.fakePlayerChunkRadius = fakePlayerChunkRadius;
+    }
+
     /** 越界字段回退默认（非法值不保留，保证配置文件永远可手改且不崩）。 */
     public void normalize() {
         this.chatHistoryLimit = clampInt(this.chatHistoryLimit,
@@ -164,6 +179,8 @@ public class ModConfig {
                 MIN_EVENT_TICK_SAMPLE_INTERVAL, MAX_EVENT_TICK_SAMPLE_INTERVAL, DEFAULT_EVENT_TICK_SAMPLE_INTERVAL);
         this.eventMoveSampleDistance = clampDouble(this.eventMoveSampleDistance,
                 MIN_EVENT_MOVE_SAMPLE_DISTANCE, MAX_EVENT_MOVE_SAMPLE_DISTANCE, DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE);
+        this.fakePlayerChunkRadius = clampInt(this.fakePlayerChunkRadius,
+                MIN_FAKE_PLAYER_CHUNK_RADIUS, MAX_FAKE_PLAYER_CHUNK_RADIUS, DEFAULT_FAKE_PLAYER_CHUNK_RADIUS);
         this.commands = ModCommands.normalize(this.commands);
     }
 

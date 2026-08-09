@@ -110,6 +110,21 @@ public interface Bot {
     boolean isBlockLoaded(BlockPos pos);
 
     /**
+     * 假人当前区块加载半径（客户端 chunk 缓存 + 服务端 requestedViewDistance）。
+     *
+     * @return 当前半径
+     */
+    int getChunkRadius();
+
+    /**
+     * 设置假人区块加载半径（范围 1-32，只作用于假人 level 与服务端对该假人的
+     * 区块跟踪，主玩家 level / options 零影响）。
+     *
+     * @param radius 区块加载半径
+     */
+    void setChunkRadius(int radius);
+
+    /**
      * 服务端 Tab 列表中的在线玩家（假人收到的 PlayerInfo 更新）。
      *
      * @return 在线玩家列表

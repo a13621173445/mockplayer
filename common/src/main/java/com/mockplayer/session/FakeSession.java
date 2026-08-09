@@ -170,6 +170,44 @@ public class FakeSession {
         return this.playListener;
     }
 
+    /** 假人区块加载半径：登录时取配置默认（2，节约性能），命令可改；与主玩家完全隔离。 */
+    private volatile int chunkRadius = com.mockplayer.config.MockplayerConfig.get().getFakePlayerChunkRadius();
+
+    /** 登录时发送/保存的 ClientInformation（改半径时复制 viewDistance 后经假人连接重发）。 */
+    private volatile net.minecraft.server.level.ClientInformation clientInformation;
+
+    /** 返回假人当前区块加载半径。 */
+    public int getChunkRadius() {
+        return this.chunkRadius;
+    }
+
+    /** 记录登录使用的 ClientInformation（FakeLoginListener 构造后调用）。 */
+    void setClientInformation(net.minecraft.server.level.ClientInformation information) {
+        this.clientInformation = information;
+    }
+
+    /**
+     * 设置假人区块加载半径：本地 chunk 缓存 updateViewRadius + 经假人连接发
+     * ServerboundClientInformationPacket（viewDistance=radius）→ 服务端
+     * requestedViewDistance / ChunkTrackingView 同步（ChunkMap 每 tick 对比生效）。
+     */
+    public void setChunkRadius(int radius) {
+        this.chunkRadius = radius;
+        if (this.getFakePlayer() != null
+                && this.getFakePlayer().level() instanceof net.minecraft.client.multiplayer.ClientLevel cl) {
+            cl.getChunkSource().updateViewRadius(radius);
+        }
+        net.minecraft.server.level.ClientInformation info = this.clientInformation;
+        if (this.playListener != null && info != null) {
+            info = new net.minecraft.server.level.ClientInformation(
+                    info.language(), radius, info.chatVisibility(), info.chatColors(),
+                    info.modelCustomisation(), info.mainHand(),
+                    info.textFilteringEnabled(), info.allowsListing(), info.particleStatus());
+            this.clientInformation = info;
+            this.playListener.broadcastClientInformation(info);
+        }
+    }
+
     /**
      * 发起离线登录：连接当前客户端所在的服务器，用假人名字登录。
      *

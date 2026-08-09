@@ -51,7 +51,7 @@ public class ControlCommands {
             "move", "stop", "sneak", "unsneak", "sprint", "unsprint", "jump",
             "look", "lookAt", "turn", "attack", "stab", "sustainedAttack", "sustainedUse",
             "stopSustained", "interact", "useItem", "releaseUsingItem", "useItemOn",
-            "placeBlock", "mineBlock", "attackBlock", "hotbar", "drop", "swapHands",
+            "placeBlock", "mineBlock", "attackBlock", "hotbar", "chunkRadius", "drop", "swapHands",
             "mount", "dismount", "close", "click", "button", "trade", "setSlot",
             "chat", "command", "wakeUp", "respawn", "editBook", "editSign", "setBeacon",
             "renameItem", "pickItemFromBlock", "help");
@@ -423,6 +423,19 @@ public class ControlCommands {
         int index = Math.max(0, Math.min(8, slot - 1));
         findBot(name).actions().setSelectedSlot(index);
         return success("hotbar", name, index + 1);
+    }
+
+    public static Component chunkRadius(String name, int radius) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        if (radius < com.mockplayer.config.ModConfig.MIN_FAKE_PLAYER_CHUNK_RADIUS
+                || radius > com.mockplayer.config.ModConfig.MAX_FAKE_PLAYER_CHUNK_RADIUS) {
+            return fail("commands.mockplayer.control.invalid_chunk_radius", radius);
+        }
+        findBot(name).setChunkRadius(radius);
+        return success("chunkRadius", name, radius);
     }
 
     public static Component drop(String name, Integer slot, Boolean all) {
@@ -1084,6 +1097,16 @@ public class ControlCommands {
                             f.sendFeedback(ctx.getSource(), hotbar(
                                     StringArgumentType.getString(ctx, "player"),
                                     IntegerArgumentType.getInteger(ctx, "slot")));
+                            return 1;
+                        })));
+        player.then(f.literal("chunkRadius")
+                .then(f.argument("radius", IntegerArgumentType.integer(
+                                com.mockplayer.config.ModConfig.MIN_FAKE_PLAYER_CHUNK_RADIUS,
+                                com.mockplayer.config.ModConfig.MAX_FAKE_PLAYER_CHUNK_RADIUS))
+                        .executes(ctx -> {
+                            f.sendFeedback(ctx.getSource(), chunkRadius(
+                                    StringArgumentType.getString(ctx, "player"),
+                                    IntegerArgumentType.getInteger(ctx, "radius")));
                             return 1;
                         })));
         player.then(f.literal("drop")

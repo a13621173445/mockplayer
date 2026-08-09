@@ -142,7 +142,15 @@ public class FakeLoginListener implements ClientLoginPacketListener {
         this.connection.send(ServerboundLoginAcknowledgedPacket.INSTANCE);
         this.connection.setupOutboundProtocol(ConfigurationProtocols.SERVERBOUND);
         this.connection.send(new ServerboundCustomPayloadPacket(new BrandPayload(ClientBrandRetriever.getClientModName())));
-        this.connection.send(new ServerboundClientInformationPacket(mc.options.buildPlayerInformation()));
+        // 假人用配置默认区块加载半径（默认 2，节约性能），不再直接继承主玩家 options 的渲染距离
+        net.minecraft.server.level.ClientInformation base = mc.options.buildPlayerInformation();
+        int chunkRadius = com.mockplayer.config.MockplayerConfig.get().getFakePlayerChunkRadius();
+        net.minecraft.server.level.ClientInformation info = new net.minecraft.server.level.ClientInformation(
+                base.language(), chunkRadius, base.chatVisibility(), base.chatColors(),
+                base.modelCustomisation(), base.mainHand(),
+                base.textFilteringEnabled(), base.allowsListing(), base.particleStatus());
+        session.setClientInformation(info);
+        this.connection.send(new ServerboundClientInformationPacket(info));
     }
 
     @Override

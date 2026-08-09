@@ -15,7 +15,7 @@ import java.util.Locale;
  *
  * 输入：配置开关 debugOverlayEnabled + F3 调试信息可见（DebugScreenOverlay）
  * 输出：多行 Component（每行带颜色）：❤血量 🍗饱食度(饱和度) 同一行，
- * 💾内存(KB/MB) 🏃速度(m/s) 📦容器标题 各自一行
+ * 💾内存(KB/MB)+📡区块半径(chunk) 同一行，🏃速度(m/s)，📦+容器标题（同一行）
  *
  * 只读假人状态，零主玩家污染；无 player 时返回 null（渲染层不显示）。
  * emoji/数值/单位拼接为通用符号（语言无关），容器标题用原版翻译组件。
@@ -26,6 +26,10 @@ public final class DebugNameTagInfo {
     private static volatile int renderCount;
     /** 最近注入的 scoreText（仅测试属性开启时记录）。 */
     private static volatile String lastRendered;
+    /** 最近渲染布局：信息行相对名字的 Y 偏移（仅测试属性开启时记录）。 */
+    private static volatile float lastInfoOffsetY = -1.0F;
+    /** 最近渲染布局：名字自身 Y 偏移（布局断言基准）。 */
+    private static volatile float lastNameOffsetY = -1.0F;
 
     private DebugNameTagInfo() {
     }
@@ -37,6 +41,15 @@ public final class DebugNameTagInfo {
         }
         DebugNameTagInfo.renderCount++;
         DebugNameTagInfo.lastRendered = info.getString();
+    }
+
+    /** 渲染布局探针（仅测试属性开启时记录；infoOffsetY > nameOffsetY = 信息行在名字上方）。 */
+    public static void recordRenderLayout(float infoOffsetY, float nameOffsetY) {
+        if (!Boolean.getBoolean("mockplayer.debugRenderProbe")) {
+            return;
+        }
+        DebugNameTagInfo.lastInfoOffsetY = infoOffsetY;
+        DebugNameTagInfo.lastNameOffsetY = nameOffsetY;
     }
 
     /** F3 调试信息打开 && 配置启用（渲染 Mixin 调用）。 */
@@ -63,12 +76,19 @@ public final class DebugNameTagInfo {
                 + "(" + Math.round(bot.getLocalPlayer().getFoodData().getSaturationLevel()) + ")")
                 .withStyle(ChatFormatting.GOLD));
         line.append(stats);
-        appendLine(line, "💾" + formatBytes(bot.memoryInfo().trackedBytes()), ChatFormatting.AQUA);
+        // 内存 + 区块加载半径同一行：💾1.2 MB 📡2 chunk（内存青色、半径蓝色）
+        MutableComponent memory = Component.literal("💾" + formatBytes(bot.memoryInfo().trackedBytes()))
+                .withStyle(ChatFormatting.AQUA);
+        memory.append(Component.literal(" 📡" + bot.getChunkRadius() + " chunk")
+                .withStyle(ChatFormatting.BLUE));
+        line.append(memory);
         double speed = bot.getLocalPlayer().getDeltaMovement().horizontalDistance() * 20.0;
         appendLine(line, "🏃" + String.format(Locale.ROOT, "%.1f", speed) + " m/s", ChatFormatting.GREEN);
         bot.getContainer().ifPresent(container -> {
-            line.append(Component.literal("📦").withStyle(ChatFormatting.YELLOW));
-            line.append(container.getTitle());
+            // 📦 与容器名称同一行（同一 sibling；渲染层按 sibling 逐行画）
+            MutableComponent containerLine = Component.literal("📦").withStyle(ChatFormatting.YELLOW);
+            containerLine.append(container.getTitle());
+            line.append(containerLine);
         });
         return line;
     }

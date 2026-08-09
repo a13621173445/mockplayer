@@ -84,6 +84,10 @@ public final class ModConfigScreen extends YACLScreen {
                                 .name(Component.translatable("config.mockplayer.group.debug"))
                                 .option(booleanOption("debugOverlayEnabled", false,
                                         cfg::isDebugOverlayEnabled, cfg::setDebugOverlayEnabled))
+                                .option(intOption("fakePlayerChunkRadius",
+                                        ModConfig.DEFAULT_FAKE_PLAYER_CHUNK_RADIUS,
+                                        ModConfig.MIN_FAKE_PLAYER_CHUNK_RADIUS, ModConfig.MAX_FAKE_PLAYER_CHUNK_RADIUS,
+                                        cfg::getFakePlayerChunkRadius, cfg::setFakePlayerChunkRadius))
                                 .build())
                         .build())
                 .category(ConfigCategory.createBuilder()

@@ -167,6 +167,16 @@ public class BotImpl implements Bot {
     }
 
     @Override
+    public int getChunkRadius() {
+        return this.session.getChunkRadius();
+    }
+
+    @Override
+    public void setChunkRadius(int radius) {
+        this.session.setChunkRadius(radius);
+    }
+
+    @Override
     public List<PlayerInfo> getOnlinePlayers() {
         FakePlayListener listener = this.session.getPlayListener();
         if (listener == null) {

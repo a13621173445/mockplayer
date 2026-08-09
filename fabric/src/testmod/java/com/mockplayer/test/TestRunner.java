@@ -64,6 +64,8 @@ public final class TestRunner {
 
     private static Phase phase = Phase.WAIT_TITLE;
     private static long phaseStart;
+    /** 测试局域网发布端口：运行时空闲端口，避免被本机代理占用（25565/25567 实测被 FlClash 占用）。 */
+    private static int testLanPort = -1;
     /** 当前套件开始时间（finishSuite 算耗时） */
     private static long suiteStart;
     private static boolean worldCreationStarted;
@@ -161,8 +163,12 @@ public final class TestRunner {
                         applyTestGameRules(server);
                     }
                     if (!server.isPublished()) {
-                        // 显式端口（26.2 port=0 不自动分配，getPort() 会返回 0）
-                        server.publishServer(MultiplayerScope.LAN, GameType.SURVIVAL, false, 25565);
+                        // 显式端口（26.2 port=0 不自动分配，getPort() 会返回 0）；
+                        // 用运行时空闲端口，避免被本机代理等进程占用（实测 FlClash 占 25565/25567 导致发布超时）
+                        if (testLanPort < 0) {
+                            testLanPort = findFreeTestPort();
+                        }
+                        server.publishServer(MultiplayerScope.LAN, GameType.SURVIVAL, false, testLanPort);
                     }
                     if (server.isPublished() && server.getPort() > 0) {
                         phase = Phase.RUN;
@@ -171,6 +177,15 @@ public final class TestRunner {
                 }
             }
             case RUN -> run(mc);
+        }
+    }
+
+    /** 找当前空闲的 TCP 端口（绑定 0 由系统分配，随后关闭，端口号用于局域网发布）。 */
+    private static int findFreeTestPort() {
+        try (java.net.ServerSocket socket = new java.net.ServerSocket(0)) {
+            return socket.getLocalPort();
+        } catch (java.io.IOException e) {
+            return 25566;
         }
     }
 
@@ -1366,6 +1381,7 @@ public final class TestRunner {
     private static volatile boolean ccHuskAttacked;
     private static volatile float ccHuskHealth = 20;
     private static volatile float ccHuskHealthBeforeTarget = 20;
+    private static volatile net.minecraft.world.phys.Vec3 ccHuskPos;
     private static volatile boolean ccHuskTargetAttacked;
     private static boolean ccSustainedStarted;
     private static volatile boolean ccSustainedHit;
@@ -1406,6 +1422,12 @@ public final class TestRunner {
     private static boolean ccPlaced2Checked;
     private static boolean ccMineSent;
     private static volatile boolean ccMinedAir2;
+    private static boolean ccMinedChecked;
+    private static BlockPos ccPlaceAtPos;
+    private static boolean ccPlaceAtGiven;
+    private static boolean ccPlaceAtSent;
+    private static volatile boolean ccPlacedAt;
+    private static boolean ccPlaceAtChecked;
     private static boolean ccBedSet;
     private static BlockPos ccBedPos;
     private static boolean ccBedClicked;
@@ -1441,6 +1463,17 @@ public final class TestRunner {
     private static volatile boolean ccMineSpReady;
     private static volatile BlockPos ccMineStone1;
     private static volatile BlockPos ccMineStone2;
+    private static boolean ccChunkDefaultChecked;
+    private static boolean ccChunkServerChecked;
+    private static boolean ccChunkServerAfterChecked;
+    private static boolean ccChunkLoadedChecked;
+    private static boolean ccChunkTeleported;
+    private static boolean ccChunkSettled;
+    private static BlockPos ccChunkProbePos;
+    private static int ccChunkMainOptionsBefore = -1;
+    private static Object ccChunkMainChunkSource;
+    private static volatile int ccChunkServerRequested = -1;
+    private static volatile int ccChunkServerView = -1;
     private static volatile BlockPos ccMineStoneFar;
     private static boolean ccMineFarSent;
     private static boolean ccMineFarChecked;
@@ -1537,6 +1570,60 @@ public final class TestRunner {
                         || s.isBold() || s.isItalic() || s.isUnderlined() || s.isStrikethrough() || s.isObfuscated());
     }
 
+    /** 断言假人当前朝向是否指向目标位置（自动 lookAt 的强证据，yaw/pitch 容差可配）。 */
+    private static boolean ccFacing(net.minecraft.client.player.LocalPlayer p, net.minecraft.world.phys.Vec3 target,
+                                    float yawTol, float pitchTol) {
+        if (p == null || target == null) {
+            return false;
+        }
+        net.minecraft.world.phys.Vec3 d = target.subtract(p.getEyePosition());
+        double horiz = Math.sqrt(d.x * d.x + d.z * d.z);
+        if (horiz < 1.0E-4) {
+            return true;
+        }
+        float expYaw = (float) (Math.toDegrees(Math.atan2(d.z, d.x)) - 90.0F);
+        float expPitch = (float) (-Math.toDegrees(Math.atan2(d.y, horiz)));
+        float yawDelta = Math.abs((((p.getYRot() - expYaw) % 360.0F) + 540.0F) % 360.0F - 180.0F);
+        float pitchDelta = Math.abs(p.getXRot() - expPitch);
+        return yawDelta <= yawTol && pitchDelta <= pitchTol;
+    }
+
+    /** 服务端强断言：读 ServerPlayer.requestedViewDistance（先公开方法，反射兜底）。 */
+    private static int ccServerRequestedViewDistance(net.minecraft.server.level.ServerPlayer sp) {
+        if (sp == null) {
+            return -1;
+        }
+        try {
+            java.lang.reflect.Method m = net.minecraft.server.level.ServerPlayer.class.getMethod("requestedViewDistance");
+            return (Integer) m.invoke(sp);
+        } catch (Exception ignored) {
+        }
+        try {
+            java.lang.reflect.Field f = net.minecraft.server.level.ServerPlayer.class.getDeclaredField("requestedViewDistance");
+            f.setAccessible(true);
+            return f.getInt(sp);
+        } catch (Exception ignored) {
+        }
+        return -1;
+    }
+
+    /** 服务端强断言：读 ServerPlayer 的 ChunkTrackingView 半径（Positioned.viewDistance）。 */
+    private static int ccServerChunkViewDistance(net.minecraft.server.level.ServerPlayer sp) {
+        if (sp == null) {
+            return -1;
+        }
+        try {
+            java.lang.reflect.Method getView = net.minecraft.server.level.ServerPlayer.class.getMethod("getChunkTrackingView");
+            Object view = getView.invoke(sp);
+            if (view != null && view.getClass().getSimpleName().contains("Positioned")) {
+                java.lang.reflect.Method vd = view.getClass().getMethod("viewDistance");
+                return (Integer) vd.invoke(view);
+            }
+        } catch (Exception ignored) {
+        }
+        return -1;
+    }
+
     private static void runControlCommands(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
         if (server == null) {
@@ -1576,7 +1663,7 @@ public final class TestRunner {
                         "move", "stop", "sneak", "unsneak", "sprint", "unsprint", "jump",
                         "look", "lookAt", "turn", "attack", "stab", "sustainedAttack", "sustainedUse",
                         "stopSustained", "interact", "useItem", "releaseUsingItem", "useItemOn",
-                        "placeBlock", "mineBlock", "attackBlock", "hotbar", "drop", "swapHands",
+                        "placeBlock", "mineBlock", "attackBlock", "hotbar", "chunkRadius", "drop", "swapHands",
                         "mount", "dismount", "chat", "command", "wakeUp", "respawn", "editBook",
                         "close", "click", "button", "trade", "setSlot", "editSign", "setBeacon",
                         "renameItem", "pickItemFromBlock", "help");
@@ -1615,7 +1702,7 @@ public final class TestRunner {
                         .map(com.mojang.brigadier.tree.CommandNode::getName)
                         .collect(java.util.stream.Collectors.toSet());
                 java.util.List<String> queries = java.util.List.of(
-                        "info", "inventory", "container", "near", "block", "online", "chatlog",
+                        "info", "inventory", "container", "near", "block", "chunk", "online", "chatlog",
                         "listen", "events", "memory");
                 java.util.List<String> missingQueries = new java.util.ArrayList<>(queries);
                 missingQueries.removeAll(qSubs);
@@ -1796,7 +1883,17 @@ public final class TestRunner {
                     if (bot.getLocalPlayer().getAttackStrengthScale(1.0F) >= 0.99F || ++waitTicks > 70) {
                         ccHuskTargetAttacked = true;
                         waitTicks = 0;
+                        // 先背对 husk（husk 在 +X，朝西 yaw=90），攻击后必须自动转向它
+                        bot.actions().look(90.0F, 0.0F);
+                        // 用攻击瞬间的客户端实体眼睛位置做期望（僵尸会移动，且脚底 vs 眼睛有 pitch 误差）
+                        ccHuskPos = bot.getEntitiesNear(16.0).stream()
+                                .filter(e -> e instanceof net.minecraft.world.entity.monster.zombie.Zombie)
+                                .min(java.util.Comparator.comparingDouble(e -> e.distanceToSqr(bot.getLocalPlayer())))
+                                .map(net.minecraft.world.entity.Entity::getEyePosition)
+                                .orElse(null);
                         com.mockplayer.session.ControlCommands.attack(botName, "husk");
+                        // 攻击同一 tick 立即断言
+                        check("attack auto-face target", ccFacing(bot.getLocalPlayer(), ccHuskPos, 10.0F, 15.0F));
                     }
                 }
                 server.execute(() -> {
@@ -2030,6 +2127,8 @@ public final class TestRunner {
                     var p = bot.getLocalPlayer();
                     ccPlacePos = p.blockPosition().offset(0, 0, 2);
                     ccPlacePos2 = p.blockPosition().offset(0, 0, 3);
+                    // placeBlockAt 目标：复用被挖空的位置（下方是实心地面，可作支撑块）
+                    ccPlaceAtPos = p.blockPosition().offset(0, 0, 3);
                 }
                 if (!ccPlaceSent) {
                     if (++waitTicks > 15) {
@@ -2096,6 +2195,8 @@ public final class TestRunner {
                     if (++waitTicks > 25) {
                         ccPlace2Sent = true;
                         waitTicks = 0;
+                        // 先背对目标（朝北），验证 placeBlock 内部自动朝向会转回来
+                        bot.actions().look(180.0F, 0.0F);
                         com.mockplayer.session.ControlCommands.placeBlock(botName,
                                 ccPlacePos2.getX(), ccPlacePos2.getY(), ccPlacePos2.getZ(), "up");
                     }
@@ -2112,7 +2213,11 @@ public final class TestRunner {
                 } else if (!ccPlaced2Checked) {
                     ccPlaced2Checked = true;
                     check("placeBlock placed dirt 2", true);
+                    check("placeBlock auto-face target", ccFacing(bot.getLocalPlayer(),
+                            net.minecraft.world.phys.Vec3.atCenterOf(ccPlacePos2), 12.0F, 20.0F));
                     ccMineSent = true;
+                    // 再背对目标（朝北），验证 mineBlock 内部自动朝向会转回来
+                    bot.actions().look(180.0F, 0.0F);
                     com.mockplayer.session.ControlCommands.mineBlock(botName,
                             ccPlacePos2.getX(), ccPlacePos2.getY(), ccPlacePos2.getZ());
                 } else if (!ccMinedAir2) {
@@ -2125,8 +2230,39 @@ public final class TestRunner {
                         fail("mineBlock timeout");
                         step = 13;
                     }
-                } else {
+                } else if (!ccMinedChecked) {
+                    ccMinedChecked = true;
                     check("mineBlock broke dirt (survival)", true);
+                    check("mineBlock auto-face target", ccFacing(bot.getLocalPlayer(),
+                            net.minecraft.world.phys.Vec3.atCenterOf(ccPlacePos2), 12.0F, 20.0F));
+                } else if (!ccPlaceAtGiven) {
+                    ccPlaceAtGiven = true;
+                    waitTicks = 0;
+                    server.execute(() -> server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                            "item replace entity " + botName + " weapon.mainhand with minecraft:dirt"));
+                } else if (!ccPlaceAtSent) {
+                    if (++waitTicks > 15 && bot.getLocalPlayer().getMainHandItem().is(net.minecraft.world.item.Items.DIRT)) {
+                        ccPlaceAtSent = true;
+                        waitTicks = 0;
+                        // 先背对目标（朝北），验证 placeBlockAt 内部自动朝向会转回来
+                        bot.actions().look(180.0F, 0.0F);
+                        bot.actions().placeBlockAt(ccPlaceAtPos);
+                    }
+                } else if (!ccPlacedAt) {
+                    server.execute(() -> {
+                        var level = server.getLevel(Level.OVERWORLD);
+                        ccPlacedAt = ccPlaceAtPos != null && level != null
+                                && level.getBlockState(ccPlaceAtPos).is(net.minecraft.world.level.block.Blocks.DIRT);
+                    });
+                    if (++waitTicks > 160) {
+                        fail("placeBlockAt timeout");
+                        step = 13;
+                    }
+                } else if (!ccPlaceAtChecked) {
+                    ccPlaceAtChecked = true;
+                    check("placeBlockAt placed dirt at exact pos (server)", true);
+                    check("placeBlockAt auto-face target", ccFacing(bot.getLocalPlayer(),
+                            net.minecraft.world.phys.Vec3.atCenterOf(ccPlaceAtPos), 12.0F, 20.0F));
                     step = 13;
                 }
             }
@@ -2720,7 +2856,114 @@ public final class TestRunner {
                     }
                 }
             }
-            case 20 -> {
+            case 20 -> { // chunkRadius：配置默认 2 + 服务端 requestedViewDistance/ChunkTrackingView 强断言 + 主玩家隔离
+                if (bot == null || bot.getLifecycle() != BotLifecycle.PLAYING) {
+                    return;
+                }
+                if (!ccChunkTeleported) {
+                    ccChunkTeleported = true;
+                    waitTicks = 0;
+                    ccChunkMainOptionsBefore = mc.options.renderDistance().get();
+                    ccChunkMainChunkSource = mc.level != null ? mc.level.getChunkSource() : null;
+                    // 先传送到全新坐标（远离此前移动/加载历史），保证半径断言确定性
+                    server.execute(() -> server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack(), "tp " + botName + " 3000 4 0"));
+                } else if (!ccChunkSettled) {
+                    // 等假人位置同步到新坐标（客户端 chunk 中心随服务端 center 包更新）
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null && !isAwaitingPosition(sp)) {
+                        ccChunkProbePos = bot.getLocalPlayer().blockPosition();
+                        if (Math.abs(ccChunkProbePos.getX() - 3000) < 2) {
+                            ccChunkSettled = true;
+                            waitTicks = 0;
+                        }
+                    }
+                    if (++waitTicks > 200) {
+                        fail("chunk teleport timeout");
+                        step = 21;
+                    }
+                } else if (!ccChunkDefaultChecked) {
+                    if (++waitTicks > 20) {
+                        ccChunkDefaultChecked = true;
+                        check("chunk config default 2",
+                                com.mockplayer.config.MockplayerConfig.get().getFakePlayerChunkRadius() == 2);
+                        check("chunk bot default radius", bot.getChunkRadius() == 2);
+                        server.execute(() -> {
+                            var sp = server.getPlayerList().getPlayerByName(botName);
+                            ccChunkServerRequested = ccServerRequestedViewDistance(sp);
+                            ccChunkServerView = ccServerChunkViewDistance(sp);
+                        });
+                        // 默认 2：ChunkTrackingView includeNeighbors buffer=2 → 实际发包到距离 3；
+                        // 距离 4（64 格）应未加载，距离 1（16 格）应加载
+                        check("chunk default +3 loaded", bot.isBlockLoaded(ccChunkProbePos.offset(48, 0, 0)));
+                        check("chunk default +4 not loaded",
+                                !bot.isBlockLoaded(ccChunkProbePos.offset(64, 0, 0)),
+                                "pos=" + ccChunkProbePos.offset(64, 0, 0));
+                        check("chunk default +1 loaded", bot.isBlockLoaded(ccChunkProbePos.offset(16, 0, 0)));
+                        waitTicks = 0;
+                    }
+                } else if (!ccChunkServerChecked) {
+                    if (++waitTicks > 10) {
+                        ccChunkServerChecked = true;
+                        check("chunk server requestedViewDistance default", ccChunkServerRequested == 2,
+                                "server=" + ccChunkServerRequested);
+                        check("chunk server tracking view default", ccChunkServerView == 2,
+                                "view=" + ccChunkServerView);
+                        String out = com.mockplayer.session.ControlCommands.chunkRadius(botName, 4).getString();
+                        check("chunk set feedback", !out.contains("commands."), "out=" + out);
+                        check("chunk set local radius", bot.getChunkRadius() == 4);
+                        ccChunkServerRequested = -1;
+                        ccChunkServerView = -1;
+                        waitTicks = 0;
+                    }
+                } else if (!ccChunkServerAfterChecked) {
+                    server.execute(() -> {
+                        var sp = server.getPlayerList().getPlayerByName(botName);
+                        ccChunkServerRequested = ccServerRequestedViewDistance(sp);
+                        ccChunkServerView = ccServerChunkViewDistance(sp);
+                    });
+                    if (++waitTicks > 30) {
+                        ccChunkServerAfterChecked = true;
+                        check("chunk server requestedViewDistance after set", ccChunkServerRequested == 4,
+                                "server=" + ccChunkServerRequested);
+                        check("chunk server tracking view after set", ccChunkServerView == 4,
+                                "view=" + ccChunkServerView);
+                        waitTicks = 0;
+                    }
+                } else if (!ccChunkLoadedChecked) {
+                    if (++waitTicks > 60) {
+                        ccChunkLoadedChecked = true;
+                        // 半径 4 → 实际发包到距离 5；距离 6 应未加载
+                        check("chunk set +5 loaded", bot.isBlockLoaded(ccChunkProbePos.offset(80, 0, 0)));
+                        check("chunk set +6 not loaded", !bot.isBlockLoaded(ccChunkProbePos.offset(96, 0, 0)));
+                        check("chunk main player isolated",
+                                mc.options.renderDistance().get() == ccChunkMainOptionsBefore
+                                        && (ccChunkMainChunkSource == null || mc.level == null
+                                            || mc.level.getChunkSource() == ccChunkMainChunkSource));
+                        String q = com.mockplayer.session.QueryCommands.chunk(botName).getString();
+                        check("chunk query readback", q.contains("4"), "q=" + q);
+                        String bad = com.mockplayer.session.ControlCommands.chunkRadius(botName, 0).getString();
+                        check("chunk invalid 0 rejected", !bad.contains("commands.") && bot.getChunkRadius() == 4,
+                                "out=" + bad);
+                        String bad2 = com.mockplayer.session.ControlCommands.chunkRadius(botName, 33).getString();
+                        check("chunk invalid 33 rejected", !bad2.contains("commands.") && bot.getChunkRadius() == 4,
+                                "out=" + bad2);
+                        // 配置 JSON 往返：保存 5 → 重载 → 读回 5（再恢复默认 2）
+                        com.mockplayer.config.ModConfig cfg5 = new com.mockplayer.config.ModConfig();
+                        cfg5.setFakePlayerChunkRadius(5);
+                        com.mockplayer.config.MockplayerConfig.save(cfg5);
+                        com.mockplayer.config.MockplayerConfig.reload();
+                        check("chunk config json roundtrip",
+                                com.mockplayer.config.MockplayerConfig.get().getFakePlayerChunkRadius() == 5);
+                        com.mockplayer.config.MockplayerConfig.save(new com.mockplayer.config.ModConfig());
+                        com.mockplayer.config.MockplayerConfig.reload();
+                        check("chunk config restore default",
+                                com.mockplayer.config.MockplayerConfig.get().getFakePlayerChunkRadius() == 2);
+                        step = 21;
+                    }
+                }
+            }
+            case 21 -> {
                 finishSuite();
             }
         }
@@ -5118,9 +5361,11 @@ public final class TestRunner {
                     check("debug tag health+food row", rows.stream().anyMatch(r ->
                             r.getString().startsWith("❤" + health)
                                     && r.getString().contains("🍗" + food + "(" + sat + ")")));
-                    check("debug tag memory row", rows.stream().anyMatch(r ->
+                    // 内存与区块半径同一行：💾数值 + 📡半径 chunk
+                    check("debug tag memory+chunk row", rows.stream().anyMatch(r ->
                             r.getString().startsWith("💾")
-                                    && (r.getString().contains("KB") || r.getString().contains("MB"))));
+                                    && (r.getString().contains("KB") || r.getString().contains("MB"))
+                                    && r.getString().contains("📡" + bot.getChunkRadius() + " chunk")));
                     check("debug tag speed row", rows.stream().anyMatch(r ->
                             r.getString().startsWith("🏃") && r.getString().contains("m/s")));
                     check("debug tag colored health", rows.stream().anyMatch(r ->
@@ -5166,6 +5411,9 @@ public final class TestRunner {
                 String injected = dntLastScoreText();
                 check("debug scoreText injected", injected != null && injected.contains("❤"),
                         "injected=" + injected);
+                // 布局强断言：所有信息行渲染在名字上方（探针记录相对偏移，信息行 > 名字）
+                check("debug tag info above name", dntInfoOffsetY() > dntNameOffsetY(),
+                        "info=" + dntInfoOffsetY() + " name=" + dntNameOffsetY());
                 waitTicks = 0;
                 step = 3;
             }
@@ -5187,10 +5435,11 @@ public final class TestRunner {
                 if (bot.getContainer().isPresent()) {
                     java.util.List<net.minecraft.network.chat.Component> rows =
                             com.mockplayer.session.DebugNameTagInfo.format(bot).getSiblings();
-                    check("debug tag container shown", rows.stream()
-                            .anyMatch(r -> r.getString().startsWith("📦")));
-                    check("debug tag container title", rows.stream().anyMatch(r ->
-                            r.getString().contains(bot.getContainer().get().getTitle().getString())));
+                    String dntTitle = bot.getContainer().get().getTitle().getString();
+                    // 📦 与容器名称必须在同一行（同一 sibling）
+                    check("debug tag container same line", rows.stream().anyMatch(r ->
+                            r.getString().startsWith("📦") && r.getString().contains(dntTitle)),
+                            "title=" + dntTitle);
                     bot.getContainer().ifPresent(c -> c.close());
                     step = 4;
                 } else if (++waitTicks > 200) {
@@ -5231,6 +5480,30 @@ public final class TestRunner {
         }
     }
 
+    /** 反射读信息行相对名字的 Y 偏移（>0 = 在名字上方）。 */
+    private static float dntInfoOffsetY() {
+        try {
+            java.lang.reflect.Field f = com.mockplayer.session.DebugNameTagInfo.class
+                    .getDeclaredField("lastInfoOffsetY");
+            f.setAccessible(true);
+            return f.getFloat(null);
+        } catch (Exception e) {
+            return -1.0F;
+        }
+    }
+
+    /** 反射读名字自身 Y 偏移（探针布局断言基准）。 */
+    private static float dntNameOffsetY() {
+        try {
+            java.lang.reflect.Field f = com.mockplayer.session.DebugNameTagInfo.class
+                    .getDeclaredField("lastNameOffsetY");
+            f.setAccessible(true);
+            return f.getFloat(null);
+        } catch (Exception e) {
+            return -1.0F;
+        }
+    }
+
     /** 反射清零渲染探针（套件隔离）。 */
     private static void dntResetRender() {
         try {
@@ -5242,6 +5515,14 @@ public final class TestRunner {
                     .getDeclaredField("lastRendered");
             l.setAccessible(true);
             l.set(null, null);
+            java.lang.reflect.Field io = com.mockplayer.session.DebugNameTagInfo.class
+                    .getDeclaredField("lastInfoOffsetY");
+            io.setAccessible(true);
+            io.setFloat(null, -1.0F);
+            java.lang.reflect.Field no = com.mockplayer.session.DebugNameTagInfo.class
+                    .getDeclaredField("lastNameOffsetY");
+            no.setAccessible(true);
+            no.setFloat(null, -1.0F);
         } catch (Exception ignored) {
         }
     }

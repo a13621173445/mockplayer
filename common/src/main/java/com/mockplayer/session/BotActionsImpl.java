@@ -20,6 +20,7 @@ import net.minecraft.world.entity.vehicle.boat.Boat;
 import net.minecraft.world.entity.vehicle.minecart.Minecart;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec2;
@@ -113,6 +114,21 @@ public class BotActionsImpl implements BotActions {
             player.setXRot(Mth.clamp(player.getXRot() + pitch, -90.0F, 90.0F));
         }
         return this;
+    }
+
+    /** 一次性朝向：交互前立即转向目标位置（不保存持续 look 状态，与持续移动输入无关）。 */
+    private void facePos(Vec3 pos) {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player != null && pos != null) {
+            player.lookAt(EntityAnchorArgument.Anchor.EYES, pos);
+        }
+    }
+
+    /** 一次性朝向实体（取其眼睛位置）。 */
+    private void faceEntity(Entity target) {
+        if (target != null) {
+            this.facePos(target.getEyePosition());
+        }
     }
 
     @Override
@@ -209,6 +225,8 @@ public class BotActionsImpl implements BotActions {
         if (player == null || target == null) {
             return;
         }
+        // 攻击前自动看向目标（用户拍板：所有实体交互先 lookAt）
+        this.faceEntity(target);
         if (this.bot.getGameMode() != null) {
             this.bot.getGameMode().attack(player, target);
             player.swing(InteractionHand.MAIN_HAND);
@@ -238,6 +256,8 @@ public class BotActionsImpl implements BotActions {
         if (player == null || target == null || this.bot.getGameMode() == null) {
             return;
         }
+        // 交互前自动看向目标
+        this.faceEntity(target);
         // 右键实体（村民交易/喂食/骑乘）：EntityHitResult 定位目标
         net.minecraft.world.phys.EntityHitResult hit = new net.minecraft.world.phys.EntityHitResult(target);
         InteractionResult result = this.bot.getGameMode().interact(player, target, hit, InteractionHand.MAIN_HAND);
@@ -254,6 +274,8 @@ public class BotActionsImpl implements BotActions {
         if (player == null || pos == null || this.bot.getGameMode() == null) {
             return;
         }
+        // 打方块前自动看向方块中心
+        this.facePos(Vec3.atCenterOf(pos));
         // 26.2 无 attackBlock：用 startDestroyBlock + 立即 stopDestroyBlock 模拟一次左键点击
         this.bot.getGameMode().startDestroyBlock(pos, Direction.UP);
         this.bot.getGameMode().stopDestroyBlock();
@@ -267,6 +289,8 @@ public class BotActionsImpl implements BotActions {
         if (player == null || pos == null || this.bot.getGameMode() == null) {
             return;
         }
+        // 挖掘前自动看向方块中心
+        this.facePos(Vec3.atCenterOf(pos));
         // 原版等价距离判断：复用 Player.isWithinBlockInteractionRange（blockInteractionRange，生存约 4.5 格），
         // 与原版 Minecraft.startAttack 的 hitResult 射线范围一致；不做视线射线（方块在背后也能按坐标挖，方便使用）
         if (!player.isWithinBlockInteractionRange(pos, 0.0)) {
@@ -290,6 +314,8 @@ public class BotActionsImpl implements BotActions {
             return;
         }
         BlockPos pos = this.miningPos;
+        // 持续挖掘每 tick 保持看向方块（玩家移动/转向后仍对准目标）
+        this.facePos(Vec3.atCenterOf(pos));
         // 原版等价：玩家移动/目标离开交互范围后，continueAttack 的 hitResult 不再指向该方块 → 松开左键
         if (!player.isWithinBlockInteractionRange(pos, 0.0)) {
             this.stopMining();
@@ -336,10 +362,16 @@ public class BotActionsImpl implements BotActions {
 
     @Override
     public void useItemOn(BlockPos pos, Direction side) {
+        this.useItemOnFacing(pos, side, Vec3.atCenterOf(pos));
+    }
+
+    /** useItemOn 内部实现：可选朝向目标（placeBlock 传实际放置位置，useItemOn 传点击方块中心）。 */
+    private void useItemOnFacing(BlockPos pos, Direction side, Vec3 faceTarget) {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null || this.bot.getGameMode() == null || pos == null) {
             return;
         }
+        this.facePos(faceTarget);
         // 26.2：useItemOn(LocalPlayer, InteractionHand, BlockHitResult)
         BlockHitResult hit = new BlockHitResult(
                 Vec3.atCenterOf(pos), side != null ? side : Direction.UP, pos, false);
@@ -353,9 +385,48 @@ public class BotActionsImpl implements BotActions {
 
     @Override
     public void placeBlock(BlockPos pos, Direction side) {
-        // 放置方块 = 手持方块对着 pos 的 side 面 useItemOn；独立语义原语
-        this.useItemOn(pos, side);
+        LocalPlayer player = this.bot.getLocalPlayer();
+        Direction face = side != null ? side : Direction.UP;
+        // 实际放置位置与原版 BlockPlaceContext 一致：点击方块可替换（空气/水等）→ 放 pos 本身；
+        // 点击实心方块 → 放 pos.relative(face)。朝向对准实际放置位置。
+        BlockPos placeTarget = pos;
+        if (player != null && !player.level().getBlockState(pos).canBeReplaced()) {
+            placeTarget = pos.relative(face);
+        }
+        this.useItemOnFacing(pos, face, Vec3.atCenterOf(placeTarget));
         this.bot.fireOnPlaceBlock(pos);
+    }
+
+    @Override
+    public void placeBlockAt(BlockPos target) {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null || target == null || this.bot.getGameMode() == null) {
+            return;
+        }
+        Level level = player.level();
+        // 找支撑块：6 方向中不可替换（canBeReplaced=false，如实心方块）且离假人眼睛最近的相邻方块；
+        // 点击它时 BlockPlaceContext.replaceClicked=false → 放置点 = 支撑块.relative(反方向) = target
+        Vec3 eye = player.getEyePosition();
+        BlockPos support = null;
+        Direction supportSide = null;
+        double bestDist = Double.MAX_VALUE;
+        for (Direction dir : Direction.values()) {
+            BlockPos neighbor = target.relative(dir);
+            if (level.getBlockState(neighbor).canBeReplaced()) {
+                continue;
+            }
+            double d = eye.distanceToSqr(Vec3.atCenterOf(neighbor));
+            if (d < bestDist) {
+                bestDist = d;
+                support = neighbor;
+                supportSide = dir.getOpposite();
+            }
+        }
+        if (support == null || supportSide == null) {
+            return; // 无支撑块，不放置
+        }
+        this.useItemOnFacing(support, supportSide, Vec3.atCenterOf(target));
+        this.bot.fireOnPlaceBlock(target);
     }
 
     @Override

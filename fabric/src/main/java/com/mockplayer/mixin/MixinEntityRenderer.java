@@ -55,7 +55,7 @@ public abstract class MixinEntityRenderer {
     }
 
     /**
-     * 多行名字标签：scoreText 里含 \n 时逐行绘制（名字在上方，信息行向下排）。
+     * 多行名字标签：scoreText 里含 \n 时逐行绘制（所有信息行在名字上方）。
      * 原版 submitNameDisplay 只画单行 scoreText，多行信息必须手动逐行 submitNameTag。
      */
     @Inject(
@@ -73,24 +73,25 @@ public abstract class MixinEntityRenderer {
         java.util.List<net.minecraft.network.chat.Component> rows = state.scoreText == null
                 ? java.util.List.of()
                 : state.scoreText.getSiblings();
-        if (rows.size() < 4 || !rows.get(0).getString().startsWith("❤")) {
+        // 假人注入的 scoreText 第一行必是 ❤；只要 ≥2 行就按多行布局（信息在名字上方）
+        if (rows.size() < 2 || !rows.get(0).getString().startsWith("❤")) {
             return;
         }
         float lineHeight = 9.0F * 1.15F * 0.025F;
         poseStack.pushPose();
-        // 名字在标准位置（原版 nameTag 位置）
-        poseStack.translate(0.0F, lineHeight, 0.0F);
-        if (state.nameTag != null) {
-            submitNodeCollector.submitNameTag(poseStack, state.nameTagAttachment, offset, state.nameTag,
-                    !state.isDiscrete, state.lightCoords, camera);
-        }
-        // 回到第一行信息位置，然后向下逐行
-        poseStack.translate(0.0F, -lineHeight, 0.0F);
+        // 所有信息行画在名字上方：先上移 rows 行高度，逐行向下画，名字最后落在标准位置
+        float infoOffset = lineHeight * rows.size();
+        poseStack.translate(0.0F, infoOffset, 0.0F);
         for (net.minecraft.network.chat.Component row : rows) {
             submitNodeCollector.submitNameTag(poseStack, state.nameTagAttachment, offset,
                     row, !state.isDiscrete, state.lightCoords, camera);
             poseStack.translate(0.0F, -lineHeight, 0.0F);
         }
+        if (state.nameTag != null) {
+            submitNodeCollector.submitNameTag(poseStack, state.nameTagAttachment, offset, state.nameTag,
+                    !state.isDiscrete, state.lightCoords, camera);
+        }
+        DebugNameTagInfo.recordRenderLayout(infoOffset, 0.0F);
         poseStack.popPose();
         ci.cancel();
     }
