@@ -50,6 +50,7 @@ public class ControlCommands {
     public static final List<String> ACTIONS = List.of(
             "move", "stop", "sneak", "unsneak", "sprint", "unsprint", "jump",
             "look", "lookAt", "turn", "attack", "stab", "sustainedAttack", "sustainedUse",
+            "attackLook", "useLook", "sustainedAttackLook", "sustainedUseLook",
             "stopSustained", "interact", "useItem", "releaseUsingItem", "useItemOn",
             "placeBlock", "mineBlock", "attackBlock", "hotbar", "chunkRadius", "drop", "swapHands",
             "mount", "dismount", "close", "click", "button", "trade", "setSlot",
@@ -322,6 +323,42 @@ public class ControlCommands {
         }
         bot.actions().sustainedUse(entity);
         return success("sustainedUse", name, entity.getName());
+    }
+
+    public static Component attackLook(String name) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        findBot(name).actions().attackLook();
+        return success("attackLook", name);
+    }
+
+    public static Component useLook(String name) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        findBot(name).actions().useLook();
+        return success("useLook", name);
+    }
+
+    public static Component sustainedAttackLook(String name) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        findBot(name).actions().sustainedAttackLook();
+        return success("sustainedAttackLook", name);
+    }
+
+    public static Component sustainedUseLook(String name) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        findBot(name).actions().sustainedUseLook();
+        return success("sustainedUseLook", name);
     }
 
     public static Component stopSustained(String name) {
@@ -1000,6 +1037,22 @@ public class ControlCommands {
                                     StringArgumentType.getString(ctx, "target")));
                             return 1;
                         })));
+        player.then(f.literal("attackLook").executes(ctx -> {
+            f.sendFeedback(ctx.getSource(), attackLook(StringArgumentType.getString(ctx, "player")));
+            return 1;
+        }));
+        player.then(f.literal("useLook").executes(ctx -> {
+            f.sendFeedback(ctx.getSource(), useLook(StringArgumentType.getString(ctx, "player")));
+            return 1;
+        }));
+        player.then(f.literal("sustainedAttackLook").executes(ctx -> {
+            f.sendFeedback(ctx.getSource(), sustainedAttackLook(StringArgumentType.getString(ctx, "player")));
+            return 1;
+        }));
+        player.then(f.literal("sustainedUseLook").executes(ctx -> {
+            f.sendFeedback(ctx.getSource(), sustainedUseLook(StringArgumentType.getString(ctx, "player")));
+            return 1;
+        }));
         player.then(f.literal("stopSustained").executes(ctx -> {
             f.sendFeedback(ctx.getSource(), stopSustained(StringArgumentType.getString(ctx, "player")));
             return 1;

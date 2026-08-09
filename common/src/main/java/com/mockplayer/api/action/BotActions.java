@@ -109,6 +109,37 @@ public interface BotActions {
     BotActions sustainedUse(Entity target);
 
     /**
+     * 沿假人视线射线执行一次原版左键动作（单点）：
+     * 命中实体 → {@link #attack(Entity)}；命中方块 → 打一下（attackBlock 等价，
+     * 不掉方块）；空 → 挥空。射线复用原版 pick（方块 4.5 / 实体 3.0，创造 +2）。
+     */
+    void attackLook();
+
+    /**
+     * 沿假人视线射线执行一次原版右键动作（单点）：
+     * 命中实体 → {@link #interact(Entity)}；命中方块 → {@link #useItemOn(BlockPos, Direction)}；
+     * 空 → {@link #useItem(InteractionHand)}。
+     */
+    void useLook();
+
+    /**
+     * 长按左键（每 tick 沿射线）：实体 → 持续攻击；方块 → 持续挖掘；
+     * 配合 {@link #stopSustained()} 停止。
+     *
+     * @return this
+     */
+    BotActions sustainedAttackLook();
+
+    /**
+     * 长按右键（每 tick 沿射线）：实体 → 持续交互；方块 → 首次 useItemOn，
+     * 之后持续 useItem（吃 / 拉弓 / 投掷的按住语义）；配合
+     * {@link #stopSustained()} 停止。
+     *
+     * @return this
+     */
+    BotActions sustainedUseLook();
+
+    /**
      * 停止持续攻击/使用（sustainedAttack/sustainedUse）。
      *
      * @return this

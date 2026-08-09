@@ -1497,6 +1497,46 @@ public final class TestRunner {
     private static Object ccChunkMainChunkSource;
     private static volatile int ccChunkServerRequested = -1;
     private static volatile int ccChunkServerView = -1;
+    // ===== 射线交互（attackLook/useLook 单点 + sustained*Look 长按）=====
+    private static int rcStep;
+    private static long rcWaitStart;
+    private static BlockPos rcPos;
+    private static BlockPos rcHuskPos;
+    private static volatile float rcHuskHp = 20;
+    /** 服务端已确认 husk 出现（异步读未完成时不能用旧 hp 值推进状态机）。 */
+    private static volatile boolean rcHuskFound;
+    private static boolean rcHuskSummoned;
+    private static boolean rcChestPlaced;
+    private static volatile boolean rcChestOpen;
+    private static BlockPos rcChestPos;
+    private static boolean rcBreadGiven;
+    private static volatile boolean rcUsing;
+    private static volatile boolean rcReleased;
+    private static boolean rcDirtPlaced;
+    private static volatile boolean rcDirtBroken;
+    private static BlockPos rcDirtPos;
+    private static boolean rcFarPlaced;
+    private static volatile boolean rcFarStill;
+    private static BlockPos rcFarPos;
+    private static boolean rcTurnHuskSummoned;
+    private static boolean rcTurnAttacked;
+    private static volatile float rcTurnHpAfter = 20;
+
+    /** 射线测试助手：取服务端 OVERWORLD 里离假人最近的僵尸（husk 也属于 Zombie）。 */
+    private static net.minecraft.world.entity.monster.zombie.Zombie ccNearestZombie(MinecraftServer server) {
+        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+        net.minecraft.server.level.ServerLevel level = server.getLevel(Level.OVERWORLD);
+        if (sp == null || level == null) {
+            return null;
+        }
+        net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(
+                sp.getX() - 16, sp.getY() - 16, sp.getZ() - 16,
+                sp.getX() + 16, sp.getY() + 16, sp.getZ() + 16);
+        return level.getEntitiesOfClass(net.minecraft.world.entity.monster.zombie.Zombie.class, box).stream()
+                .min(Comparator.comparingDouble(e -> e.distanceToSqr(sp)))
+                .orElse(null);
+    }
+
     private static volatile BlockPos ccMineStoneFar;
     private static boolean ccMineFarSent;
     private static boolean ccMineFarChecked;
@@ -1688,6 +1728,7 @@ public final class TestRunner {
                 java.util.List<String> actions = java.util.List.of(
                         "move", "stop", "sneak", "unsneak", "sprint", "unsprint", "jump",
                         "look", "lookAt", "turn", "attack", "stab", "sustainedAttack", "sustainedUse",
+                        "attackLook", "useLook", "sustainedAttackLook", "sustainedUseLook",
                         "stopSustained", "interact", "useItem", "releaseUsingItem", "useItemOn",
                         "placeBlock", "mineBlock", "attackBlock", "hotbar", "chunkRadius", "drop", "swapHands",
                         "mount", "dismount", "chat", "command", "wakeUp", "respawn", "editBook",
@@ -3017,7 +3058,258 @@ public final class TestRunner {
                     }
                 }
             }
-            case 21 -> {
+            case 21 -> { // 射线交互：attackLook/useLook 单点 + sustained*Look 长按（原版等价）
+                if (bot == null || bot.getLifecycle() != BotLifecycle.PLAYING) {
+                    return;
+                }
+                switch (rcStep) {
+                    case 0 -> { // 准备：记录基座 + 清实体
+                        rcStep = 1;
+                        rcWaitStart = System.currentTimeMillis();
+                        rcPos = bot.getLocalPlayer().blockPosition();
+                        BlockPos p = rcPos;
+                        server.execute(() -> server.getCommands().performPrefixedCommand(
+                                server.createCommandSourceStack(), "kill @e[type=!minecraft:player]"));
+                        rcHuskSummoned = false;
+                        rcHuskFound = false;
+                    }
+                    case 1 -> { // 召唤 husk（东 3 格）并等它出现
+                        if (!rcHuskSummoned) {
+                            rcHuskSummoned = true;
+                            rcHuskPos = rcPos.offset(3, 0, 0);
+                            BlockPos hp = rcHuskPos;
+                            server.execute(() -> server.getCommands().performPrefixedCommand(
+                                    server.createCommandSourceStack(),
+                                    String.format("summon minecraft:husk %.2f %.2f %.2f {NoAI:1b}",
+                                            hp.getX() + 0.5, (double) hp.getY(), hp.getZ() + 0.5)));
+                        }
+                        server.execute(() -> {
+                            var h = ccNearestZombie(server);
+                            rcHuskFound = h != null;
+                            rcHuskHp = h != null ? h.getHealth() : -1;
+                        });
+                        if (rcHuskFound && rcHuskHp == 20.0F) {
+                            rcStep = 2;
+                            rcWaitStart = System.currentTimeMillis();
+                        } else if (System.currentTimeMillis() - rcWaitStart > 15_000) {
+                            fail("raycast husk spawn timeout");
+                            step = 22;
+                        }
+                    }
+                    case 2 -> { // attackLook 单点 → 服务端伤害
+                        if (rcHuskFound && rcHuskHp >= 20.0F) {
+                            bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(rcHuskPos));
+                            com.mockplayer.session.ControlCommands.attackLook(botName);
+                        }
+                        server.execute(() -> {
+                            var h = ccNearestZombie(server);
+                            rcHuskFound = h != null;
+                            rcHuskHp = h != null ? h.getHealth() : 20;
+                        });
+                        if (rcHuskFound && rcHuskHp < 20.0F) {
+                            check("attackLook damages entity", true);
+                            rcStep = 3;
+                            rcWaitStart = System.currentTimeMillis();
+                        } else if (System.currentTimeMillis() - rcWaitStart > 15_000) {
+                            fail("attackLook no damage");
+                            step = 22;
+                        }
+                    }
+                    case 3 -> { // sustainedAttackLook 长按 → 持续伤害，再停止
+                        if (rcHuskFound && rcHuskHp >= 13.0F) {
+                            com.mockplayer.session.ControlCommands.sustainedAttackLook(botName);
+                        }
+                        server.execute(() -> {
+                            var h = ccNearestZombie(server);
+                            rcHuskFound = h != null;
+                            rcHuskHp = h != null ? h.getHealth() : 20;
+                        });
+                        if (rcHuskFound && rcHuskHp < 13.0F) {
+                            check("sustainedAttackLook continuous damage", true);
+                            com.mockplayer.session.ControlCommands.stopSustained(botName);
+                            rcStep = 4;
+                            rcWaitStart = System.currentTimeMillis();
+                        } else if (System.currentTimeMillis() - rcWaitStart > 25_000) {
+                            fail("sustainedAttackLook no damage hp=" + rcHuskHp);
+                            step = 22;
+                        }
+                    }
+                    case 4 -> { // useLook 单点开箱
+                        if (!rcChestPlaced) {
+                            rcChestPlaced = true;
+                            rcChestPos = rcPos.offset(2, 0, 0);
+                            BlockPos p = rcChestPos;
+                            server.execute(() -> server.getLevel(Level.OVERWORLD)
+                                    .setBlock(p, Blocks.CHEST.defaultBlockState(), 3));
+                        }
+                        if (!rcChestOpen && bot.getBlockState(rcChestPos).is(Blocks.CHEST)) {
+                            bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(rcChestPos));
+                            com.mockplayer.session.ControlCommands.useLook(botName);
+                        }
+                        rcChestOpen = bot.getContainer().isPresent();
+                        if (rcChestOpen) {
+                            check("useLook opens container", true);
+                            bot.getContainer().ifPresent(c -> c.close());
+                            rcStep = 5;
+                            rcWaitStart = System.currentTimeMillis();
+                        } else if (System.currentTimeMillis() - rcWaitStart > 15_000) {
+                            fail("useLook chest timeout");
+                            step = 22;
+                        }
+                    }
+                    case 5 -> { // sustainedUseLook 长按面包：using 状态 + release
+                        if (!rcBreadGiven) {
+                            rcBreadGiven = true;
+                            // 满饥饿吃不了面包（canEat=false）：先把服务端饥饿压到 6（同步给假人客户端）
+                            server.execute(() -> {
+                                var sp = server.getPlayerList().getPlayerByName(botName);
+                                if (sp != null) {
+                                    sp.getFoodData().setFoodLevel(6);
+                                    sp.getFoodData().setSaturation(0.0F);
+                                }
+                            });
+                            server.execute(() -> server.getCommands().performPrefixedCommand(
+                                    server.createCommandSourceStack(),
+                                    "item replace entity " + botName + " weapon.mainhand with minecraft:bread"));
+                        }
+                        if (!rcUsing && bot.getLocalPlayer().getMainHandItem()
+                                .is(net.minecraft.world.item.Items.BREAD)) {
+                            bot.actions().lookAt(new net.minecraft.world.phys.Vec3(
+                                    rcPos.getX(), rcPos.getY() + 20.0, rcPos.getZ()));
+                            com.mockplayer.session.ControlCommands.sustainedUseLook(botName);
+                        }
+                        // 服务端 using 证据：假人持面包且处于使用状态
+                        server.execute(() -> {
+                            var sp = server.getPlayerList().getPlayerByName(botName);
+                            rcUsing = sp != null && sp.isUsingItem()
+                                    && sp.getUseItem().is(net.minecraft.world.item.Items.BREAD);
+                        });
+                        if (rcUsing) {
+                            check("sustainedUseLook using item", true);
+                            if (!rcReleased) {
+                                rcReleased = true;
+                                com.mockplayer.session.ControlCommands.releaseUsingItem(botName);
+                                com.mockplayer.session.ControlCommands.stopSustained(botName);
+                            }
+                            server.execute(() -> {
+                                var sp = server.getPlayerList().getPlayerByName(botName);
+                                rcReleased = sp != null && !sp.isUsingItem();
+                            });
+                            if (rcReleased) {
+                                check("sustainedUseLook release stops using", true);
+                                rcStep = 6;
+                                rcWaitStart = System.currentTimeMillis();
+                            }
+                        } else if (System.currentTimeMillis() - rcWaitStart > 15_000) {
+                            fail("sustainedUseLook bread timeout");
+                            step = 22;
+                        }
+                    }
+                    case 6 -> { // sustainedAttackLook 长按挖 dirt
+                        if (!rcDirtPlaced) {
+                            rcDirtPlaced = true;
+                            rcDirtPos = rcPos.offset(2, 0, 0);
+                            BlockPos p = rcDirtPos;
+                            server.execute(() -> server.getLevel(Level.OVERWORLD)
+                                    .setBlock(p, Blocks.DIRT.defaultBlockState(), 3));
+                        }
+                        if (!rcDirtBroken && bot.getBlockState(rcDirtPos).is(Blocks.DIRT)) {
+                            bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(rcDirtPos));
+                            com.mockplayer.session.ControlCommands.sustainedAttackLook(botName);
+                        }
+                        server.execute(() -> rcDirtBroken = server.getLevel(Level.OVERWORLD)
+                                .getBlockState(rcDirtPos).isAir());
+                        if (rcDirtBroken) {
+                            check("sustainedAttackLook breaks block", true);
+                            com.mockplayer.session.ControlCommands.stopSustained(botName);
+                            rcStep = 7;
+                            rcWaitStart = System.currentTimeMillis();
+                        } else if (System.currentTimeMillis() - rcWaitStart > 25_000) {
+                            fail("sustainedAttackLook mine timeout");
+                            step = 22;
+                        }
+                    }
+                    case 7 -> { // 距离边界：8 格石头不破坏（射线在 4.5 格外 MISS）
+                        if (!rcFarPlaced) {
+                            rcFarPlaced = true;
+                            rcFarPos = rcPos.offset(8, 0, 0);
+                            BlockPos p = rcFarPos;
+                            BlockPos base = rcPos;
+                            server.execute(() -> {
+                                for (int i = 2; i <= 7; i++) {
+                                    server.getLevel(Level.OVERWORLD)
+                                            .setBlock(base.offset(i, 0, 0), Blocks.AIR.defaultBlockState(), 3);
+                                }
+                                server.getLevel(Level.OVERWORLD)
+                                        .setBlock(p, Blocks.STONE.defaultBlockState(), 3);
+                            });
+                        }
+                        if (System.currentTimeMillis() - rcWaitStart < 3000) {
+                            bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(rcFarPos));
+                            com.mockplayer.session.ControlCommands.sustainedAttackLook(botName);
+                        } else {
+                            server.execute(() -> rcFarStill = server.getLevel(Level.OVERWORLD)
+                                    .getBlockState(rcFarPos).is(Blocks.STONE));
+                            if (rcFarStill) {
+                                check("look out of reach no break", true);
+                                com.mockplayer.session.ControlCommands.stopSustained(botName);
+                                rcStep = 8;
+                                rcWaitStart = System.currentTimeMillis();
+                            } else if (System.currentTimeMillis() - rcWaitStart > 25_000) {
+                                fail("look out of reach stone broken");
+                                com.mockplayer.session.ControlCommands.stopSustained(botName);
+                                step = 22;
+                            }
+                        }
+                    }
+                    case 8 -> { // 视线变化：lookAt husk 后 turn 180，攻击不再命中
+                        if (!rcTurnHuskSummoned) {
+                            rcTurnHuskSummoned = true;
+                            // 清掉此前攻击过的残血 husk（血量断言依赖满血新目标）
+                            server.execute(() -> server.getCommands().performPrefixedCommand(
+                                    server.createCommandSourceStack(), "kill @e[type=!minecraft:player]"));
+                            rcHuskPos = rcPos.offset(3, 0, 0);
+                            BlockPos hp = rcHuskPos;
+                            server.execute(() -> server.getCommands().performPrefixedCommand(
+                                    server.createCommandSourceStack(),
+                                    String.format("summon minecraft:husk %.2f %.2f %.2f {NoAI:1b}",
+                                            hp.getX() + 0.5, (double) hp.getY(), hp.getZ() + 0.5)));
+                        } else if (!rcTurnAttacked) {
+                            if (System.currentTimeMillis() - rcWaitStart > 5000) {
+                                rcTurnAttacked = true;
+                                bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(rcHuskPos));
+                                bot.actions().turn(180.0F, 0.0F);
+                                com.mockplayer.session.ControlCommands.attackLook(botName);
+                                rcWaitStart = System.currentTimeMillis();
+                            }
+                        } else if (System.currentTimeMillis() - rcWaitStart > 2000) {
+                            server.execute(() -> {
+                                var h = ccNearestZombie(server);
+                                rcTurnHpAfter = h != null ? h.getHealth() : -1;
+                            });
+                            check("turn changes look target", rcTurnHpAfter >= 19.99F,
+                                    "hp=" + rcTurnHpAfter);
+                            server.execute(() -> server.getCommands().performPrefixedCommand(
+                                    server.createCommandSourceStack(), "kill @e[type=!minecraft:player]"));
+                            rcStep = 9;
+                        }
+                    }
+                    case 9 -> { // 命令层 i18n：help 列出 4 个新动作
+                        String help = com.mockplayer.session.ControlCommands.help(botName).getString();
+                        check("help lists look actions",
+                                help.contains(net.minecraft.network.chat.Component.translatable(
+                                        "commands.mockplayer.control.action.attackLook").getString())
+                                        && help.contains(net.minecraft.network.chat.Component.translatable(
+                                                "commands.mockplayer.control.action.useLook").getString())
+                                        && help.contains(net.minecraft.network.chat.Component.translatable(
+                                                "commands.mockplayer.control.action.sustainedAttackLook").getString())
+                                        && help.contains(net.minecraft.network.chat.Component.translatable(
+                                                "commands.mockplayer.control.action.sustainedUseLook").getString()));
+                        step = 22;
+                    }
+                }
+            }
+            case 22 -> {
                 finishSuite();
             }
         }

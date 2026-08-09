@@ -46,6 +46,11 @@ public class BotActionsImpl implements BotActions {
     private int dismountShiftTicks;
     private Entity sustainedAttackTarget;
     private Entity sustainedUseTarget;
+    /** 长按左键/右键的射线持续状态（沿视线，stopSustained 停止）。 */
+    private boolean sustainedAttackLook;
+    private boolean sustainedUseLook;
+    /** 长按右键已交互过的方块（同一方块只 useItemOn 一次，之后持续 useItem）。 */
+    private BlockPos sustainedUseLookBlock;
     private BlockPos miningPos;
 
     public BotActionsImpl(BotImpl bot) {
@@ -153,6 +158,9 @@ public class BotActionsImpl implements BotActions {
     public BotActions stopSustained() {
         this.sustainedAttackTarget = null;
         this.sustainedUseTarget = null;
+        this.sustainedAttackLook = false;
+        this.sustainedUseLook = false;
+        this.sustainedUseLookBlock = null;
         this.stopMining();
         return this;
     }
@@ -167,6 +175,9 @@ public class BotActionsImpl implements BotActions {
         this.dismountShiftTicks = 0;
         this.sustainedAttackTarget = null;
         this.sustainedUseTarget = null;
+        this.sustainedAttackLook = false;
+        this.sustainedUseLook = false;
+        this.sustainedUseLookBlock = null;
         this.stopMining();
         return this;
     }
@@ -215,6 +226,41 @@ public class BotActionsImpl implements BotActions {
                 this.interact(this.sustainedUseTarget);
             } else {
                 this.sustainedUseTarget = null;
+            }
+        }
+        // 长按左键（原版按住左键）：射线命中实体 → 持续攻击；方块 → 持续挖掘；空 → 挥空
+        if (this.sustainedAttackLook) {
+            net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
+            if (hit instanceof net.minecraft.world.phys.EntityHitResult entityHit) {
+                if (entityHit.getEntity().isAlive()) {
+                    this.attack(entityHit.getEntity());
+                }
+            } else if (hit instanceof net.minecraft.world.phys.BlockHitResult blockHit
+                    && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+                if (!blockHit.getBlockPos().equals(this.miningPos)) {
+                    this.mineBlock(blockHit.getBlockPos());
+                }
+            } else {
+                this.stopMining();
+                player.swing(InteractionHand.MAIN_HAND);
+            }
+        }
+        // 长按右键（原版按住右键）：实体 → 持续交互；方块 → 首次 useItemOn，之后持续 useItem
+        if (this.sustainedUseLook) {
+            net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
+            if (hit instanceof net.minecraft.world.phys.EntityHitResult entityHit) {
+                if (entityHit.getEntity().isAlive()) {
+                    this.interact(entityHit.getEntity());
+                }
+            } else if (hit instanceof net.minecraft.world.phys.BlockHitResult blockHit
+                    && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+                if (!blockHit.getBlockPos().equals(this.sustainedUseLookBlock)) {
+                    this.sustainedUseLookBlock = blockHit.getBlockPos();
+                    this.useItemOn(blockHit.getBlockPos(), blockHit.getDirection());
+                }
+                this.useItem(InteractionHand.MAIN_HAND);
+            } else {
+                this.useItem(InteractionHand.MAIN_HAND);
             }
         }
     }
@@ -266,6 +312,103 @@ public class BotActionsImpl implements BotActions {
             player.swing(InteractionHand.MAIN_HAND);
         }
         this.bot.fireOnInteractEntity(target);
+    }
+
+    @Override
+    public void attackLook() {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null) {
+            return;
+        }
+        net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
+        if (hit instanceof net.minecraft.world.phys.EntityHitResult entityHit) {
+            this.attack(entityHit.getEntity());
+        } else if (hit instanceof net.minecraft.world.phys.BlockHitResult blockHit
+                && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+            // 原版单点左键方块 = 打一下（start+stop+swing，不掉方块）
+            this.attackBlock(blockHit.getBlockPos());
+        } else {
+            player.swing(InteractionHand.MAIN_HAND); // 挥空
+        }
+    }
+
+    @Override
+    public void useLook() {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null) {
+            return;
+        }
+        net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
+        if (hit instanceof net.minecraft.world.phys.EntityHitResult entityHit) {
+            this.interact(entityHit.getEntity());
+        } else if (hit instanceof net.minecraft.world.phys.BlockHitResult blockHit
+                && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+            this.useItemOn(blockHit.getBlockPos(), blockHit.getDirection());
+        } else {
+            this.useItem(InteractionHand.MAIN_HAND);
+        }
+    }
+
+    @Override
+    public BotActions sustainedAttackLook() {
+        this.sustainedAttackLook = true;
+        return this;
+    }
+
+    @Override
+    public BotActions sustainedUseLook() {
+        this.sustainedUseLook = true;
+        return this;
+    }
+
+    /**
+     * 原版等价射线（对齐 LocalPlayer.raycastHitResult / pick）：方块 clip +
+     * 实体相交最近优先 + 作用距离过滤。返回 null 表示假人未就绪。
+     */
+    private net.minecraft.world.phys.HitResult pickLookTarget() {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null) {
+            return null;
+        }
+        // 26.2 Mojang 映射方法名：blockInteractionRange()/entityInteractionRange()
+        // （getContainerInteractionRange 是容器专用，不要用；攻击/交互范围默认 4.5/3.0，创造 +2）
+        double blockRange = player.blockInteractionRange();
+        double entityRange = player.entityInteractionRange();
+        double maxDistance = Math.max(blockRange, entityRange);
+        double maxDistanceSq = maxDistance * maxDistance;
+        net.minecraft.world.phys.Vec3 from = player.getEyePosition(1.0F);
+        net.minecraft.world.phys.HitResult blockHit = player.pick(maxDistance, 1.0F, false);
+        double blockDistanceSq = blockHit.getLocation().distanceToSqr(from);
+        if (blockHit.getType() != net.minecraft.world.phys.HitResult.Type.MISS) {
+            maxDistanceSq = blockDistanceSq;
+            maxDistance = Math.sqrt(blockDistanceSq);
+        }
+        net.minecraft.world.phys.Vec3 view = player.getViewVector(1.0F);
+        net.minecraft.world.phys.Vec3 to = from.add(
+                view.x * maxDistance, view.y * maxDistance, view.z * maxDistance);
+        net.minecraft.world.phys.AABB box = player.getBoundingBox()
+                .expandTowards(view.scale(maxDistance)).inflate(1.0, 1.0, 1.0);
+        net.minecraft.world.phys.EntityHitResult entityHit =
+                net.minecraft.world.entity.projectile.ProjectileUtil.getEntityHitResult(
+                        player, from, to, box, net.minecraft.world.entity.EntitySelector.CAN_BE_PICKED,
+                        maxDistanceSq);
+        if (entityHit != null && entityHit.getLocation().distanceToSqr(from) < blockDistanceSq) {
+            return filterLookRange(entityHit, from, entityRange);
+        }
+        return filterLookRange(blockHit, from, blockRange);
+    }
+
+    /** 原版 filterHitResult 等价：超出作用距离的命中转 MISS（带命中位置/方向）。 */
+    private static net.minecraft.world.phys.HitResult filterLookRange(
+            net.minecraft.world.phys.HitResult hit, net.minecraft.world.phys.Vec3 from, double range) {
+        net.minecraft.world.phys.Vec3 loc = hit.getLocation();
+        if (loc.closerThan(from, range)) {
+            return hit;
+        }
+        net.minecraft.core.Direction dir = net.minecraft.core.Direction.getApproximateNearest(
+                loc.x - from.x, loc.y - from.y, loc.z - from.z);
+        return net.minecraft.world.phys.BlockHitResult.miss(
+                loc, dir, net.minecraft.core.BlockPos.containing(loc));
     }
 
     @Override
