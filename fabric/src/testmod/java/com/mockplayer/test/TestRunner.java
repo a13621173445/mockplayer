@@ -3944,6 +3944,9 @@ public final class TestRunner {
     private static boolean containerAllGiven;
     private static boolean containerAllPut;
     private static boolean containerAllTaken;
+    /** 服务端校验结果所属的 case 下标（防残留任务把下一 case 打成假绿）。 */
+    private static volatile int containerAllServerPutFor = -1;
+    private static volatile int containerAllServerEmptyFor = -1;
     private static volatile boolean containerAllServerPut;
     private static volatile boolean containerAllServerEmpty;
     private static boolean lecternBookGiven;
@@ -3951,6 +3954,24 @@ public final class TestRunner {
     private static int lecternOpenWait;
     private static boolean horseSummoned;
     private static boolean horseInteracted;
+
+    /** 切换到下一个容器 case 前重置全部 per-case 状态（成功与超时路径共用）。 */
+    private static void containerAllResetCase() {
+        containerAllPos = null;
+        containerAllOpened = false;
+        containerAllGiven = false;
+        containerAllPut = false;
+        containerAllTaken = false;
+        containerAllServerPut = false;
+        containerAllServerEmpty = false;
+        containerAllServerPutFor = -1;
+        containerAllServerEmptyFor = -1;
+        lecternBookGiven = false;
+        lecternBookPlaced = false;
+        horseSummoned = false;
+        horseInteracted = false;
+        waitTicks = 0;
+    }
 
     private static void runContainersAll(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -4134,23 +4155,24 @@ public final class TestRunner {
                         });
                     }
                 }
+                final int putIdx = containerAllCaseIndex; // 调度时捕获，防执行时 index 已推进越界
                 server.execute(() -> {
-                    final int idx = containerAllCaseIndex;
-                    ContainerCase c = CONTAINER_CASES.get(idx);
+                    ContainerCase c = CONTAINER_CASES.get(putIdx);
+                    boolean put;
                     if ("lectern".equals(c.name())) {
-                        containerAllServerPut = !server.getLevel(Level.OVERWORLD).getBlockState(containerAllPos)
+                        put = !server.getLevel(Level.OVERWORLD).getBlockState(containerAllPos)
                                 .getValue(net.minecraft.world.level.block.LecternBlock.HAS_BOOK); // 书被取走
                     } else {
                         net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
-                        if (sp != null) {
-                            // 部分容器（砂轮/切石机等）放入即处理到结果槽，验证容器槽或结果槽有物品
-                            boolean inContainer = !sp.containerMenu.getSlot(c.containerSlot()).getItem().isEmpty();
-                            boolean inResult = c.resultSlot() >= 0 && !sp.containerMenu.getSlot(c.resultSlot()).getItem().isEmpty();
-                            containerAllServerPut = inContainer || inResult;
-                        }
+                        // 部分容器（砂轮/切石机等）放入即处理到结果槽，验证容器槽或结果槽有物品
+                        put = sp != null
+                                && (!sp.containerMenu.getSlot(c.containerSlot()).getItem().isEmpty()
+                                || (c.resultSlot() >= 0 && !sp.containerMenu.getSlot(c.resultSlot()).getItem().isEmpty()));
                     }
+                    containerAllServerPut = put;
+                    containerAllServerPutFor = put ? putIdx : -1; // 带 case 标签，残留任务不污染下一 case
                 });
-                if (containerAllServerPut) {
+                if (containerAllServerPut && containerAllServerPutFor == containerAllCaseIndex) {
                     check("put into " + CONTAINER_CASES.get(containerAllCaseIndex).name() + " (server)", true);
                     step = 6;
                 } else if (++waitTicks > 200) {
@@ -4177,38 +4199,28 @@ public final class TestRunner {
                         });
                     }
                 }
+                final int takeIdx = containerAllCaseIndex; // 调度时捕获，防执行时 index 已推进越界
                 server.execute(() -> {
-                    final int idx = containerAllCaseIndex;
-                    ContainerCase c = CONTAINER_CASES.get(idx);
+                    ContainerCase c = CONTAINER_CASES.get(takeIdx);
+                    boolean empty;
                     if ("lectern".equals(c.name())) {
-                        containerAllServerEmpty = bot.getLocalPlayer().getInventory()
+                        empty = bot.getLocalPlayer().getInventory()
                                 .countItem(net.minecraft.world.item.Items.WRITABLE_BOOK) > 0; // 书取回到背包
                     } else {
                         net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
-                        if (sp != null) {
-                            boolean cEmpty = sp.containerMenu.getSlot(c.containerSlot()).getItem().isEmpty();
-                            boolean rEmpty = c.resultSlot() < 0 || sp.containerMenu.getSlot(c.resultSlot()).getItem().isEmpty();
-                            containerAllServerEmpty = cEmpty && rEmpty;
-                        }
+                        boolean cEmpty = sp != null && sp.containerMenu.getSlot(c.containerSlot()).getItem().isEmpty();
+                        boolean rEmpty = c.resultSlot() < 0 || sp == null || sp.containerMenu.getSlot(c.resultSlot()).getItem().isEmpty();
+                        empty = cEmpty && rEmpty;
                     }
+                    containerAllServerEmpty = empty;
+                    containerAllServerEmptyFor = empty ? takeIdx : -1; // 带 case 标签，残留任务不污染下一 case
                 });
-                if (containerAllServerEmpty) {
+                if (containerAllServerEmpty && containerAllServerEmptyFor == containerAllCaseIndex) {
                     check("take back from " + CONTAINER_CASES.get(containerAllCaseIndex).name() + " (server)", true);
                     bot.getContainer().ifPresent(cont -> cont.close());
                     containerAllCaseIndex++;
                     if (containerAllCaseIndex < CONTAINER_CASES.size()) {
-                        containerAllPos = null;
-                        containerAllOpened = false;
-                        containerAllGiven = false;
-                        containerAllPut = false;
-                        containerAllTaken = false;
-                        containerAllServerPut = false;
-                        containerAllServerEmpty = false;
-                        lecternBookGiven = false;
-                        lecternBookPlaced = false;
-                        horseSummoned = false;
-                        horseInteracted = false;
-                        waitTicks = 0;
+                        containerAllResetCase();
                         step = 1;
                     } else {
                         step = 7;
@@ -4216,6 +4228,7 @@ public final class TestRunner {
                 } else if (++waitTicks > 200) {
                     fail("take back from " + CONTAINER_CASES.get(containerAllCaseIndex).name() + " timeout");
                     containerAllCaseIndex++;
+                    containerAllResetCase();
                     step = (containerAllCaseIndex < CONTAINER_CASES.size()) ? 1 : 7;
                 }
             }
