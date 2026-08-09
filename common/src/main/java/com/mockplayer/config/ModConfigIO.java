@@ -62,6 +62,7 @@ public final class ModConfigIO {
             config.setEventMoveSampleDistance(readDouble(root, "eventMoveSampleDistance",
                     ModConfig.DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE,
                     ModConfig.MIN_EVENT_MOVE_SAMPLE_DISTANCE, ModConfig.MAX_EVENT_MOVE_SAMPLE_DISTANCE));
+            config.setCommands(readCommands(root));
         } catch (Exception e) {
             // 文件损坏/非 JSON 对象 → 整体回退默认，不崩客户端
             return new ModConfig();
@@ -85,6 +86,7 @@ public final class ModConfigIO {
         normalized.setEventSummaryMaxLength(config.getEventSummaryMaxLength());
         normalized.setEventTickSampleInterval(config.getEventTickSampleInterval());
         normalized.setEventMoveSampleDistance(config.getEventMoveSampleDistance());
+        normalized.setCommands(config.getCommands());
         normalized.normalize();
 
         try {
@@ -132,5 +134,21 @@ public final class ModConfigIO {
         } catch (NumberFormatException e) {
             return fallback;
         }
+    }
+
+    /** 读 commands 对象：缺失/非对象 → 默认；逐条交给 ModCommands 规范化。 */
+    private static java.util.Map<String, String> readCommands(JsonObject root) {
+        if (!root.has("commands") || !root.get("commands").isJsonObject()) {
+            return ModCommands.defaults();
+        }
+        JsonObject obj = root.getAsJsonObject("commands");
+        java.util.Map<String, String> raw = new java.util.LinkedHashMap<>();
+        for (String key : ModCommands.ALL) {
+            if (obj.has(key) && obj.get(key).isJsonPrimitive()
+                    && obj.get(key).getAsJsonPrimitive().isString()) {
+                raw.put(key, obj.get(key).getAsString());
+            }
+        }
+        return raw;
     }
 }

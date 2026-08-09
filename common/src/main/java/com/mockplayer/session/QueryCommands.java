@@ -303,8 +303,9 @@ public class QueryCommands {
 
     // ===== 命令树构建（双端共用，平台只提供 literal/argument/反馈函数） =====
 
-    public static <S extends SharedSuggestionProvider> LiteralArgumentBuilder<S> buildQueryTree(CommandSupport.CommandFactory<S> f) {
-        LiteralArgumentBuilder<S> root = f.literal("query");
+    public static <S extends SharedSuggestionProvider> LiteralArgumentBuilder<S> buildQueryTree(
+            CommandSupport.CommandFactory<S> f, String rootName) {
+        LiteralArgumentBuilder<S> root = f.literal(rootName);
         root.then(f.literal("list").executes(ctx -> {
             f.sendFeedback(ctx.getSource(), list());
             return 1;

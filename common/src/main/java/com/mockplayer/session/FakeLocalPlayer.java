@@ -62,4 +62,20 @@ public class FakeLocalPlayer extends LocalPlayer {
     protected boolean isControlledCamera() {
         return true;
     }
+
+    /**
+     * 假人关闭容器：只复位假人自己的菜单，绝不碰主玩家 GUI。
+     *
+     * 原版 LocalPlayer.clientSideCloseContainer 会 this.minecraft.gui.setScreen(null)——
+     * this.minecraft 是主玩家 Minecraft 单例，假人一关容器就会把主玩家
+     * 暂停界面/容器界面直接关掉（实测 bug）。假人无头，跳过主玩家 screen 操作。
+     *
+     * 注意：不能调 super.closeContainer()——super 是 LocalPlayer.closeContainer()，
+     * 它又会虚调本方法，直接死循环（StackOverflowError）。这里等价复制
+     * Player.closeContainer() 的逻辑（containerMenu 复位为 inventoryMenu）。
+     */
+    @Override
+    public void clientSideCloseContainer() {
+        this.containerMenu = this.inventoryMenu;
+    }
 }

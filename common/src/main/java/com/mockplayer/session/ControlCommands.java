@@ -843,8 +843,8 @@ public class ControlCommands {
     // ===== 命令树构建（双端共用，平台只提供 literal/argument/反馈函数） =====
 
     public static <S extends SharedSuggestionProvider> LiteralArgumentBuilder<S> buildControlTree(
-            CommandSupport.CommandFactory<S> f) {
-        LiteralArgumentBuilder<S> root = f.literal("control");
+            CommandSupport.CommandFactory<S> f, String rootName) {
+        LiteralArgumentBuilder<S> root = f.literal(rootName);
 
         RequiredArgumentBuilder<S, ?> player = f.argument("player", FakePlayerNameArgument.fakePlayerName())
                 .suggests(CommandSupport.botNames());

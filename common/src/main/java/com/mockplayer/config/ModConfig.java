@@ -1,5 +1,9 @@
 package com.mockplayer.config;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * Mockplayer 客户端配置（纯数据类，零第三方依赖）。
  *
@@ -52,6 +56,8 @@ public class ModConfig {
     private int eventSummaryMaxLength = DEFAULT_EVENT_SUMMARY_MAX_LENGTH;
     private int eventTickSampleInterval = DEFAULT_EVENT_TICK_SAMPLE_INTERVAL;
     private double eventMoveSampleDistance = DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE;
+    /** 根命令名配置（字段固定，值可改/可禁用；默认 = 现在的名字）。 */
+    private Map<String, String> commands = new LinkedHashMap<>(ModCommands.defaults());
 
     public int getChatHistoryLimit() {
         return this.chatHistoryLimit;
@@ -109,6 +115,29 @@ public class ModConfig {
         this.eventMoveSampleDistance = eventMoveSampleDistance;
     }
 
+    /** 根命令名配置（只读视图；修改用 setCommandName / setCommands）。 */
+    public Map<String, String> getCommands() {
+        return Collections.unmodifiableMap(this.commands);
+    }
+
+    /** 取某个根命令名（缺失回默认；空串 = 禁用，见 {@link ModCommands#isDisabled}）。 */
+    public String getCommandName(String key) {
+        String name = this.commands.get(key);
+        return name != null ? name : ModCommands.defaults().get(key);
+    }
+
+    public void setCommandName(String key, String name) {
+        Map<String, String> copy = new LinkedHashMap<>(this.commands);
+        copy.put(key, name);
+        this.commands = copy;
+    }
+
+    public void setCommands(Map<String, String> commands) {
+        this.commands = commands != null
+                ? new LinkedHashMap<>(commands)
+                : new LinkedHashMap<>(ModCommands.defaults());
+    }
+
     /** 越界字段回退默认（非法值不保留，保证配置文件永远可手改且不崩）。 */
     public void normalize() {
         this.chatHistoryLimit = clampInt(this.chatHistoryLimit,
@@ -125,6 +154,7 @@ public class ModConfig {
                 MIN_EVENT_TICK_SAMPLE_INTERVAL, MAX_EVENT_TICK_SAMPLE_INTERVAL, DEFAULT_EVENT_TICK_SAMPLE_INTERVAL);
         this.eventMoveSampleDistance = clampDouble(this.eventMoveSampleDistance,
                 MIN_EVENT_MOVE_SAMPLE_DISTANCE, MAX_EVENT_MOVE_SAMPLE_DISTANCE, DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE);
+        this.commands = ModCommands.normalize(this.commands);
     }
 
     private static int clampInt(int value, int min, int max, int fallback) {

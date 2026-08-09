@@ -10,6 +10,7 @@ import com.mockplayer.config.MissingYaclScreen;
 import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.ModConfigIO;
 import com.mockplayer.config.ModConfigScreen;
+import com.mockplayer.config.ModCommands;
 import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.session.EventRecorder;
 import com.mockplayer.session.FakePlayerState;
@@ -1516,8 +1517,8 @@ public final class TestRunner {
 
     /** 注册 /control + /query 双树（测试用）。 */
     private static void ccRegisterAll(com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher) {
-        dispatcher.register(com.mockplayer.session.ControlCommands.buildControlTree(ccFactory()));
-        dispatcher.register(com.mockplayer.session.QueryCommands.buildQueryTree(ccFactory()));
+        dispatcher.register(com.mockplayer.session.ControlCommands.buildControlTree(ccFactory(), "control"));
+        dispatcher.register(com.mockplayer.session.QueryCommands.buildQueryTree(ccFactory(), "query"));
     }
 
     /** 收集组件 visit 展开后的全部样式片段（转义断言用）。 */
@@ -3562,7 +3563,36 @@ public final class TestRunner {
                 }
             }
             case 13 -> {
-                bot.getContainer().ifPresent(c -> c.close());
+                // 暂停隔离：主玩家打开 PauseScreen，假人容器交互不得打断暂停界面。
+                // 根因：LocalPlayer.clientSideCloseContainer 会 this.minecraft.gui.setScreen(null)
+                // （主玩家单例），假人一关容器就把主玩家暂停界面关掉；FakeLocalPlayer 已重写跳过。
+                if (mc.gui.screen() == null) {
+                    mc.gui.setScreen(new net.minecraft.client.gui.screens.PauseScreen(true));
+                }
+                check("pause screen open", mc.gui.screen() instanceof net.minecraft.client.gui.screens.PauseScreen);
+                // bot 容器此时仍开着：执行 UI 交互 click + close（close 是原污染路径）
+                bot.getContainer().ifPresent(c -> {
+                    c.click(0, 0, net.minecraft.world.inventory.ContainerInput.PICKUP);
+                    c.close();
+                });
+                waitTicks = 0;
+                step = 14;
+            }
+            case 14 -> {
+                // 关容器是异步回包：持续断言主玩家暂停界面仍在（每 tick 检查）
+                check("pause screen not interrupted", mc.gui.screen()
+                        instanceof net.minecraft.client.gui.screens.PauseScreen);
+                if (bot.getContainer().isEmpty()) {
+                    check("container closed after pause isolation", true);
+                    mc.gui.setScreen(null);
+                    step = 15;
+                } else if (++waitTicks > 100) {
+                    fail("container close timeout during pause isolation");
+                    mc.gui.setScreen(null);
+                    step = 15;
+                }
+            }
+            case 15 -> {
                 MockplayerApi.bots().removeBot(botName, "test");
                 finishSuite();
             }
@@ -4799,6 +4829,25 @@ public final class TestRunner {
                 check("invalid values fallback", configEquals(new ModConfig(), ModConfigIO.load(cfgFile)));
                 writeConfigRaw("not a json object");
                 check("corrupt file fallback", configEquals(new ModConfig(), ModConfigIO.load(cfgFile)));
+                // commands：手改/空串禁用/非法回退（不是禁用）/重名整组回退/类型错回退
+                writeConfigRaw("{\"commands\":{\"control\":\"ctrl\"}}");
+                ModConfig renamed = ModConfigIO.load(cfgFile);
+                check("commands hand-edit applied", "ctrl".equals(renamed.getCommandName("control"))
+                        && "query".equals(renamed.getCommandName("query")));
+                writeConfigRaw("{\"commands\":{\"query\":\"\"}}");
+                check("commands empty disables", ModCommands.isDisabled(
+                        ModConfigIO.load(cfgFile).getCommandName("query")));
+                writeConfigRaw("{\"commands\":{\"control\":\"bad name!\"}}");
+                check("commands invalid falls back (not disabled)",
+                        "control".equals(ModConfigIO.load(cfgFile).getCommandName("control")));
+                writeConfigRaw("{\"commands\":{\"control\":\"x\",\"query\":\"x\"}}");
+                ModConfig duplicated = ModConfigIO.load(cfgFile);
+                check("commands duplicate falls back all",
+                        "control".equals(duplicated.getCommandName("control"))
+                                && "query".equals(duplicated.getCommandName("query")));
+                writeConfigRaw("{\"commands\":[]}");
+                check("commands wrong type falls back",
+                        "control".equals(ModConfigIO.load(cfgFile).getCommandName("control")));
                 step = 3;
             }
             case 3 -> {
@@ -4824,24 +4873,62 @@ public final class TestRunner {
                 step = 4;
             }
             case 4 -> {
-                // 模拟修改控件：requestSet 改一个 int 选项 → finishOrSave 应用并落盘
+                // 模拟修改控件：改 int 选项 + query 命令名 → finishOrSave → 保存 + 热重载端到端
                 ModConfigScreen screen = cfgScreen;
                 dev.isxander.yacl3.api.Option<Integer> intOption = firstIntegerOption(screen);
+                dev.isxander.yacl3.api.Option<String> queryOption = findStringOption(screen, "query");
+                dev.isxander.yacl3.api.Option<String> controlOption = findStringOption(screen, "control");
                 check("integer option found", intOption != null);
-                if (intOption != null) {
+                check("query option found", queryOption != null);
+                check("control option found", controlOption != null);
+                if (intOption != null && queryOption != null && controlOption != null) {
                     int before = intOption.binding().getValue();
                     intOption.requestSet(before + 1);
+                    queryOption.requestSet("qry");
                     check("pending change registered", screen.pendingChanges());
                     screen.finishOrSave();
-                    check("option applied to config", intOption.binding().getValue() == before + 1);
-                    check("config file written", ModConfigIO.load(MockplayerConfig.path()).getChatHistoryLimit() == before + 1);
+                    check("int option applied to config", intOption.binding().getValue() == before + 1);
+                    check("command rename applied to config", MockplayerConfig.get().getCommandName("query").equals("qry"));
+                    ModConfig saved = ModConfigIO.load(MockplayerConfig.path());
+                    check("config file written", saved.getChatHistoryLimit() == before + 1
+                            && "qry".equals(saved.getCommandName("query")));
+                    // 热重载：不重进游戏，dispatcher 两层都更新
+                    check("hot reload old root removed (active)", !hasActiveRoot("query"));
+                    check("hot reload new root registered (active)", hasActiveRoot("qry"));
+                    check("hot reload exec layer updated", !hasExecRoot("query") && hasExecRoot("qry"));
+                    check("new command executable", executeClientCommand("qry list"));
+                    check("old command not executable", !executeClientCommand("query list"));
+                    // 禁用 control：保存后根消失，其它命令不受影响
+                    controlOption.requestSet("");
+                    screen.finishOrSave();
+                    check("disable control root removed (active)", !hasActiveRoot("control"));
+                    check("disable control exec layer updated", !hasExecRoot("control"));
+                    check("disable control other command intact", hasActiveRoot("qry"));
+                    // 恢复默认：配置与 dispatcher 全部回默认
                     MockplayerConfig.save(new ModConfig());
-                    check("config restored", ModConfigIO.load(MockplayerConfig.path()).getChatHistoryLimit()
-                            == ModConfig.DEFAULT_CHAT_HISTORY_LIMIT);
+                    check("restore config file", ModConfigIO.load(MockplayerConfig.path()).getChatHistoryLimit()
+                            == ModConfig.DEFAULT_CHAT_HISTORY_LIMIT
+                            && ModConfigIO.load(MockplayerConfig.path()).getCommandName("query").equals("query"));
+                    check("restore control root back", hasActiveRoot("control") && hasActiveRoot("query"));
+                    check("restore renamed root gone", !hasActiveRoot("qry"));
+                    check("restore exec layer back", hasExecRoot("control") && hasExecRoot("query"));
                 }
                 step = 5;
             }
             case 5 -> {
+                // 一键恢复默认（按钮共用路径）：打乱绑定实例 → resetAllAndSave → 全默认 + 热重载
+                ModConfig bound = cfgScreen.config();
+                bound.setChatHistoryLimit(77);
+                bound.setCommandName(ModCommands.QUERY, "qq");
+                ModConfigScreen.resetAllAndSave(cfgScreen);
+                check("reset all config defaults", cfgScreen.config().getChatHistoryLimit()
+                        == ModConfig.DEFAULT_CHAT_HISTORY_LIMIT
+                        && cfgScreen.config().getCommandName(ModCommands.QUERY).equals("query"));
+                check("reset all file defaults", ModConfigIO.load(MockplayerConfig.path()).getChatHistoryLimit()
+                        == ModConfig.DEFAULT_CHAT_HISTORY_LIMIT
+                        && ModConfigIO.load(MockplayerConfig.path()).getCommandName(ModCommands.QUERY).equals("query"));
+                check("reset all dispatcher restored", hasActiveRoot("query") && hasActiveRoot("control")
+                        && !hasActiveRoot("qq"));
                 // 配置真实生效（消费者）：聊天历史上限 + 事件缓存容量
                 MockplayerConfig.get().setChatHistoryLimit(10);
                 FakePlayerState state = new FakePlayerState();
@@ -4885,6 +4972,45 @@ public final class TestRunner {
             }
         }
         return null;
+    }
+
+    /** 找默认名为 defaultName 的 String 选项（命令名选项，界面树顺序按字段固定）。 */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static dev.isxander.yacl3.api.Option<String> findStringOption(ModConfigScreen screen, String defaultName) {
+        for (dev.isxander.yacl3.api.ConfigCategory category : screen.config.categories()) {
+            for (dev.isxander.yacl3.api.OptionGroup group : category.groups()) {
+                for (dev.isxander.yacl3.api.Option<?> option : group.options()) {
+                    if (option.binding().getValue() instanceof String
+                            && defaultName.equals(option.binding().defaultValue())) {
+                        return (dev.isxander.yacl3.api.Option) option;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** NeoForge 注册层 dispatcher（ClientCommandHandler.commands）是否含根命令。 */
+    private static boolean hasActiveRoot(String name) {
+        var dispatcher = net.neoforged.neoforge.client.ClientCommandHandler.getDispatcher();
+        return dispatcher != null && dispatcher.getRoot().getChild(name) != null;
+    }
+
+    /** 执行层 dispatcher（ClientPacketListener.commands）是否含根命令。 */
+    private static boolean hasExecRoot(String name) {
+        var connection = net.minecraft.client.Minecraft.getInstance().getConnection();
+        return connection != null && connection.getCommands().getRoot().getChild(name) != null;
+    }
+
+    /** 执行一条客户端命令（true = 执行成功，false = 未知命令/语法错误）。 */
+    private static boolean executeClientCommand(String command) {
+        try {
+            net.neoforged.neoforge.client.ClientCommandHandler.getDispatcher()
+                    .execute(command, net.neoforged.neoforge.client.ClientCommandHandler.getSource());
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** 写原始 JSON 到临时配置文件（模拟玩家手改）。 */
