@@ -1465,6 +1465,8 @@ public final class TestRunner {
     private static volatile float ccMineDigSpeed = -1.0F;
     private static volatile boolean ccMineCorrectTool = false;
     private static volatile float ccMineDestroyProgressRate = -1.0F;
+    private static volatile boolean ccMineServerPickaxe;
+    private static volatile boolean ccMineServerOnGround;
     private static boolean ccMineStopWaitDone;
     private static boolean ccListenOn;
     private static boolean ccListenDamaged;
@@ -1586,13 +1588,20 @@ public final class TestRunner {
                         "placeBlock", "mineBlock", "attackBlock", "hotbar", "drop", "swapHands",
                         "mount", "dismount", "chat", "command", "wakeUp", "respawn", "editBook",
                         "close", "click", "button", "trade", "setSlot", "editSign", "setBeacon",
-                        "renameItem", "pickItemFromBlock");
+                        "renameItem", "pickItemFromBlock", "help");
                 java.util.List<String> missingActions = new java.util.ArrayList<>(actions);
                 missingActions.removeAll(subs);
                 java.util.List<String> leakedQueries = subs.stream()
                         .filter(s -> !actions.contains(s)).toList();
                 check("tree actions complete", missingActions.isEmpty(), "missing=" + missingActions);
                 check("tree control no query leak", leakedQueries.isEmpty(), "leaked=" + leakedQueries);
+                // /control help：输出包含全部动作的 i18n 翻译（防 ACTIONS 与树漂移）
+                String helpText = com.mockplayer.session.ControlCommands.help(botName).getString();
+                check("help lists all actions",
+                        helpText.lines().count() == com.mockplayer.session.ControlCommands.ACTIONS.size() + 1);
+                check("help action translated", helpText.contains(
+                        net.minecraft.network.chat.Component.translatable(
+                                "commands.mockplayer.control.action.attack").getString()));
                 // /query 树：list + player 查询全集（含 memory）
                 var query = root.stream().filter(n -> n.getName().equals("query")).findFirst().orElse(null);
                 check("tree query root", query != null);
@@ -2175,7 +2184,7 @@ public final class TestRunner {
                     step = 14;
                 }
             }
-            case 14 -> { // mount 矿车 + dismount
+            case 14 -> { // mount 矿车 + 骑乘一段时间后 dismount
                 if (!ccRailSet) {
                     ccRailSet = true;
                     waitTicks = 0;
@@ -2200,9 +2209,11 @@ public final class TestRunner {
                     ccMounted = sp != null && sp.getVehicle() != null;
                 });
                 if (ccMounted && !ccMountChecked) {
-                    // 稳定骑乘验证：连续 20 tick 服务端仍骑乘才认定上马成功，
-                    // 排除「矿车坠落/碰撞被服务端自动弹出乘客」造成的假绿
-                    if (++ccMountStableTicks >= 20) {
+                    // 稳定骑乘验证：连续 60 tick（3 秒）服务端仍骑乘才认定上马成功，
+                    // 覆盖「骑乘一段时间后再下马」；也排除「矿车坠落/碰撞被服务端自动弹出乘客」假绿。
+                    // 注：26.2 骑乘矿车实测无法被动力轨/Motion/斜轨推进（服务端不驱动），
+                    // 「移动中下马」无法稳定构造，见 TODO #5。
+                    if (++ccMountStableTicks >= 60) {
                         ccMountStableTicks = 0;
                         ccMountChecked = true;
                         check("mount minecart", true);
@@ -2522,6 +2533,8 @@ public final class TestRunner {
                 if (!ccMineTestSet) {
                     ccMineTestSet = true;
                     waitTicks = 0;
+                    // 客户端先固定选中槽 0（与服务端一致，item replace 才能落在主手）
+                    bot.getLocalPlayer().getInventory().setSelectedSlot(0);
                     server.execute(() -> {
                         // 用服务端玩家位置算石头坐标：respawn 后客户端位置可能尚未同步到重生点
                         var sp = server.getPlayerList().getPlayerByName(botName);
@@ -2541,6 +2554,8 @@ public final class TestRunner {
                         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
                                 "setblock " + ccMineStoneFar.getX() + " " + ccMineStoneFar.getY() + " "
                                         + ccMineStoneFar.getZ() + " minecraft:stone");
+                        // 先固定服务端选中槽 0，再替换主手：顺序反了镐会落到原选中槽
+                        sp.getInventory().setSelectedSlot(0);
                         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
                                 // give 不覆盖主手（selected 槽还有木棍），必须 replace 才保证用石镐挖
                                 "item replace entity " + botName + " weapon.mainhand with minecraft:stone_pickaxe");
@@ -2554,8 +2569,31 @@ public final class TestRunner {
                         }
                         return;
                     }
-                    if (++waitTicks > 20 && bot.getBlockState(ccMineStone1).is(net.minecraft.world.level.block.Blocks.STONE)
-                            && bot.getBlockState(ccMineStone2).is(net.minecraft.world.level.block.Blocks.STONE)) {
+                    if (++waitTicks > 20
+                            && bot.getBlockState(ccMineStone1).is(net.minecraft.world.level.block.Blocks.STONE)
+                            && bot.getBlockState(ccMineStone2).is(net.minecraft.world.level.block.Blocks.STONE)
+                            // 石镐必须已同步到主手再开挖：空手挖石头约 45 tick，
+                            // 中途换镐会拉长总时长（all 模式偶发 115 tick 的根因，hand=air 特征）
+                            && bot.getLocalPlayer().getMainHandItem()
+                                    .is(net.minecraft.world.item.Items.STONE_PICKAXE)) {
+                        server.execute(() -> {
+                            var sp = server.getPlayerList().getPlayerByName(botName);
+                            ccMineServerPickaxe = sp != null
+                                    && sp.getMainHandItem().is(net.minecraft.world.item.Items.STONE_PICKAXE);
+                            // 服务端玩家必须落地：空中挖掘速度 ×1/5（原版惩罚），会拉长挖掘时间
+                            ccMineServerOnGround = sp != null && sp.onGround();
+                        });
+                        if (!ccMineServerPickaxe || !ccMineServerOnGround) {
+                            // 主手或落地状态未就绪：继续等（waitTicks 自然增长，超时走 sync timeout）
+                            if (waitTicks > 200) {
+                                System.out.println("[mocktest] diag mine sync serverPickaxe="
+                                        + ccMineServerPickaxe + " serverOnGround=" + ccMineServerOnGround
+                                        + " clientHand=" + bot.getLocalPlayer().getMainHandItem());
+                                fail("mine test sync timeout (server pickaxe/ground)");
+                                step = 20;
+                            }
+                            return;
+                        }
                         ccMineTestSynced = true;
                         ccMineTestTicks = 0;
                         waitTicks = 0;
@@ -5253,6 +5291,8 @@ public final class TestRunner {
         ccMineDigSpeed = -1.0F;
         ccMineCorrectTool = false;
         ccMineDestroyProgressRate = -1.0F;
+        ccMineServerPickaxe = false;
+        ccMineServerOnGround = false;
         ccMineStopWaitDone = false;
         ccListenOn = false;
         ccListenDamaged = false;

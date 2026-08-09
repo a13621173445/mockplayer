@@ -9,6 +9,7 @@
   },
   "mixins": [],
   "client": [
+    "MixinAccountProfileKeyPairManager",
     "MixinClientConfigurationPacketListenerImpl",
     "MixinConnection",
     "MixinClientCommonPacketListenerImpl",

@@ -46,7 +46,32 @@ import java.util.Optional;
  */
 public class ControlCommands {
 
+    /** 全部动作命令（与 buildControlTree 的 player 子命令同步；/control help 与测试共用）。 */
+    public static final List<String> ACTIONS = List.of(
+            "move", "stop", "sneak", "unsneak", "sprint", "unsprint", "jump",
+            "look", "lookAt", "turn", "attack", "stab", "sustainedAttack", "sustainedUse",
+            "stopSustained", "interact", "useItem", "releaseUsingItem", "useItemOn",
+            "placeBlock", "mineBlock", "attackBlock", "hotbar", "drop", "swapHands",
+            "mount", "dismount", "close", "click", "button", "trade", "setSlot",
+            "chat", "command", "wakeUp", "respawn", "editBook", "editSign", "setBeacon",
+            "renameItem", "pickItemFromBlock", "help");
+
     private ControlCommands() {
+    }
+
+    /** /control help：列出全部动作命令（i18n；ACTIONS 与树同步，测试防漂移）。 */
+    public static Component help(String name) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        MutableComponent out = info("commands.mockplayer.control.help.header", playerName(name));
+        for (String action : ACTIONS) {
+            out.append(Component.literal("\n")).append(info(
+                    "commands.mockplayer.control.help.entry",
+                    Component.translatable("commands.mockplayer.control.action." + action)));
+        }
+        return out;
     }
 
     // ===== 通用辅助 =====
@@ -1277,6 +1302,13 @@ public class ControlCommands {
                                                             "true".equals(StringArgumentType.getString(ctx, "includeData"))));
                                                     return 1;
                                                 }))))));
+
+        player.then(f.literal("help")
+                .executes(ctx -> {
+                    String name = StringArgumentType.getString(ctx, "player");
+                    f.sendFeedback(ctx.getSource(), help(name));
+                    return 1;
+                }));
 
         root.then(player);
         return root;

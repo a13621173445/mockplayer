@@ -14,6 +14,8 @@
     "disconnect.mockplayer.fake_player_removed": "假人已移除",
     "commands.mockplayer.control.success": "已对假人 %1$s 执行 %2$s",
     "commands.mockplayer.control.success.content": "已对假人 %1$s 执行 %2$s：%3$s",
+    "commands.mockplayer.control.help.header": "假人 %s 可用动作：",
+    "commands.mockplayer.control.help.entry": "%s",
     "commands.mockplayer.control.not_found": "假人 %s 不存在",
     "commands.mockplayer.control.not_playing": "假人 %s 未就绪（PLAYING）",
     "commands.mockplayer.control.entity_not_found": "假人 %1$s 附近没有名为 %2$s 的实体",

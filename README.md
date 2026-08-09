@@ -18,6 +18,7 @@
 - `/delplayer <name>`：移除假人
 - `/connect <name> <host> [port]`：让已存在的假人连接指定服务器
 - `/control <player> <action>`：遥控假人
+  - 用 `/control <player> help` 查看全部动作列表
   - 动作：移动、跳跃、潜行、疾跑、攻击、交互、使用物品、挖掘/放置方块、容器交互、
     骑乘/解除骑乘、聊天/执行命令、睡觉、重生、写书/告示牌、信标、物品改名等
 - `/query <player> <query>`：查询假人状态（与 `/control` 分离，不改变假人状态）
@@ -26,6 +27,33 @@
   - 监听：`/query <player> listen on/off` 实时推送假人事件，
     `/query <player> events [n]` 查看最近事件缓存
   - `memory`：JVM 堆为真实值，Mod 侧跟踪字节为精确记账，原版世界内部报实体/区块数
+
+## 命令参考（部分动作语义）
+
+- `useItemOn <x> <y> <z> <side>`：对着方块指定面使用物品（打开箱子/炉子等容器的底层操作）
+- `placeBlock <x> <y> <z> <side>`：手持方块对着指定面放置
+- `interact <target>`：右键实体（村民交易、喂食、骑乘等）
+- `mount [target|anything]`：`mount` 自动骑最近可骑乘实体；`mount anything` 骑任意实体；
+  `mount <target>` 骑指定实体（类型 id 或名字）
+- `dismount`：解除骑乘（按住潜行约 0.5 秒的原版等效行为）
+- 容器交互：`click <slot> <button> <mode>` 点击槽位、`setSlot <slot>` 写入槽位、
+  `button <id>` 点菜单按钮、`trade <index>` 选交易、`close` 关闭容器
+- `setBeacon <primary> [secondary]`：需要先 `click` 把支付物品
+  （金锭/铁锭/钻石/绿宝石）放入信标菜单槽 0，否则服务端拒绝激活
+
+## 配置
+
+所有根命令名（`control`/`query`/`newplayer`/`delplayer`/`connect`）都可以在
+`config/mockplayer.json` 的 `commands` 对象里改名，与其他模组冲突时直接改配置：
+
+```json
+{ "commands": { "control": "control", "query": "query" } }
+```
+
+- 命令名留空 = 禁用该命令
+- 非法值（空格/超长/非法字符）或启用项之间重名会自动回退默认名
+- 装有 YACL 时可在模组列表的「配置」界面修改全部设置，保存后立即热重载，无需重进游戏
+- 改完 JSON 后重进游戏生效
 
 ## 环境
 
