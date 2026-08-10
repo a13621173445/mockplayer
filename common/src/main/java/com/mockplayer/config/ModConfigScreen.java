@@ -101,6 +101,10 @@ public final class ModConfigScreen extends YACLScreen {
                                 .option(opacityOption(
                                         () -> (double) cfg.getGuiOpacity(),
                                         value -> cfg.setGuiOpacity(value.floatValue())))
+                                .option(intOption("guiBlur",
+                                        ModConfig.DEFAULT_GUI_BLUR,
+                                        ModConfig.MIN_GUI_BLUR, ModConfig.MAX_GUI_BLUR,
+                                        cfg::getGuiBlur, cfg::setGuiBlur))
                                 .build())
                         .build())
                 .category(ConfigCategory.createBuilder()

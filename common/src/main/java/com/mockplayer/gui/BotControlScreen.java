@@ -191,6 +191,8 @@ public class BotControlScreen extends Screen {
     private int lastHealth = -1;
     private long healthBlinkTime;
     private final java.util.Random heartRandom = new java.util.Random();
+    /** 打开 GUI 前主玩家菜单模糊值（关闭时恢复，不污染设置）。 */
+    private static int lastMainBlurBefore = -1;
     private Button tabStatus;
     private Button tabInventory;
     private Button tabActions;
@@ -238,8 +240,22 @@ public class BotControlScreen extends Screen {
 
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
-        // 不需要高斯模糊 / 原版菜单背景 / 全屏半透明覆盖：
-        // 背景由 extractRenderState 自绘半透明面板，面板外直接透出游戏画面
+        // 背景由 extractRenderState 自绘半透明面板，面板外直接透出游戏画面；
+        // 高斯模糊按 guiBlur 配置（>0 时触发原版 blur，强度由临时设置的主玩家选项决定）
+        if (MockplayerConfig.get().getGuiBlur() > 0) {
+            graphics.blurBeforeThisStratum();
+        }
+    }
+
+    @Override
+    public void removed() {
+        // 恢复打开前的主玩家菜单模糊值（不污染设置）
+        if (BotControlScreen.lastMainBlurBefore >= 0) {
+            Minecraft.getInstance().options.menuBackgroundBlurriness()
+                    .set(BotControlScreen.lastMainBlurBefore);
+            BotControlScreen.lastMainBlurBefore = -1;
+        }
+        super.removed();
     }
 
     @Override
@@ -393,6 +409,13 @@ public class BotControlScreen extends Screen {
         }
         // 初始可见性立即生效（防止打开 GUI 第一帧闪出全部按钮）
         this.refreshActionTabVisibility();
+        // 模糊强度：打开期间临时把主玩家菜单模糊度设为配置值（关闭时恢复）
+        if (BotControlScreen.lastMainBlurBefore < 0) {
+            BotControlScreen.lastMainBlurBefore =
+                    Minecraft.getInstance().options.getMenuBackgroundBlurriness();
+        }
+        Minecraft.getInstance().options.menuBackgroundBlurriness()
+                .set(MockplayerConfig.get().getGuiBlur());
     }
 
     // ===== 控件工厂 =====

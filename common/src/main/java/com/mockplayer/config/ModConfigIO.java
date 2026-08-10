@@ -85,6 +85,8 @@ public final class ModConfigIO {
                     config.setGuiOpacity(ModConfig.DEFAULT_GUI_OPACITY);
                 }
             }
+            config.setGuiBlur(readInt(root, "guiBlur",
+                    ModConfig.DEFAULT_GUI_BLUR, ModConfig.MIN_GUI_BLUR, ModConfig.MAX_GUI_BLUR));
             config.setFakePlayerChunkRadius(readInt(root, "fakePlayerChunkRadius",
                     ModConfig.DEFAULT_FAKE_PLAYER_CHUNK_RADIUS,
                     ModConfig.MIN_FAKE_PLAYER_CHUNK_RADIUS, ModConfig.MAX_FAKE_PLAYER_CHUNK_RADIUS));

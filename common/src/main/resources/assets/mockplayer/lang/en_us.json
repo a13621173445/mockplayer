@@ -228,6 +228,8 @@
     "config.mockplayer.option.guiKeyName.description": "GLFW key name (e.g. key.keyboard.g). Empty to disable the keybinding.",
     "config.mockplayer.option.guiOpacity": "GUI opacity",
     "config.mockplayer.option.guiOpacity.description": "Overall opacity of the panel/slots/buttons (default 25%, low transparency).",
+    "config.mockplayer.option.guiBlur": "GUI blur",
+    "config.mockplayer.option.guiBlur.description": "Background gaussian blur strength (0 = off, 1-10, default 3).",
     "key.mockplayer.openGui": "Open Bot Console",
     "gui.mockplayer.title": "Bot Console",
     "gui.mockplayer.close": "Close",

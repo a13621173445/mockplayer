@@ -6181,6 +6181,7 @@ public final class TestRunner {
     private static boolean bgChunkActionsTab;
     private static boolean bgChatActionsTab;
     private static boolean bgAutoActionsTab;
+    private static int bgBlurBefore = -1;
 
     private static void runBotGui(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -6193,6 +6194,7 @@ public final class TestRunner {
             case 0 -> {
                 prepareBot(server);
                 if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
+                    bgBlurBefore = mc.options.getMenuBackgroundBlurriness();
                     // 渲染探针属性（记录打开/帧；生产默认零开销）
                     System.setProperty("mockplayer.guiRenderProbe", "true");
                     MockplayerApi.listen(bgListener);
@@ -6259,6 +6261,8 @@ public final class TestRunner {
                                     bot, mc.font, 150).contains(botName)
                                     && com.mockplayer.gui.BotControlScreen.selectedTextDisplay(
                                     bot, mc.font, 20).length() <= 20);
+                    check("gui blur applied",
+                            mc.options.getMenuBackgroundBlurriness() == 3);
                     check("screen is BotControlScreen",
                             mc.gui.screen() instanceof com.mockplayer.gui.BotControlScreen);
                     com.mockplayer.gui.BotControlScreen screen =
@@ -7574,6 +7578,8 @@ public final class TestRunner {
                     return; // 等删除清理
                 }
                 mc.gui.setScreen(null);
+                check("gui blur restored",
+                        mc.options.getMenuBackgroundBlurriness() == bgBlurBefore);
                 finishSuite();
             }
         }

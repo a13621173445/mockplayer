@@ -70,10 +70,15 @@ public class ModConfig {
     public static final float DEFAULT_GUI_OPACITY = 0.25F;
     public static final float MIN_GUI_OPACITY = 0.05F;
     public static final float MAX_GUI_OPACITY = 1.0F;
+    /** GUI 背景高斯模糊强度（0 = 关闭，1-10 强度，默认 3 适中）。 */
+    public static final int DEFAULT_GUI_BLUR = 3;
+    public static final int MIN_GUI_BLUR = 0;
+    public static final int MAX_GUI_BLUR = 10;
 
     private boolean guiEnabled = DEFAULT_GUI_ENABLED;
     private String guiKeyName = DEFAULT_GUI_KEY_NAME;
     private float guiOpacity = DEFAULT_GUI_OPACITY;
+    private int guiBlur = DEFAULT_GUI_BLUR;
 
     /** 假人默认区块加载半径（节约性能：默认最低 2，范围 1-32）。 */
     public static final int DEFAULT_FAKE_PLAYER_CHUNK_RADIUS = 2;
@@ -200,6 +205,14 @@ public class ModConfig {
         this.guiOpacity = guiOpacity;
     }
 
+    public int getGuiBlur() {
+        return this.guiBlur;
+    }
+
+    public void setGuiBlur(int guiBlur) {
+        this.guiBlur = guiBlur;
+    }
+
     /** 不透明度规范化：NaN/非法 → 默认；范围钳制到 MIN..MAX。 */
     static float normalizeGuiOpacity(float value) {
         if (!Float.isFinite(value)) {
@@ -270,6 +283,7 @@ public class ModConfig {
         this.commands = ModCommands.normalize(this.commands);
         this.guiKeyName = normalizeGuiKeyName(this.guiKeyName);
         this.guiOpacity = normalizeGuiOpacity(this.guiOpacity);
+        this.guiBlur = Math.max(MIN_GUI_BLUR, Math.min(MAX_GUI_BLUR, this.guiBlur));
     }
 
     private static int clampInt(int value, int min, int max, int fallback) {
