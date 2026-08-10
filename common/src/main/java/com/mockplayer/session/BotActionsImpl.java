@@ -54,11 +54,12 @@ public class BotActionsImpl implements BotActions {
     private boolean rapidUseLook;
     /** 连点右键 20 tick 计数（1 秒一次）。 */
     private int rapidUseTicks;
-    /** 长按右键已交互过的方块（同一方块只 useItemOn 一次，之后持续 useItem）。 */
-    private BlockPos sustainedUseLookBlock;
     private BlockPos miningPos;
-    /** 矛戳刺节流（原版 missTime=10 tick ≈ 500ms）。 */
-    private long lastStabMillis = -1000;
+    /** 原版 handleKeybinds 输入节流（照抄 Minecraft.missTime / rightClickDelay 语义）。 */
+    private int missTime;
+    private int rightClickDelay;
+    /** 长按左键按住状态（点击沿触发 startAttack，按住期间由 continueAttack 挖方块）。 */
+    private boolean sustainedAttackHeld;
 
     public BotActionsImpl(BotImpl bot) {
         this.bot = bot;
@@ -152,7 +153,9 @@ public class BotActionsImpl implements BotActions {
         this.sustainedUseTarget = null;
         this.sustainedAttackLook = false;
         this.sustainedUseLook = false;
-        this.sustainedUseLookBlock = null;
+        this.sustainedAttackHeld = false;
+        this.missTime = 0;
+        this.rightClickDelay = 0;
         this.stopMining();
         // 原版松开右键：正在使用物品（举盾/拉弓/吃东西）→ releaseUsingItem
         LocalPlayer usingPlayer = this.bot.getLocalPlayer();
@@ -177,7 +180,9 @@ public class BotActionsImpl implements BotActions {
         this.rapidAttackLook = false;
         this.rapidUseLook = false;
         this.rapidUseTicks = 0;
-        this.sustainedUseLookBlock = null;
+        this.sustainedAttackHeld = false;
+        this.missTime = 0;
+        this.rightClickDelay = 0;
         this.stopMining();
         return this;
     }
@@ -255,6 +260,8 @@ public class BotActionsImpl implements BotActions {
         if (player == null) {
             return;
         }
+        // 原版输入节流：missTime / rightClickDelay 每 tick 递减（Minecraft.tick 等价）
+        this.tickVanillaInput();
         // 移动：只用抽象 moveVector（x=左右=strafe, y=前后=forward），原版 applyInput 从它设 xxa/zza
         ((com.mockplayer.session.accessor.MockplayerClientInputAccessor) player.input)
                 .mockplayer$setMoveVector(new Vec2(this.strafe, this.forward));
@@ -283,56 +290,33 @@ public class BotActionsImpl implements BotActions {
                 this.sustainedUseTarget = null;
             }
         }
-        // 长按左键（原版按住左键）：射线命中实体 → 持续攻击；方块 → 持续挖掘；空 → 挥空
+        // 长按左键（原版按住左键驱动）：点击沿 startAttack，按住期间 continueAttack 挖方块；
+        // 实体/空挥在按住时继续触发（持矛由 MINIMUM_ATTACK_CHARGE 自然控制戳刺节奏）
         if (this.sustainedAttackLook) {
-            // 持矛戳刺：原版按住左键每 10 tick（missTime）一次 STAB，不依赖射线
-            if (player.getMainHandItem().has(net.minecraft.core.component.DataComponents.PIERCING_WEAPON)) {
-                long now = net.minecraft.util.Util.getMillis();
-                if (now - this.lastStabMillis >= 500L) {
-                    this.lastStabMillis = now;
-                    this.pierceStab();
-                }
-                return;
-            }
-            net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
-            if (hit instanceof net.minecraft.world.phys.EntityHitResult entityHit) {
-                if (entityHit.getEntity().isAlive()) {
-                    this.attack(entityHit.getEntity());
-                }
-            } else if (hit instanceof net.minecraft.world.phys.BlockHitResult blockHit
-                    && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
-                if (!blockHit.getBlockPos().equals(this.miningPos)) {
-                    this.mineBlock(blockHit.getBlockPos());
-                }
+            if (player.isUsingItem()) {
+                // 原版：使用物品期间不响应左键（松开后重新按下才再触发）
+                this.sustainedAttackHeld = false;
             } else {
-                this.stopMining();
-                player.swing(InteractionHand.MAIN_HAND);
-            }
-        }
-        // 长按右键（原版按住右键）：实体 → 持续交互；方块 → 首次 useItemOn，之后持续 useItem
-        if (this.sustainedUseLook) {
-            net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
-            if (hit instanceof net.minecraft.world.phys.EntityHitResult entityHit) {
-                if (entityHit.getEntity().isAlive()) {
-                    // 原版按住右键：interact 非 Success（如持矛）→ useItem（举矛蓄力）
-                    if (!(this.interactResult(entityHit.getEntity())
-                            instanceof net.minecraft.world.InteractionResult.Success)
-                            && !player.isUsingItem()) {
-                        this.useItemLikeVanilla();
+                if (!this.sustainedAttackHeld) {
+                    this.sustainedAttackHeld = true;
+                    this.startAttackLikeVanilla();
+                } else {
+                    net.minecraft.world.phys.HitResult heldHit = this.pickLookTarget();
+                    if (!(heldHit instanceof net.minecraft.world.phys.BlockHitResult)) {
+                        this.startAttackLikeVanilla();
                     }
                 }
-            } else if (hit instanceof net.minecraft.world.phys.BlockHitResult blockHit
-                    && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
-                if (!blockHit.getBlockPos().equals(this.sustainedUseLookBlock)) {
-                    this.sustainedUseLookBlock = blockHit.getBlockPos();
-                    this.useItemOn(blockHit.getBlockPos(), blockHit.getDirection());
-                }
-                this.useItemLikeVanilla();
-            } else {
-                // 原版按住右键：未在使用时才 startUseItem（主手优先，副手 fallback 举盾）
-                if (!player.isUsingItem()) {
-                    this.useItemLikeVanilla();
-                }
+                this.continueAttackLikeVanilla(true);
+            }
+        }
+        // 长按右键（原版按住右键驱动）：未使用且节流到 0 时 startUseItem；
+        // 使用中保持蓄力不重发（矛动能/进食/举盾都靠原版 tick 推进）
+        if (this.sustainedUseLook) {
+            if (player.isUsingItem()) {
+                // 保持使用（矛蓄力/进食/举盾），松开由 stopSustained 发 RELEASE_USE_ITEM
+            } else if (this.rightClickDelay == 0 && player.containerMenu == player.inventoryMenu) {
+                // 容器开着时跳过（等价原版 screen != null 阻止 handleKeybinds，防每 4 tick 重开）
+                this.startUseItemLikeVanilla();
             }
         }
         // 连点左键：主手蓄力满（attack strength 1.0）才攻击一次（原版攻击节奏）
@@ -351,10 +335,18 @@ public class BotActionsImpl implements BotActions {
     @Override
     public void attack(Entity target) {
         LocalPlayer player = this.bot.getLocalPlayer();
-        if (player == null || target == null) {
+        if (player == null || target == null || this.bot.getGameMode() == null) {
             return;
         }
-        if (this.bot.getGameMode() != null) {
+        net.minecraft.world.item.ItemStack held = player.getMainHandItem();
+        if (held.has(net.minecraft.core.component.DataComponents.PIERCING_WEAPON)) {
+            // 矛：攻击 = 沿视线戳刺（STAB 包，服务端射线判定）；蓄力未满时原版 attack 也是空挥
+            if (!player.cannotAttackWithItem(held, 0)) {
+                this.bot.getGameMode().piercingAttack(
+                        held.get(net.minecraft.core.component.DataComponents.PIERCING_WEAPON));
+                player.swing(InteractionHand.MAIN_HAND);
+            }
+        } else {
             this.bot.getGameMode().attack(player, target);
             player.swing(InteractionHand.MAIN_HAND);
         }
@@ -374,19 +366,8 @@ public class BotActionsImpl implements BotActions {
             // this.minecraft.player 换成假人），与 mod 扩展的原版戳刺逻辑保持一致。
             // 原版方法硬编码主玩家，假人不能直接调（污染主玩家），Mixin 替换作用对象后即可复用。
             this.bot.getGameMode().piercingAttack(weapon);
-        }
-    }
-
-    /** 原版 startAttack 持矛分支：piercingAttack（发 STAB 包）+ swing。 */
-    private void pierceStab() {
-        LocalPlayer player = this.bot.getLocalPlayer();
-        if (player == null || this.bot.getGameMode() == null) {
-            return;
-        }
-        net.minecraft.world.item.component.PiercingWeapon weapon =
-                player.getMainHandItem().get(net.minecraft.core.component.DataComponents.PIERCING_WEAPON);
-        if (weapon != null) {
-            this.bot.getGameMode().piercingAttack(weapon);
+            // 原版 Minecraft.startAttack 持矛分支：piercingAttack 后 swing（ServerboundSwingPacket →
+            // 服务端广播 AnimatePacket，主客户端能看到假人挥矛动作）
             player.swing(InteractionHand.MAIN_HAND);
         }
     }
@@ -421,43 +402,25 @@ public class BotActionsImpl implements BotActions {
         if (player == null) {
             return;
         }
-        // 原版 Minecraft.startAttack 持矛分支：直接戳刺（STAB 包，不依赖射线命中）
-        if (player.getMainHandItem().has(net.minecraft.core.component.DataComponents.PIERCING_WEAPON)) {
-            this.pierceStab();
-            return;
-        }
+        // 单点左键 = 原版 startAttack 一次 + 立即松开（实体挥击/持矛戳刺/方块打一下）
         net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
-        if (hit instanceof net.minecraft.world.phys.EntityHitResult entityHit) {
-            this.attack(entityHit.getEntity());
-        } else if (hit instanceof net.minecraft.world.phys.BlockHitResult blockHit
-                && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
-            // 原版单点左键方块 = 打一下（start+stop+swing，不掉方块）
-            this.attackBlock(blockHit.getBlockPos());
-        } else {
-            player.swing(InteractionHand.MAIN_HAND); // 挥空
+        this.startAttackLikeVanilla();
+        if (hit instanceof net.minecraft.world.phys.BlockHitResult blockHit
+                && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK
+                && !player.level().getBlockState(blockHit.getBlockPos()).isAir()) {
+            // 单点方块 = 打一下（事件语义与 attackBlock 一致）
+            this.bot.fireOnBreakBlock(blockHit.getBlockPos());
         }
+        this.continueAttackLikeVanilla(false);
     }
 
     @Override
     public void useLook() {
-        LocalPlayer player = this.bot.getLocalPlayer();
-        if (player == null) {
+        if (this.bot.getLocalPlayer() == null) {
             return;
         }
-        net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
-        if (hit instanceof net.minecraft.world.phys.EntityHitResult entityHit) {
-            // 原版 startUseItem：interact 非 Success（如持矛右键实体）→ 继续 useItem（举矛）
-            if (!(this.interactResult(entityHit.getEntity())
-                    instanceof net.minecraft.world.InteractionResult.Success)) {
-                this.useItemLikeVanilla();
-            }
-        } else if (hit instanceof net.minecraft.world.phys.BlockHitResult blockHit
-                && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
-            this.useItemOn(blockHit.getBlockPos(), blockHit.getDirection());
-        } else {
-            // 原版单点右键空气：主手优先，主手无使用动画自动 fallback 副手（如副手盾举盾）
-            this.useItemLikeVanilla();
-        }
+        // 单点右键 = 原版 startUseItem 一次（实体 interact fallthrough / 方块 useItemOn fallthrough / 空 useItem）
+        this.startUseItemLikeVanilla();
     }
 
     @Override
@@ -549,9 +512,14 @@ public class BotActionsImpl implements BotActions {
 
     @Override
     public void useItem(InteractionHand hand) {
+        this.useItemResult(hand);
+    }
+
+    /** 使用手中物品（吃/拉弓/扔/喝药水/矛蓄力等），返回原版分发结果（startUseItem 需判断 Success）。 */
+    private net.minecraft.world.InteractionResult useItemResult(InteractionHand hand) {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null || this.bot.getGameMode() == null) {
-            return;
+            return net.minecraft.world.InteractionResult.PASS;
         }
         // 原版 Minecraft.java:1743-1745：useItem 返回 Success + swingSource==CLIENT → swing（吃食物/投掷物/饮用药水等）
         InteractionResult result = this.bot.getGameMode().useItem(player, hand);
@@ -559,30 +527,7 @@ public class BotActionsImpl implements BotActions {
             player.swing(hand);
         }
         this.bot.fireOnUseItem(hand, player.getItemInHand(hand));
-    }
-
-    /**
-     * 原版 startUseItem 的空气/交互失败分支：主手优先，主手无使用动画（如剑）时
-     * 自动 fallback 副手（如副手盾举盾），与原版按住右键行为一致。
-     */
-    public void useItemLikeVanilla() {
-        LocalPlayer player = this.bot.getLocalPlayer();
-        if (player == null || this.bot.getGameMode() == null) {
-            return;
-        }
-        for (InteractionHand hand : InteractionHand.values()) {
-            if (player.getItemInHand(hand).isEmpty()) {
-                continue;
-            }
-            InteractionResult result = this.bot.getGameMode().useItem(player, hand);
-            if (result instanceof InteractionResult.Success success) {
-                if (success.swingSource() == InteractionResult.SwingSource.CLIENT) {
-                    player.swing(hand);
-                }
-                this.bot.fireOnUseItem(hand, player.getItemInHand(hand));
-                return;
-            }
-        }
+        return result;
     }
 
     @Override
@@ -598,9 +543,14 @@ public class BotActionsImpl implements BotActions {
 
     @Override
     public void useItemOn(BlockPos pos, Direction side) {
+        this.useItemOnResult(pos, side);
+    }
+
+    /** 右键交互方块（开箱/点门/放方块前的位置），返回原版分发结果（startUseItem 需判断 Success/Fail）。 */
+    private net.minecraft.world.InteractionResult useItemOnResult(BlockPos pos, Direction side) {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null || this.bot.getGameMode() == null || pos == null) {
-            return;
+            return net.minecraft.world.InteractionResult.PASS;
         }
         // 26.2：useItemOn(LocalPlayer, InteractionHand, BlockHitResult)
         BlockHitResult hit = new BlockHitResult(
@@ -611,6 +561,199 @@ public class BotActionsImpl implements BotActions {
             player.swing(InteractionHand.MAIN_HAND);
         }
         this.bot.fireOnInteractBlock(pos, side != null ? side : Direction.UP);
+        return result;
+    }
+
+    // ===== 原版等价输入驱动（照抄 Minecraft.handleKeybinds 的左/右键链路，只换作用对象为假人） =====
+    // 所有 look 路径（单点/长按/连点）都走这里：持矛戳刺、动能蓄力、方块交互 fallthrough、
+    // 副手举盾等特殊物品行为由原版逻辑统一处理，不再逐处手动适配。
+
+    /** 每 tick 推进原版输入节流（Minecraft.tick 的 missTime/rightClickDelay 递减）。 */
+    private void tickVanillaInput() {
+        if (this.missTime > 0) {
+            this.missTime--;
+        }
+        if (this.rightClickDelay > 0) {
+            this.rightClickDelay--;
+        }
+    }
+
+    /**
+     * 原版 Minecraft.startAttack 等价：持矛 → piercingAttack（STAB 包）；实体 → gameMode.attack；
+     * 方块 → startDestroyBlock；空 → 挥空 + missTime=10 + 蓄力复位。
+     * 返回是否瞬间破坏（创造模式一击可碎）。
+     */
+    private boolean startAttackLikeVanilla() {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null || this.bot.getGameMode() == null) {
+            return false;
+        }
+        if (this.missTime > 0) {
+            return false;
+        }
+        net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
+        if (hit == null) {
+            // 原版：null hitResult 不应发生，按 miss 处理
+            if (this.bot.getGameMode().hasMissTime()) {
+                this.missTime = 10;
+            }
+            return false;
+        }
+        if (player.isHandsBusy()) {
+            return false;
+        }
+        // 假人不进旁观模式：原版 isSpectator（spectate）分支省略，等价非旁观
+        net.minecraft.world.item.ItemStack heldItem = player.getMainHandItem();
+        if (!heldItem.isItemEnabled(player.level().enabledFeatures())) {
+            return false;
+        }
+        if (player.cannotAttackWithItem(heldItem, 0)) {
+            return false;
+        }
+        net.minecraft.world.item.component.PiercingWeapon piercingWeapon =
+                heldItem.get(net.minecraft.core.component.DataComponents.PIERCING_WEAPON);
+        if (piercingWeapon != null) {
+            // 持矛：STAB 包 + 客户端音效/状态（服务端射线判定伤害），不依赖射线命中
+            this.bot.getGameMode().piercingAttack(piercingWeapon);
+            player.swing(InteractionHand.MAIN_HAND);
+            return true;
+        }
+        boolean endAttack = false;
+        switch (hit.getType()) {
+            case ENTITY -> {
+                net.minecraft.world.phys.EntityHitResult entityHit = (net.minecraft.world.phys.EntityHitResult) hit;
+                net.minecraft.world.item.component.AttackRange customRange =
+                        heldItem.get(net.minecraft.core.component.DataComponents.ATTACK_RANGE);
+                if (customRange == null || customRange.isInRange(player, hit.getLocation())) {
+                    this.bot.getGameMode().attack(player, entityHit.getEntity());
+                    this.bot.fireOnAttackEntity(entityHit.getEntity());
+                }
+            }
+            case BLOCK -> {
+                net.minecraft.world.phys.BlockHitResult blockHit = (net.minecraft.world.phys.BlockHitResult) hit;
+                net.minecraft.core.BlockPos pos = blockHit.getBlockPos();
+                if (!player.level().getBlockState(pos).isAir()) {
+                    this.bot.getGameMode().startDestroyBlock(pos, blockHit.getDirection());
+                    if (player.level().getBlockState(pos).isAir()) {
+                        endAttack = true;
+                    }
+                }
+            }
+            case MISS -> {
+                if (this.bot.getGameMode().hasMissTime()) {
+                    this.missTime = 10;
+                }
+                player.resetAttackStrengthTicker();
+            }
+            default -> { }
+        }
+        player.swing(InteractionHand.MAIN_HAND);
+        return endAttack;
+    }
+
+    /**
+     * 原版 Minecraft.continueAttack 等价：按住左键时持续挖掘（continueDestroyBlock + 裂纹 + 挥动），
+     * 松开/目标变空气/持矛时停止或跳过。
+     */
+    private void continueAttackLikeVanilla(boolean down) {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null || this.bot.getGameMode() == null) {
+            return;
+        }
+        if (!down) {
+            this.missTime = 0;
+        }
+        if (this.missTime <= 0 && !player.isUsingItem()) {
+            net.minecraft.world.item.ItemStack heldItem = player.getMainHandItem();
+            if (!heldItem.has(net.minecraft.core.component.DataComponents.PIERCING_WEAPON)) {
+                net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
+                if (down && hit != null && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+                    net.minecraft.world.phys.BlockHitResult blockHit = (net.minecraft.world.phys.BlockHitResult) hit;
+                    net.minecraft.core.BlockPos pos = blockHit.getBlockPos();
+                    if (!player.level().getBlockState(pos).isAir()) {
+                        if (this.bot.getGameMode().continueDestroyBlock(pos, blockHit.getDirection())) {
+                            if (player.level() instanceof net.minecraft.client.multiplayer.ClientLevel cl) {
+                                cl.addBreakingBlockEffect(pos, blockHit.getDirection());
+                            }
+                            player.swing(InteractionHand.MAIN_HAND);
+                        }
+                    }
+                } else {
+                    this.bot.getGameMode().stopDestroyBlock();
+                }
+            }
+        }
+    }
+
+    /**
+     * 原版 Minecraft.startUseItem 等价：实体 → interact（失败 fallthrough 到 useItem）；
+     * 方块 → useItemOn（Success/Fail 返回，PASS fallthrough 到 useItem）；空 → useItem。
+     * 主手优先、副手 fallback（如副手盾举盾），持矛右键 = 动能蓄力（CONSUME）。
+     */
+    private void startUseItemLikeVanilla() {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null || this.bot.getGameMode() == null) {
+            return;
+        }
+        if (this.bot.getGameMode().isDestroying()) {
+            return;
+        }
+        this.rightClickDelay = 4;
+        if (player.isHandsBusy()) {
+            return;
+        }
+        net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
+        for (InteractionHand hand : InteractionHand.values()) {
+            net.minecraft.world.item.ItemStack heldItem = player.getItemInHand(hand);
+            if (!heldItem.isItemEnabled(player.level().enabledFeatures())) {
+                return;
+            }
+            if (hit != null) {
+                switch (hit.getType()) {
+                    case ENTITY -> {
+                        net.minecraft.world.phys.EntityHitResult entityHit = (net.minecraft.world.phys.EntityHitResult) hit;
+                        net.minecraft.world.entity.Entity entity = entityHit.getEntity();
+                        if (!player.level().getWorldBorder().isWithinBounds(entity.blockPosition())) {
+                            return;
+                        }
+                        if (player.isWithinEntityInteractionRange(entity, 0.0)) {
+                            InteractionResult interactResult =
+                                    this.bot.getGameMode().interact(player, entity, entityHit, hand);
+                            this.bot.fireOnInteractEntity(entity);
+                            if (interactResult instanceof InteractionResult.Success success) {
+                                if (success.swingSource() == InteractionResult.SwingSource.CLIENT) {
+                                    player.swing(hand);
+                                }
+                                return;
+                            }
+                        }
+                    }
+                    case BLOCK -> {
+                        net.minecraft.world.phys.BlockHitResult blockHit = (net.minecraft.world.phys.BlockHitResult) hit;
+                        InteractionResult useResult =
+                                this.bot.getGameMode().useItemOn(player, hand, blockHit);
+                        this.bot.fireOnInteractBlock(blockHit.getBlockPos(), blockHit.getDirection());
+                        if (useResult instanceof InteractionResult.Success success) {
+                            if (success.swingSource() == InteractionResult.SwingSource.CLIENT) {
+                                player.swing(hand);
+                            }
+                            return;
+                        }
+                        if (useResult instanceof InteractionResult.Fail) {
+                            return;
+                        }
+                    }
+                    default -> { }
+                }
+            }
+            if (!heldItem.isEmpty() && this.bot.getGameMode().useItem(player, hand) instanceof InteractionResult.Success success) {
+                if (success.swingSource() == InteractionResult.SwingSource.CLIENT) {
+                    player.swing(hand);
+                }
+                this.bot.fireOnUseItem(hand, heldItem);
+                return;
+            }
+        }
     }
 
     @Override

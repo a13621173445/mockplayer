@@ -4293,7 +4293,20 @@ public final class TestRunner {
     private static boolean sprintSpearGiven;
     private static volatile boolean sprintSpearServer;
     private static boolean sprintThrustIssued;
+    private static boolean sprintHoldGiven;
+    private static boolean sprintHoldSummoned;
+    private static boolean sprintHoldSeen;
+    private static boolean sprintHoldIssued;
+    private static boolean sprintHoldWalkGiven;
+    private static boolean sprintHoldWalkIssued;
+    private static boolean sprintHoldWalkChecked;
+    private static volatile boolean sprintHoldUsingOk;
+    private static volatile int sprintHoldWalkRemaining = -1;
+    private static volatile int sprintHoldWalkDuration = -1;
     private static volatile boolean combatLastDamageIsSpear;
+    private static volatile boolean stabSwingSeen;
+    private static volatile boolean stabSwingSampled;
+    private static volatile boolean sprintHoldPoseSampled;
     private static volatile float combatServerScale = -1;
     private static volatile boolean sprintFacingOk;
     private static volatile boolean sprintUsingOk;
@@ -4409,8 +4422,17 @@ public final class TestRunner {
                 // 戳刺走 ServerboundPlayerActionPacket(STAB) → 服务端 PiercingWeapon.attack（SPEAR 伤害）。
                 // 需要攻击蓄力满（MINIMUM_ATTACK_CHARGE，服务端 cannotAttackWithItem 检查）。
                 readSpearDamage(server);
-                if (combatLastDamageIsSpear && combatHuskHealth >= 0 && combatHuskHealth < 20) {
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null && sp.swinging) {
+                        stabSwingSeen = true; // 挥动动画已广播（主客户端可见动作）
+                    }
+                    stabSwingSampled = true;
+                });
+                if (combatLastDamageIsSpear && combatHuskHealth >= 0 && combatHuskHealth < 20
+                        && stabSwingSampled) {
                     check("husk hurt by SPEAR (left-click stab)", true);
+                    check("stab swing animation broadcast", stabSwingSeen);
                     check("fake still PLAYING (no server crash)", bot.getLifecycle() == BotLifecycle.PLAYING);
                     step = 7;
                 } else if (combatServerScale >= 1.0F) {
@@ -4682,7 +4704,125 @@ public final class TestRunner {
                     step = 9;
                 }
             }
-            case 9 -> {
+            case 9 -> { // 长按右键 + 冲刺（sustainedUseLook）：由长按路径自己蓄力，动能伤害正常触发
+                if (!sprintHoldGiven) {
+                    sprintHoldGiven = true;
+                    waitTicks = 0;
+                    bot.actions().stop();
+                    bot.actions().stopSustained(); // 释放上一次冲刺的使用中矛
+                    server.execute(() -> server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack(), "kill @e[type=minecraft:husk]"));
+                    return;
+                }
+                if (!sprintHoldSummoned) {
+                    if (++waitTicks > 10) {
+                        sprintHoldSummoned = true;
+                        summonHusk(server, 6.0);
+                        waitTicks = 0;
+                    }
+                    return;
+                }
+                if (!sprintHoldSeen) {
+                    if (bot.getEntitiesNear(64).stream()
+                            .anyMatch(e -> e instanceof net.minecraft.world.entity.monster.zombie.Zombie)) {
+                        sprintHoldSeen = true;
+                        waitTicks = 0;
+                    } else if (++waitTicks > 200) {
+                        fail("hold husk not seen");
+                        sprintHoldSeen = true;
+                    }
+                    return;
+                }
+                if (!sprintHoldIssued) {
+                    if (++waitTicks > 20) { // 等尸壳完全刷新
+                        sprintHoldIssued = true;
+                        waitTicks = 0;
+                        net.minecraft.world.entity.Entity target = bot.getEntitiesNear(64).stream()
+                                .filter(e -> e instanceof net.minecraft.world.entity.monster.zombie.Zombie)
+                                .findFirst().orElse(null);
+                        if (target != null) {
+                            bot.actions().lookAt(target);
+                        }
+                        bot.getLocalPlayer().getInventory().setSelectedSlot(0);
+                        bot.actions().sustainedUseLook(); // 长按右键：长按路径负责蓄力，不手动 useItem
+                        bot.actions().setForward(1.0F);
+                        bot.actions().setSprint(true);
+                        check("hold-thrust issued (sustainedUseLook + sprint)", true);
+                    }
+                    return;
+                }
+                step = 10;
+            }
+            case 10 -> { // 长按右键蓄力 + 冲刺 → 服务端 SPEAR 动能伤害
+                readSpearDamage(server);
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    sprintHoldUsingOk = sp != null && sp.isUsingItem()
+                            && sp.getUseItem().is(net.minecraft.world.item.Items.IRON_SPEAR);
+                    sprintHoldPoseSampled = true;
+                });
+                if (combatLastDamageIsSpear && combatHuskHealth >= 0 && combatHuskHealth < 20
+                        && sprintHoldPoseSampled) {
+                    check("husk hurt by SPEAR (hold right-click sprint)", true);
+                    check("hold right-click shows using pose", sprintHoldUsingOk);
+                    check("fake still PLAYING (no server crash)", bot.getLifecycle() == BotLifecycle.PLAYING);
+                    waitTicks = 0;
+                    step = 11;
+                } else if (++waitTicks > 300) {
+                    fail("hold-thrust timeout (no SPEAR damage) hp=" + combatHuskHealth
+                            + " spear=" + combatLastDamageIsSpear);
+                    step = 11;
+                }
+            }
+            case 11 -> { // 长按右键看地面：蓄力不得被方块分支每 tick 重置（旧 bug 根因）
+                if (!sprintHoldWalkGiven) {
+                    sprintHoldWalkGiven = true;
+                    waitTicks = 0;
+                    bot.actions().stop();
+                    bot.actions().stopSustained();
+                    server.execute(() -> server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack(), "kill @e[type=minecraft:husk]"));
+                    return;
+                }
+                if (!sprintHoldWalkIssued) {
+                    if (++waitTicks > 10) { // 等 kill 生效，再低头看前方地面
+                        sprintHoldWalkIssued = true;
+                        waitTicks = 0;
+                        bot.actions().look(bot.getLocalPlayer().getYRot(), -45.0F);
+                        bot.actions().sustainedUseLook(); // 长按右键：射线命中方块 → useItemOn PASS → 蓄力
+                    }
+                    return;
+                }
+                if (!sprintHoldWalkChecked) {
+                    if (++waitTicks > 35) {
+                        sprintHoldWalkChecked = true;
+                        server.execute(() -> {
+                            var sp = server.getPlayerList().getPlayerByName(botName);
+                            sprintHoldWalkRemaining = sp != null && sp.isUsingItem()
+                                    ? sp.getUseItemRemainingTicks() : -1;
+                            sprintHoldWalkDuration = sp != null && sp.isUsingItem()
+                                    ? sp.getUseItem().getUseDuration(sp) : -1;
+                        });
+                    }
+                    return;
+                }
+                if (sprintHoldWalkRemaining >= 0 && sprintHoldWalkDuration > 0) {
+                    // 蓄力持续推进：剩余 tick 明显小于总时长（每 tick 重置 → 剩余≈总时长）
+                    check("hold right-click charge not reset while aiming at block",
+                            sprintHoldWalkRemaining <= sprintHoldWalkDuration - 20,
+                            "remaining=" + sprintHoldWalkRemaining
+                                    + " duration=" + sprintHoldWalkDuration);
+                } else {
+                    check("hold right-click charge not reset while aiming at block", false,
+                            "remaining=" + sprintHoldWalkRemaining
+                                    + " duration=" + sprintHoldWalkDuration);
+                }
+                bot.actions().stop();
+                bot.actions().stopSustained();
+                waitTicks = 0;
+                step = 12;
+            }
+            case 12 -> { // 收尾
                 removeHusks(server);
                 MockplayerApi.bots().removeBot(botName, "command");
                 finishSuite();
