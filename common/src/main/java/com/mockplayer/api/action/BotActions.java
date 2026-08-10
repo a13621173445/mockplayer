@@ -95,6 +95,8 @@ public interface BotActions {
     /**
      * 持续攻击目标（每 tick 自动 attack 一次，目标死亡自动停止；配合 {@link #stopSustained()}）。
      *
+     * <p>不自动转向，需要追踪目标朝向时由外部调用者按 tick 调 {@link #lookAt(Entity)}。
+     *
      * @param target 攻击目标
      * @return this
      */
@@ -102,6 +104,8 @@ public interface BotActions {
 
     /**
      * 持续右键目标（每 tick 自动 interact 一次，目标死亡自动停止；配合 {@link #stopSustained()}）。
+     *
+     * <p>不自动转向，需要追踪目标朝向时由外部调用者按 tick 调 {@link #lookAt(Entity)}。
      *
      * @param target 交互目标
      * @return this
@@ -202,7 +206,7 @@ public interface BotActions {
     /**
      * 攻击实体（挥拳/武器）。
      *
-     * <p>执行前自动看向目标实体（一次性 lookAt，不保存持续朝向状态）。
+     * <p>不改变假人朝向；需要先看向目标请调用 {@link #lookAt(Entity)}。
      *
      * @param target 目标实体
      */
@@ -219,7 +223,7 @@ public interface BotActions {
     /**
      * 右键交互实体（村民交易/喂食/骑乘/开门等）。
      *
-     * <p>执行前自动看向目标实体。
+     * <p>不改变假人朝向；需要先看向目标请调用 {@link #lookAt(Entity)}。
      *
      * @param target 目标实体
      */
@@ -228,7 +232,7 @@ public interface BotActions {
     /**
      * 左键打方块（一次破坏进度）。
      *
-     * <p>执行前自动看向方块中心。
+     * <p>不改变假人朝向；需要先看向方块请调用 {@link #lookAt(Vec3)}。
      *
      * @param pos 方块位置
      */
@@ -237,7 +241,7 @@ public interface BotActions {
     /**
      * 开始挖掘方块（持续挖掘由 gameMode 自动累积进度并发 START/STOP 包）。
      *
-     * <p>执行前与持续挖掘期间自动看向方块中心。
+     * <p>不改变假人朝向；需要先看向方块请调用 {@link #lookAt(Vec3)}。
      *
      * @param pos 方块位置
      */
@@ -259,7 +263,7 @@ public interface BotActions {
     /**
      * 右键交互方块（开箱/点门/放方块前的位置）。
      *
-     * <p>执行前自动看向被点击的方块中心。
+     * <p>不改变假人朝向；需要先看向方块请调用 {@link #lookAt(Vec3)}。
      *
      * @param pos  方块位置
      * @param side 交互的面
@@ -270,7 +274,7 @@ public interface BotActions {
      * 放置方块（手持方块对准 pos 的 side 面放置；与 useItemOn 同通道，独立语义原语）。
      *
      * <p>实际放置位置与原版 BlockPlaceContext 一致：点击可替换方块（空气/水等）→ 放 pos 本身；
-     * 点击实心方块 → 放 pos.relative(side)。执行前自动看向实际放置位置。
+     * 点击实心方块 → 放 pos.relative(side)。不改变假人朝向，需要先看向目标请调用 {@link #lookAt(Vec3)}。
      *
      * @param pos  相邻方块位置
      * @param side 放置的面
@@ -282,7 +286,7 @@ public interface BotActions {
      * target 的面完成放置（原语等价 placeBlock(支撑块, 反方向)）；找不到支撑块时
      * 不放置。
      *
-     * <p>执行前自动看向 target 中心。
+     * <p>不改变假人朝向，需要先看向目标请调用 {@link #lookAt(Vec3)}。
      *
      * @param target 被放置方块的位置
      */

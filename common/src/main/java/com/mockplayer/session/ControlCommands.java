@@ -284,6 +284,7 @@ public class ControlCommands {
         if (entity == null) {
             return fail("commands.mockplayer.control.entity_not_found", playerName(name), target == null ? "?" : target);
         }
+        bot.actions().lookAt(entity);
         bot.actions().attack(entity);
         return success("attack", name, entity.getName());
     }
@@ -307,6 +308,7 @@ public class ControlCommands {
         if (entity == null) {
             return fail("commands.mockplayer.control.entity_not_found", playerName(name), target == null ? "?" : target);
         }
+        bot.actions().lookAt(entity);
         bot.actions().sustainedAttack(entity);
         return success("sustainedAttack", name, entity.getName());
     }
@@ -321,6 +323,7 @@ public class ControlCommands {
         if (entity == null) {
             return fail("commands.mockplayer.control.entity_not_found", playerName(name), target == null ? "?" : target);
         }
+        bot.actions().lookAt(entity);
         bot.actions().sustainedUse(entity);
         return success("sustainedUse", name, entity.getName());
     }
@@ -380,6 +383,7 @@ public class ControlCommands {
         if (entity == null) {
             return fail("commands.mockplayer.control.entity_not_found", playerName(name), target == null ? "?" : target);
         }
+        bot.actions().lookAt(entity);
         bot.actions().interact(entity);
         return success("interact", name, entity.getName());
     }
@@ -417,6 +421,7 @@ public class ControlCommands {
         if (dir == null) {
             return fail("commands.mockplayer.control.invalid_side", side == null ? "" : side);
         }
+        findBot(name).actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
         findBot(name).actions().useItemOn(new BlockPos(x, y, z), dir);
         return success("useItemOn", name, x + " " + y + " " + z + " " + dir.getName());
     }
@@ -430,6 +435,7 @@ public class ControlCommands {
         if (dir == null) {
             return fail("commands.mockplayer.control.invalid_side", side == null ? "" : side);
         }
+        findBot(name).actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
         findBot(name).actions().placeBlock(new BlockPos(x, y, z), dir);
         return success("placeBlock", name, x + " " + y + " " + z + " " + dir.getName());
     }
@@ -439,6 +445,7 @@ public class ControlCommands {
         if (blocked != null) {
             return blocked;
         }
+        findBot(name).actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
         findBot(name).actions().mineBlock(new BlockPos(x, y, z));
         return success("mineBlock", name, x + " " + y + " " + z);
     }
@@ -448,6 +455,7 @@ public class ControlCommands {
         if (blocked != null) {
             return blocked;
         }
+        findBot(name).actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
         findBot(name).actions().attackBlock(new BlockPos(x, y, z));
         return success("attackBlock", name, x + " " + y + " " + z);
     }
@@ -513,6 +521,7 @@ public class ControlCommands {
         if (entity == null) {
             return fail("commands.mockplayer.control.entity_not_found", playerName(name), target);
         }
+        bot.actions().lookAt(entity);
         bot.actions().mount(entity);
         return success("mount", name, entity.getName());
     }

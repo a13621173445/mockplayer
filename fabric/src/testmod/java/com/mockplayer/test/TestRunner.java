@@ -1956,7 +1956,7 @@ public final class TestRunner {
                     if (bot.getLocalPlayer().getAttackStrengthScale(1.0F) >= 0.99F || ++waitTicks > 70) {
                         ccHuskTargetAttacked = true;
                         waitTicks = 0;
-                        // 先背对 husk（husk 在 +X，朝西 yaw=90），攻击后必须自动转向它
+                        // 先背对 husk（husk 在 +X，朝西 yaw=90），命令层 attack 会先 lookAt 转向它
                         bot.actions().look(90.0F, 0.0F);
                         // 用攻击瞬间的客户端实体眼睛位置做期望（僵尸会移动，且脚底 vs 眼睛有 pitch 误差）
                         ccHuskPos = bot.getEntitiesNear(16.0).stream()
@@ -2268,7 +2268,7 @@ public final class TestRunner {
                     if (++waitTicks > 25) {
                         ccPlace2Sent = true;
                         waitTicks = 0;
-                        // 先背对目标（朝北），验证 placeBlock 内部自动朝向会转回来
+                        // 先背对目标（朝北），验证命令层 placeBlock 会自动 lookAt 转回来
                         bot.actions().look(180.0F, 0.0F);
                         com.mockplayer.session.ControlCommands.placeBlock(botName,
                                 ccPlacePos2.getX(), ccPlacePos2.getY(), ccPlacePos2.getZ(), "up");
@@ -2289,7 +2289,7 @@ public final class TestRunner {
                     check("placeBlock auto-face target", ccFacing(bot.getLocalPlayer(),
                             net.minecraft.world.phys.Vec3.atCenterOf(ccPlacePos2), 12.0F, 20.0F));
                     ccMineSent = true;
-                    // 再背对目标（朝北），验证 mineBlock 内部自动朝向会转回来
+                    // 再背对目标（朝北），验证命令层 mineBlock 会自动 lookAt 转回来
                     bot.actions().look(180.0F, 0.0F);
                     com.mockplayer.session.ControlCommands.mineBlock(botName,
                             ccPlacePos2.getX(), ccPlacePos2.getY(), ccPlacePos2.getZ());
@@ -2317,8 +2317,8 @@ public final class TestRunner {
                     if (++waitTicks > 15 && bot.getLocalPlayer().getMainHandItem().is(net.minecraft.world.item.Items.DIRT)) {
                         ccPlaceAtSent = true;
                         waitTicks = 0;
-                        // 先背对目标（朝北），验证 placeBlockAt 内部自动朝向会转回来
-                        bot.actions().look(180.0F, 0.0F);
+                        // 朝向由外部调用者负责：placeBlockAt 不再自动转向，先 lookAt 目标
+                        bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(ccPlaceAtPos));
                         bot.actions().placeBlockAt(ccPlaceAtPos);
                     }
                 } else if (!ccPlacedAt) {
@@ -2334,7 +2334,7 @@ public final class TestRunner {
                 } else if (!ccPlaceAtChecked) {
                     ccPlaceAtChecked = true;
                     check("placeBlockAt placed dirt at exact pos (server)", true);
-                    check("placeBlockAt auto-face target", ccFacing(bot.getLocalPlayer(),
+                    check("placeBlockAt external lookAt applied", ccFacing(bot.getLocalPlayer(),
                             net.minecraft.world.phys.Vec3.atCenterOf(ccPlaceAtPos), 12.0F, 20.0F));
                     step = 13;
                 }
@@ -6393,6 +6393,8 @@ public final class TestRunner {
     private static boolean bgSlideGiven;
     private static boolean bgSlideWalking;
     private static boolean bgSlideWalked;
+    private static int bgSlideWalkTicks;
+    private static boolean bgSlidePauseOnLostFocus;
     private static volatile double bgSlideStartX = Double.NaN;
     private static volatile double bgSlideStartZ = Double.NaN;
 
@@ -8580,6 +8582,9 @@ public final class TestRunner {
                 if (!bgSlideGiven) {
                     bgSlideGiven = true;
                     mc.gui.setScreen(null);
+                    // 失焦会弹 PauseScreen 挡住移动输入：本阶段临时关掉，收尾恢复
+                    bgSlidePauseOnLostFocus = mc.options.pauseOnLostFocus;
+                    mc.options.pauseOnLostFocus = false;
                     bgSlideStartX = mc.player.getX();
                     bgSlideStartZ = mc.player.getZ();
                     server.execute(() -> {
@@ -8596,18 +8601,36 @@ public final class TestRunner {
                     return; // 等 bot 重叠到位
                 }
                 if (!bgSlideWalking) {
-                    bgSlideWalking = true;
-                    mc.options.keyUp.setDown(true); // 主玩家前进 10 tick 产生动量
-                    waitTicks = 0;
-                    return;
-                }
-                if (++waitTicks < 10) {
+                    if (mc.gui.screen() != null) {
+                        mc.gui.setScreen(null); // 残留界面（如失焦弹的 PauseScreen）先关掉
+                    }
+                    // 就绪门：等主玩家落地/存活/无界面（失焦暂停或残留界面会让按键无效，造成假失败）
+                    if (mc.player.onGround() && mc.player.isAlive() && mc.gui.screen() == null) {
+                        bgSlideWalking = true;
+                        bgSlideWalkTicks = 0;
+                        mc.options.keyUp.setDown(true); // 主玩家前进产生动量
+                        waitTicks = 0;
+                    } else if (waitTicks > 140) {
+                        check("main player ready to walk", false,
+                                "onGround=" + mc.player.onGround()
+                                        + " alive=" + mc.player.isAlive()
+                                        + " screen=" + mc.gui.screen()
+                                        + " paused=" + mc.isPaused());
+                        bgSlideWalked = true; // 直接测量（实际 moved 会 FAIL，给出完整状态）
+                        waitTicks = 0;
+                    }
                     return;
                 }
                 if (!bgSlideWalked) {
-                    bgSlideWalked = true;
-                    mc.options.keyUp.setDown(false);
-                    waitTicks = 0;
+                    bgSlideWalkTicks++;
+                    double dx = mc.player.getX() - bgSlideStartX;
+                    double dz = mc.player.getZ() - bgSlideStartZ;
+                    // 走到 0.5 格即松键（最长 80 tick，容忍卡位/延迟启动，不掩盖滑行回归）
+                    if (bgSlideWalkTicks >= 80 || Math.sqrt(dx * dx + dz * dz) >= 0.5) {
+                        bgSlideWalked = true;
+                        mc.options.keyUp.setDown(false);
+                        waitTicks = 0;
+                    }
                     return;
                 }
                 if (++waitTicks < 6) {
@@ -8618,7 +8641,10 @@ public final class TestRunner {
                 double speed = mc.player.getDeltaMovement().horizontalDistance();
                 check("main player actually moved",
                         Math.sqrt(dx * dx + dz * dz) > 0.5,
-                        "dist=" + Math.sqrt(dx * dx + dz * dz));
+                        "dist=" + Math.sqrt(dx * dx + dz * dz)
+                                + " paused=" + mc.isPaused()
+                                + " onGround=" + mc.player.onGround()
+                                + " screen=" + mc.gui.screen());
                 check("main player stops after release", speed < 0.05, "speed=" + speed);
                 bgStep(40);
             }
@@ -8626,6 +8652,7 @@ public final class TestRunner {
                 if (++waitTicks < 20) {
                     return;
                 }
+                mc.options.pauseOnLostFocus = bgSlidePauseOnLostFocus;
                 mc.gui.setScreen(null);
                 finishSuite();
             }

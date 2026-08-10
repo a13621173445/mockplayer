@@ -128,21 +128,6 @@ public class BotActionsImpl implements BotActions {
         return this;
     }
 
-    /** 一次性朝向：交互前立即转向目标位置（不保存持续 look 状态，与持续移动输入无关）。 */
-    private void facePos(Vec3 pos) {
-        LocalPlayer player = this.bot.getLocalPlayer();
-        if (player != null && pos != null) {
-            player.lookAt(EntityAnchorArgument.Anchor.EYES, pos);
-        }
-    }
-
-    /** 一次性朝向实体（取其眼睛位置）。 */
-    private void faceEntity(Entity target) {
-        if (target != null) {
-            this.facePos(target.getEyePosition());
-        }
-    }
-
     @Override
     public BotActions jump() {
         this.jumping = true;
@@ -369,8 +354,6 @@ public class BotActionsImpl implements BotActions {
         if (player == null || target == null) {
             return;
         }
-        // 攻击前自动看向目标（用户拍板：所有实体交互先 lookAt）
-        this.faceEntity(target);
         if (this.bot.getGameMode() != null) {
             this.bot.getGameMode().attack(player, target);
             player.swing(InteractionHand.MAIN_HAND);
@@ -419,8 +402,6 @@ public class BotActionsImpl implements BotActions {
         if (player == null || target == null || this.bot.getGameMode() == null) {
             return net.minecraft.world.InteractionResult.PASS;
         }
-        // 交互前自动看向目标
-        this.faceEntity(target);
         // 右键实体（村民交易/喂食/骑乘）：EntityHitResult 定位目标
         net.minecraft.world.phys.EntityHitResult hit = new net.minecraft.world.phys.EntityHitResult(target);
         net.minecraft.world.InteractionResult result =
@@ -511,8 +492,6 @@ public class BotActionsImpl implements BotActions {
         if (player == null || pos == null || this.bot.getGameMode() == null) {
             return;
         }
-        // 打方块前自动看向方块中心
-        this.facePos(Vec3.atCenterOf(pos));
         // 26.2 无 attackBlock：用 startDestroyBlock + 立即 stopDestroyBlock 模拟一次左键点击
         this.bot.getGameMode().startDestroyBlock(pos, Direction.UP);
         this.bot.getGameMode().stopDestroyBlock();
@@ -526,8 +505,6 @@ public class BotActionsImpl implements BotActions {
         if (player == null || pos == null || this.bot.getGameMode() == null) {
             return;
         }
-        // 挖掘前自动看向方块中心
-        this.facePos(Vec3.atCenterOf(pos));
         // 原版等价距离判断：复用 Player.isWithinBlockInteractionRange（blockInteractionRange，生存约 4.5 格），
         // 与原版 Minecraft.startAttack 的 hitResult 射线范围一致；不做视线射线（方块在背后也能按坐标挖，方便使用）
         if (!player.isWithinBlockInteractionRange(pos, 0.0)) {
@@ -551,8 +528,6 @@ public class BotActionsImpl implements BotActions {
             return;
         }
         BlockPos pos = this.miningPos;
-        // 持续挖掘每 tick 保持看向方块（玩家移动/转向后仍对准目标）
-        this.facePos(Vec3.atCenterOf(pos));
         // 原版等价：玩家移动/目标离开交互范围后，continueAttack 的 hitResult 不再指向该方块 → 松开左键
         if (!player.isWithinBlockInteractionRange(pos, 0.0)) {
             this.stopMining();
@@ -623,16 +598,10 @@ public class BotActionsImpl implements BotActions {
 
     @Override
     public void useItemOn(BlockPos pos, Direction side) {
-        this.useItemOnFacing(pos, side, Vec3.atCenterOf(pos));
-    }
-
-    /** useItemOn 内部实现：可选朝向目标（placeBlock 传实际放置位置，useItemOn 传点击方块中心）。 */
-    private void useItemOnFacing(BlockPos pos, Direction side, Vec3 faceTarget) {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null || this.bot.getGameMode() == null || pos == null) {
             return;
         }
-        this.facePos(faceTarget);
         // 26.2：useItemOn(LocalPlayer, InteractionHand, BlockHitResult)
         BlockHitResult hit = new BlockHitResult(
                 Vec3.atCenterOf(pos), side != null ? side : Direction.UP, pos, false);
@@ -646,15 +615,9 @@ public class BotActionsImpl implements BotActions {
 
     @Override
     public void placeBlock(BlockPos pos, Direction side) {
-        LocalPlayer player = this.bot.getLocalPlayer();
-        Direction face = side != null ? side : Direction.UP;
-        // 实际放置位置与原版 BlockPlaceContext 一致：点击方块可替换（空气/水等）→ 放 pos 本身；
-        // 点击实心方块 → 放 pos.relative(face)。朝向对准实际放置位置。
-        BlockPos placeTarget = pos;
-        if (player != null && !player.level().getBlockState(pos).canBeReplaced()) {
-            placeTarget = pos.relative(face);
-        }
-        this.useItemOnFacing(pos, face, Vec3.atCenterOf(placeTarget));
+        // 点击 pos 的 side 面，实际放置位置由服务端 BlockPlaceContext 决定
+        // （可替换方块 → pos 本身；实心方块 → pos.relative(side)）；朝向由外部调用者负责
+        this.useItemOn(pos, side);
         this.bot.fireOnPlaceBlock(pos);
     }
 
@@ -686,7 +649,7 @@ public class BotActionsImpl implements BotActions {
         if (support == null || supportSide == null) {
             return; // 无支撑块，不放置
         }
-        this.useItemOnFacing(support, supportSide, Vec3.atCenterOf(target));
+        this.useItemOn(support, supportSide);
         this.bot.fireOnPlaceBlock(target);
     }
 
