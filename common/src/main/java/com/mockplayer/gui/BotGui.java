@@ -45,6 +45,10 @@ public final class BotGui {
     private static volatile int slotIconCount;
     private static volatile int tooltipCount;
     private static volatile int carriedCount;
+    private static volatile int itemDecorationCount;
+    private static volatile int xpBarCount;
+    private static volatile int xpBarLevel;
+    private static volatile float xpBarProgress;
     private static volatile String lastTitle = "";
 
     private BotGui() {
@@ -189,6 +193,22 @@ public final class BotGui {
         }
     }
 
+    /** 槽位物品数量/角标渲染探针（原版 itemDecorations；仅测试属性开启时记录）。 */
+    public static void recordItemDecoration() {
+        if (Boolean.getBoolean("mockplayer.guiRenderProbe")) {
+            BotGui.itemDecorationCount++;
+        }
+    }
+
+    /** 经验条渲染探针（记录最近一次等级/进度；仅测试属性开启时记录）。 */
+    public static void recordXpBar(int level, float progress) {
+        if (Boolean.getBoolean("mockplayer.guiRenderProbe")) {
+            BotGui.xpBarCount++;
+            BotGui.xpBarLevel = level;
+            BotGui.xpBarProgress = progress;
+        }
+    }
+
     /** 测试读取：打开次数（0 = 从未打开）。 */
     public static int probeOpenCount() {
         return BotGui.openCount;
@@ -217,6 +237,26 @@ public final class BotGui {
     /** 测试读取：携带物品渲染次数（0 = 从未绘制）。 */
     public static int probeCarriedCount() {
         return BotGui.carriedCount;
+    }
+
+    /** 测试读取：槽位数量角标渲染次数（0 = 从未绘制）。 */
+    public static int probeItemDecorationCount() {
+        return BotGui.itemDecorationCount;
+    }
+
+    /** 测试读取：经验条渲染次数（0 = 从未绘制）。 */
+    public static int probeXpBarCount() {
+        return BotGui.xpBarCount;
+    }
+
+    /** 测试读取：最近一次经验条等级。 */
+    public static int probeXpBarLevel() {
+        return BotGui.xpBarLevel;
+    }
+
+    /** 测试读取：最近一次经验条进度（0-1）。 */
+    public static float probeXpBarProgress() {
+        return BotGui.xpBarProgress;
     }
 
     /** 测试读取：最近渲染帧的标题文本。 */

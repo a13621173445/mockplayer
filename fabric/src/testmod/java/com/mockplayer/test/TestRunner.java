@@ -6172,6 +6172,11 @@ public final class TestRunner {
     private static net.minecraft.client.gui.components.Button bgChunkButton;
     private static boolean bgCarriedOpened;
     private static boolean bgCarriedPicked;
+    private static boolean bgCarriedSwapTested;
+    private static int bgCarriedSelectedBefore;
+    private static boolean bgHotbarSlotClicked;
+    private static boolean bgXpGiven;
+    private static boolean bgAttackActionsTab;
 
     private static void runBotGui(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -6364,13 +6369,29 @@ public final class TestRunner {
                         return;
                     }
                     waitTicks = 0;
-                    net.minecraft.client.gui.components.Button two = bgFindButtonByLiteral(screen, "2");
-                    if (two == null) {
-                        fail("hotbar button missing");
+                    net.minecraft.client.gui.components.Button invTab =
+                            bgFindButton(screen, "gui.mockplayer.tab.inventory");
+                    if (invTab == null) {
+                        fail("inventory tab missing");
                         bgStep(6);
                         return;
                     }
-                    bgClick(two);
+                    bgClick(invTab);
+                    return; // 下一 tick 等背包 Tab 切换
+                }
+                if (++waitTicks < 5) {
+                    return; // 等背包 Tab 切换完成
+                }
+                if (!bgHotbarSlotClicked) {
+                    bgHotbarSlotClicked = true;
+                    waitTicks = 0;
+                    com.mockplayer.gui.BotControlScreen s = bgScreen();
+                    if (s == null || !bgRightClickInventorySlot(s, 37)) {
+                        fail("hotbar slot click failed");
+                        bgStep(6);
+                        return;
+                    }
+                    return;
                 }
                 server.execute(() -> {
                     var sp = server.getPlayerList().getPlayerByName(botName);
@@ -6379,6 +6400,8 @@ public final class TestRunner {
                 });
                 if (bgHotbarServer) {
                     check("gui hotbar switch server", true);
+                    check("hotbar slot click not pickup",
+                            bot.getLocalPlayer().containerMenu.getCarried().isEmpty());
                     bgStep(6);
                 } else if (++waitTicks > 120) {
                     fail("gui hotbar timeout");
@@ -6391,6 +6414,19 @@ public final class TestRunner {
                     fail("gui screen lost");
                     bgStep(7);
                     return;
+                }
+                if (!bgAttackActionsTab) {
+                    bgAttackActionsTab = true;
+                    waitTicks = 0;
+                    net.minecraft.client.gui.components.Button actions =
+                            bgFindButton(screen, "gui.mockplayer.tab.actions");
+                    if (actions != null) {
+                        bgClick(actions);
+                    }
+                    return;
+                }
+                if (++waitTicks < 5) {
+                    return; // 等动作 Tab 激活攻击按钮
                 }
                 if (!bgHuskSummoned) {
                     bgHuskSummoned = true;
@@ -6883,15 +6919,12 @@ public final class TestRunner {
                             && com.mockplayer.gui.BotControlScreen.slotIcon(lp, 45).getPath().endsWith("shield"));
                     check("gui hotbar slot has no icon", lp == null
                             || com.mockplayer.gui.BotControlScreen.slotIcon(lp, 36) == null);
-                    // 悬停信息：物品槽返回原版 tooltip + 数量行，空槽返回 null
-                    check("slot tooltip shows item and count", lp != null
+                    // 悬停信息：物品槽返回原版 tooltip，空槽返回 null
+                    check("slot tooltip shows item", lp != null
                             && com.mockplayer.gui.BotControlScreen.slotTooltip(lp, 36) != null
                             && com.mockplayer.gui.BotControlScreen.slotTooltip(lp, 36).stream()
                             .anyMatch(c -> c.getString().contains("Diamond")
-                                    || c.getString().contains("钻石"))
-                            && com.mockplayer.gui.BotControlScreen.slotTooltip(lp, 36).stream()
-                            .anyMatch(c -> c.getString().contains("Count")
-                                    || c.getString().contains("数量")));
+                                    || c.getString().contains("钻石")));
                     check("empty slot tooltip null", lp == null
                             || com.mockplayer.gui.BotControlScreen.slotTooltip(lp, 9) == null);
                     // 渲染路径：打开背包 Tab，空装备槽图标应真实绘制（探针计数）
@@ -6911,6 +6944,9 @@ public final class TestRunner {
                 }
                 if (com.mockplayer.gui.BotGui.probeSlotIconCount() > 0) {
                     check("empty armor slot icons rendered", true);
+                    check("item decorations rendered",
+                            com.mockplayer.gui.BotGui.probeItemDecorationCount() > 0,
+                            "decorations=" + com.mockplayer.gui.BotGui.probeItemDecorationCount());
                     mc.gui.setScreen(null);
                     System.clearProperty("mockplayer.guiRenderProbe");
                     bgStep(19);
@@ -7043,7 +7079,7 @@ public final class TestRunner {
                 mc.gui.setScreen(null);
                 bgStep(23);
             }
-            case 23 -> { // 拿起物品不消失：点背包槽拿起 → carried 跟随鼠标渲染 → 放回
+            case 23 -> { // 拿起物品不消失 + 右键切换快捷栏不干扰 carried
                 if (!bgCarriedOpened) {
                     bgCarriedOpened = true;
                     System.setProperty("mockplayer.guiRenderProbe", "true");
@@ -7067,24 +7103,44 @@ public final class TestRunner {
                     bgCarriedPicked = true;
                     com.mockplayer.gui.BotControlScreen s = bgScreen();
                     if (s != null) {
-                        bgClickInventorySlot(s, 36); // 拿起快捷栏 0 的钻石
+                        bgClickInventorySlot(s, 36); // 左键拿起快捷栏 0 的钻石（原版物品交互）
                     }
                     waitTicks = 0;
                     return;
                 }
                 net.minecraft.client.player.LocalPlayer lp = bot.getLocalPlayer();
-                boolean carriedDiamond = lp != null
-                        && lp.containerMenu.getCarried().is(net.minecraft.world.item.Items.DIAMOND);
-                if (carriedDiamond && com.mockplayer.gui.BotGui.probeCarriedCount() > 0) {
-                    check("picked item carried on cursor", true);
-                    check("picked item renders on cursor", true);
-                    if (bgScreen() instanceof com.mockplayer.gui.BotControlScreen s) {
-                        bgClickInventorySlot(s, 36); // 放回原槽
+                if (!bgCarriedSwapTested) {
+                    boolean carriedDiamond = lp != null
+                            && lp.containerMenu.getCarried().is(net.minecraft.world.item.Items.DIAMOND);
+                    if (carriedDiamond && com.mockplayer.gui.BotGui.probeCarriedCount() > 0) {
+                        check("picked item carried on cursor", true);
+                        check("picked item renders on cursor", true);
+                        bgCarriedSelectedBefore = lp.getInventory().getSelectedSlot();
+                        bgCarriedSwapTested = true;
+                        waitTicks = 0;
+                        if (bgScreen() instanceof com.mockplayer.gui.BotControlScreen s) {
+                            bgRightClickInventorySlot(s, 36); // 拿着物品点快捷栏：原版物品动作
+                        }
+                        return;
                     }
+                    if (++waitTicks > 100) {
+                        fail("picked item carried timeout");
+                        bgStep(24);
+                    }
+                    return;
+                }
+                boolean itemOk = lp != null
+                        && lp.getInventory().getSelectedSlot() == bgCarriedSelectedBefore
+                        && lp.containerMenu.getCarried().isEmpty();
+                if (itemOk) {
+                    check("hotbar click with carried does item action", true);
+                    check("hotbar click with carried does not switch slot", true);
                     waitTicks = 0;
                     bgStep(24);
-                } else if (++waitTicks > 100) {
-                    fail("picked item carried timeout");
+                } else if (++waitTicks > 60) {
+                    fail("hotbar item action timeout selected="
+                            + (lp != null ? lp.getInventory().getSelectedSlot() : -1)
+                            + " carried=" + (lp != null ? lp.containerMenu.getCarried() : "null"));
                     bgStep(24);
                 }
             }
@@ -7094,10 +7150,76 @@ public final class TestRunner {
                     check("picked item put back", true);
                     mc.gui.setScreen(null);
                     System.clearProperty("mockplayer.guiRenderProbe");
-                    finishSuite();
+                    bgStep(25);
                 } else if (++waitTicks > 60) {
                     check("picked item put back", false,
                             "carried=" + lp.containerMenu.getCarried());
+                    mc.gui.setScreen(null);
+                    System.clearProperty("mockplayer.guiRenderProbe");
+                    bgStep(25);
+                }
+            }
+            case 25 -> { // 状态栏经验条：服务端给经验 → 假人 level/progress 同步 → 状态 Tab 渲染探针
+                if (!bgXpGiven) {
+                    bgXpGiven = true;
+                    System.setProperty("mockplayer.guiRenderProbe", "true");
+                    server.execute(() -> {
+                        var cmds = server.getCommands();
+                        var src = server.createCommandSourceStack();
+                        cmds.performPrefixedCommand(src, "xp add " + botName + " 7 levels");
+                        cmds.performPrefixedCommand(src, "xp add " + botName + " 5 points");
+                    });
+                    waitTicks = 0;
+                    return;
+                }
+                net.minecraft.client.player.LocalPlayer lp = bot.getLocalPlayer();
+                if (lp == null) {
+                    fail("xp sync timeout player null");
+                    bgStep(26);
+                    return;
+                }
+                if (lp.experienceLevel >= 7 && lp.experienceProgress > 0.0F) {
+                    check("xp level synced to client", lp.experienceLevel >= 7,
+                            "level=" + lp.experienceLevel);
+                    check("xp progress synced to client", lp.experienceProgress > 0.0F,
+                            "progress=" + lp.experienceProgress);
+                    check("buttons semi-transparent",
+                            com.mockplayer.gui.BotControlScreen.BUTTON_ALPHA > 0.0F
+                                    && com.mockplayer.gui.BotControlScreen.BUTTON_ALPHA < 1.0F);
+                    mc.gui.setScreen(null);
+                    com.mockplayer.gui.BotGui.open(mc);
+                    net.minecraft.client.gui.screens.Screen opened = bgScreen();
+                    if (opened instanceof com.mockplayer.gui.BotControlScreen s) {
+                        net.minecraft.client.gui.components.Button statusTab =
+                                bgFindButton(s, "gui.mockplayer.tab.status");
+                        if (statusTab != null) {
+                            bgClick(statusTab);
+                        }
+                    }
+                    waitTicks = 0;
+                    bgStep(26);
+                    return;
+                }
+                if (++waitTicks > 150) {
+                    fail("xp sync timeout level=" + lp.experienceLevel
+                            + " progress=" + lp.experienceProgress);
+                    bgStep(26);
+                }
+            }
+            case 26 -> { // 经验条渲染探针断言
+                if (com.mockplayer.gui.BotGui.probeXpBarCount() > 0
+                        && com.mockplayer.gui.BotGui.probeXpBarLevel() >= 7
+                        && com.mockplayer.gui.BotGui.probeXpBarProgress() > 0.0F) {
+                    check("xp bar rendered with level and progress", true,
+                            "level=" + com.mockplayer.gui.BotGui.probeXpBarLevel()
+                                    + " progress=" + com.mockplayer.gui.BotGui.probeXpBarProgress());
+                    mc.gui.setScreen(null);
+                    System.clearProperty("mockplayer.guiRenderProbe");
+                    finishSuite();
+                } else if (++waitTicks > 100) {
+                    check("xp bar rendered with level and progress", false,
+                            "level=" + com.mockplayer.gui.BotGui.probeXpBarLevel()
+                                    + " progress=" + com.mockplayer.gui.BotGui.probeXpBarProgress());
                     mc.gui.setScreen(null);
                     System.clearProperty("mockplayer.guiRenderProbe");
                     finishSuite();
@@ -7218,8 +7340,19 @@ public final class TestRunner {
                 sx, sy, new net.minecraft.client.input.MouseButtonInfo(0, 0)), false);
     }
 
-    /** 背包 Tab 格子点击（menuSlot：盔甲5-8/主背包9-35/快捷栏36-44/副手45）。 */
+    /** 背包 Tab 格子左键点击（menuSlot：盔甲5-8/主背包9-35/快捷栏36-44/副手45）。 */
     private static boolean bgClickInventorySlot(com.mockplayer.gui.BotControlScreen screen, int menuSlot) {
+        return bgClickInventorySlotButton(screen, menuSlot, 0);
+    }
+
+    /** 背包 Tab 格子右键点击（切换快捷栏选中用）。 */
+    private static boolean bgRightClickInventorySlot(com.mockplayer.gui.BotControlScreen screen, int menuSlot) {
+        return bgClickInventorySlotButton(screen, menuSlot, 1);
+    }
+
+    /** 背包 Tab 格子点击（button：0=左键 / 1=右键）。 */
+    private static boolean bgClickInventorySlotButton(
+            com.mockplayer.gui.BotControlScreen screen, int menuSlot, int button) {
         Minecraft mc = Minecraft.getInstance();
         int w = mc.getWindow().getGuiScaledWidth();
         int h = mc.getWindow().getGuiScaledHeight();
@@ -7244,7 +7377,7 @@ public final class TestRunner {
         double sx = com.mockplayer.gui.BotGui.panelX(w, h) + (104 + lx + 10) * scale;
         double sy = com.mockplayer.gui.BotGui.panelY(w, h) + (44 + ly + 10) * scale;
         return screen.mouseClicked(new net.minecraft.client.input.MouseButtonEvent(
-                sx, sy, new net.minecraft.client.input.MouseButtonInfo(0, 0)), false);
+                sx, sy, new net.minecraft.client.input.MouseButtonInfo(button, 0)), false);
     }
 
     /** 容器 Tab 的「容器区」格子点击（row 0 = 容器槽 0；与玩家区不同）。 */

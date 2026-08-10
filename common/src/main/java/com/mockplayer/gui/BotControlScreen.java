@@ -76,6 +76,8 @@ public class BotControlScreen extends Screen {
     public static final int ACT_BTN_W = 74;
     public static final int ACT_BTN_H = 16;
     public static final int ACT_GAP = 76;
+    /** 按钮贴图透明度（0-1：半透明保留原版悬停/高亮/禁用贴图，文字保持不透明）。 */
+    public static final float BUTTON_ALPHA = 0.65F;
 
     /** 当前选中假人（null = 未选中）。 */
     private Bot selected;
@@ -108,7 +110,6 @@ public class BotControlScreen extends Screen {
     private Button sneakButton;
     private Button sprintButton;
     private Button jumpButton;
-    private final List<Button> hotbarButtons = new ArrayList<>();
     private TapHoldButton attackLookButton;
     private TapHoldButton useLookButton;
     private RepeatHoldButton chunkMinusButton;
@@ -140,7 +141,6 @@ public class BotControlScreen extends Screen {
     protected void init() {
         this.clearWidgets();
         this.botButtons.clear();
-        this.hotbarButtons.clear();
         this.entityButtons.clear();
         this.entityTargets.clear();
         this.tapHoldButtons.clear();
@@ -164,6 +164,7 @@ public class BotControlScreen extends Screen {
                     this.select(bots.get(index));
                 }
             }).bounds(sx(LIST_X), sy(34 + i * 16), sw(LIST_W), sh(15)).build();
+            b.setAlpha(BUTTON_ALPHA);
             this.addRenderableWidget(b);
             this.botButtons.add(b);
         }
@@ -221,45 +222,36 @@ public class BotControlScreen extends Screen {
         this.jumpButton = this.addButton(CONTENT_X + 54, 96, 52, 16, "gui.mockplayer.action.jump",
                 () -> this.toggleJump());
 
-        for (int i = 0; i < 9; i++) {
-            int slot = i;
-            Button b = Button.builder(Component.literal(String.valueOf(slot + 1)), btn -> this.act(
-                            bot -> bot.actions().setSelectedSlot(slot),
-                            "gui.mockplayer.action.hotbar"))
-                    .bounds(sx(CONTENT_X + i * 22), sy(122), sw(20), sh(14)).build();
-            this.addRenderableWidget(b);
-            this.hotbarButtons.add(b);
-        }
         // 左键/右键：快速松开 = 单点（attackLook/useLook），按住超阈值 = 持续动作（松开停止）
-        this.attackLookButton = this.addTapHold(CONTENT_X, 148, ACT_BTN_W, ACT_BTN_H,
+        this.attackLookButton = this.addTapHold(CONTENT_X, 122, ACT_BTN_W, ACT_BTN_H,
                 "gui.mockplayer.action.attack_look",
                 () -> this.actQuiet(b -> b.actions().attackLook()),
                 () -> this.actQuiet(b -> b.actions().sustainedAttackLook()),
                 () -> this.actQuiet(b -> b.actions().stopSustained()));
-        this.useLookButton = this.addTapHold(CONTENT_X + ACT_GAP, 148, ACT_BTN_W, ACT_BTN_H,
+        this.useLookButton = this.addTapHold(CONTENT_X + ACT_GAP, 122, ACT_BTN_W, ACT_BTN_H,
                 "gui.mockplayer.action.use_look",
                 () -> this.actQuiet(b -> b.actions().useLook()),
                 () -> this.actQuiet(b -> b.actions().sustainedUseLook()),
                 () -> this.actQuiet(b -> b.actions().stopSustained()));
 
-        this.chunkMinusButton = this.addRepeat(CONTENT_X, 176, 30, 14,
+        this.chunkMinusButton = this.addRepeat(CONTENT_X, 148, 30, 14,
                 "gui.mockplayer.action.chunk_minus", () -> this.changeChunk(-1), CHUNK_REPEAT_MS);
-        this.chunkPlusButton = this.addRepeat(CONTENT_X + 32, 176, 30, 14,
+        this.chunkPlusButton = this.addRepeat(CONTENT_X + 32, 148, 30, 14,
                 "gui.mockplayer.action.chunk_plus", () -> this.changeChunk(1), CHUNK_REPEAT_MS);
-        this.respawnButton = this.addButton(CONTENT_X + 66, 176, 44, 14,
+        this.respawnButton = this.addButton(CONTENT_X + 66, 148, 44, 14,
                 "gui.mockplayer.action.respawn",
                 () -> this.act(Bot::actions, "gui.mockplayer.action.respawn", actions -> actions.respawn()));
-        this.autoRespawnButton = this.addButton(CONTENT_X + 112, 176, 66, 14,
+        this.autoRespawnButton = this.addButton(CONTENT_X + 112, 148, 66, 14,
                 "gui.mockplayer.action.auto_respawn", () -> this.toggleAutoRespawn());
-        this.closeContainerButton = this.addButton(CONTENT_X + 180, 176, 68, 14,
+        this.closeContainerButton = this.addButton(CONTENT_X + 180, 148, 68, 14,
                 "gui.mockplayer.action.close_container",
                 () -> this.actQuiet(b -> b.getContainer().ifPresent(BotContainer::close)));
 
-        this.chatBox = new EditBox(this.font, sx(CONTENT_X), sy(192), sw(180), sh(14),
+        this.chatBox = new EditBox(this.font, sx(CONTENT_X), sy(172), sw(180), sh(14),
                 Component.translatable("gui.mockplayer.action.chat_hint"));
         this.chatBox.setMaxLength(256);
         this.addRenderableWidget(this.chatBox);
-        this.sendButton = this.addButton(CONTENT_X + 182, 192, 66, 14, "gui.mockplayer.action.send",
+        this.sendButton = this.addButton(CONTENT_X + 182, 172, 66, 14, "gui.mockplayer.action.send",
                 () -> this.sendChat());
 
         // ===== 附近实体（动作 Tab 顶部，点击 = bot 转头） =====
@@ -272,6 +264,7 @@ public class BotControlScreen extends Screen {
                 }
             }).bounds(sx(CONTENT_X + 156 + (index % 2) * 46), sy(54 + (index / 2) * 17),
                     sw(44), sh(16)).build();
+            b.setAlpha(BUTTON_ALPHA);
             this.addRenderableWidget(b);
             this.entityButtons.add(b);
         }
@@ -282,6 +275,7 @@ public class BotControlScreen extends Screen {
     private Button addButton(int x, int y, int w, int h, String key, Runnable action) {
         Button b = Button.builder(Component.translatable(key), btn -> action.run())
                 .bounds(sx(x), sy(y), sw(w), sw(h)).build();
+        b.setAlpha(BUTTON_ALPHA);
         this.addRenderableWidget(b);
         return b;
     }
@@ -291,6 +285,7 @@ public class BotControlScreen extends Screen {
                                Runnable start, Runnable end) {
         HoldButton b = new HoldButton(sx(x), sy(y), sw(w), sw(h),
                 Component.translatable(key), start, end);
+        b.setAlpha(BUTTON_ALPHA);
         this.addRenderableWidget(b);
         return b;
     }
@@ -300,6 +295,7 @@ public class BotControlScreen extends Screen {
                                      Runnable tap, Runnable holdStart, Runnable holdEnd) {
         TapHoldButton b = new TapHoldButton(sx(x), sy(y), sw(w), sw(h),
                 Component.translatable(key), tap, holdStart, holdEnd, HOLD_START_MS);
+        b.setAlpha(BUTTON_ALPHA);
         this.addRenderableWidget(b);
         this.tapHoldButtons.add(b);
         return b;
@@ -310,6 +306,7 @@ public class BotControlScreen extends Screen {
                                        Runnable action, long intervalMs) {
         RepeatHoldButton b = new RepeatHoldButton(sx(x), sy(y), sw(w), sw(h),
                 Component.translatable(key), action, intervalMs);
+        b.setAlpha(BUTTON_ALPHA);
         this.addRenderableWidget(b);
         this.repeatButtons.add(b);
         return b;
@@ -686,9 +683,6 @@ public class BotControlScreen extends Screen {
         this.newButton.active = true;
         this.delButton.active = true;
         this.closeContainerButton.visible = actionsTab;
-        for (Button b : this.hotbarButtons) {
-            b.active = ready && actionsTab;
-        }
         // 开关回显（on/off 状态写进按钮文字）
         if (ready) {
             this.sneakButton.setMessage(Component.translatable(
@@ -811,9 +805,21 @@ public class BotControlScreen extends Screen {
                     return true;
                 }
             } else {
+                net.minecraft.client.player.LocalPlayer player = this.selected.getLocalPlayer();
                 int slot = this.inventorySlotAt(mx, my);
                 if (slot >= 0) {
-                    this.inventoryClick(slot, info);
+                    if (slot >= 36 && slot < 45) {
+                        // 右键空手点快捷栏 = 切换选中槽；左键/携带时保持原版物品交互
+                        // （拿起/放下/交换），物品选择完全不受干扰
+                        if (player != null && info.button() == 1
+                                && player.containerMenu.getCarried().isEmpty()) {
+                            this.selectHotbarSlot(slot - 36);
+                        } else if (player != null) {
+                            this.inventoryClick(slot, info);
+                        }
+                    } else {
+                        this.inventoryClick(slot, info);
+                    }
                     return true;
                 }
             }
@@ -861,6 +867,19 @@ public class BotControlScreen extends Screen {
         this.setFeedback(Component.translatable("gui.mockplayer.feedback.inventory_click",
                 Component.translatable(input == ContainerInput.QUICK_MOVE
                         ? "gui.mockplayer.value.shift" : "gui.mockplayer.value.pickup")));
+    }
+
+    /** 点击背包快捷栏格子 → 假人选中该槽位（服务端同步，原版按 1-9 等价）。 */
+    private void selectHotbarSlot(int hotbar) {
+        if (!this.requireBot()) {
+            return;
+        }
+        try {
+            this.selected.actions().setSelectedSlot(hotbar);
+            this.setFeedback(Component.translatable("gui.mockplayer.feedback.hotbar_selected", hotbar + 1));
+        } catch (Exception e) {
+            this.setError(Component.translatable("gui.mockplayer.feedback.error", e.getMessage()));
+        }
     }
 
     /** 容器菜单格子：容器槽（每行 9）+ 下方假人背包（菜单末尾 36 槽）。 */
@@ -1000,6 +1019,26 @@ public class BotControlScreen extends Screen {
             graphics.text(this.font, lines.get(i), x, y, i == 0 ? 0xFFFFFF : 0xFFD7D7D7);
             y += step;
         }
+        this.drawXpBar(graphics, y + 4);
+    }
+
+    /** 状态 Tab 经验条（主玩家 HUD 同款语义：绿色渐变填充 + 等级数字）。 */
+    private void drawXpBar(GuiGraphicsExtractor graphics, int y) {
+        net.minecraft.client.player.LocalPlayer player = this.selected.getLocalPlayer();
+        if (player == null) {
+            return;
+        }
+        int x = this.sx(CONTENT_X);
+        int w = this.sw(CONTENT_W);
+        int h = this.sh(4);
+        graphics.fill(x, y, x + w, y + h, 0x8F000000); // 半透明背景
+        int fill = Math.round(w * player.experienceProgress);
+        if (fill > 0) {
+            graphics.fillGradient(x, y, x + fill, y + h, 0xFF80FF20, 0xFF64FF20);
+        }
+        graphics.text(this.font, String.valueOf(player.experienceLevel),
+                x + w - this.sw(14), y - this.sh(9), 0xFFFFFF, true);
+        com.mockplayer.gui.BotGui.recordXpBar(player.experienceLevel, player.experienceProgress);
     }
 
     /** 状态面板文本行（公共静态，GUI 渲染与测试共用同一数据源）。 */
@@ -1180,10 +1219,8 @@ public class BotControlScreen extends Screen {
         if (stack.isEmpty()) {
             return null;
         }
-        List<Component> lines = new ArrayList<>(
-                Screen.getTooltipFromItem(Minecraft.getInstance(), stack));
-        lines.add(Component.translatable("gui.mockplayer.tooltip.count", stack.getCount()));
-        return lines;
+        // 纯原版 tooltip（名称/附魔/组件），不额外拼数量行
+        return new ArrayList<>(Screen.getTooltipFromItem(Minecraft.getInstance(), stack));
     }
 
     private void drawContainer(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
@@ -1232,12 +1269,10 @@ public class BotControlScreen extends Screen {
                 this.sx(CONTENT_X), this.sy(CONTENT_Y), 0xFF7FB2FF);
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.move"),
                 this.sx(CONTENT_X), this.sy(CONTENT_Y + 26), 0xFF7FB2FF);
-        graphics.text(this.font, Component.translatable("gui.mockplayer.section.hotbar"),
-                this.sx(CONTENT_X), this.sy(CONTENT_Y + 68), 0xFF7FB2FF);
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.interact"),
-                this.sx(CONTENT_X), this.sy(CONTENT_Y + 94), 0xFF7FB2FF);
+                this.sx(CONTENT_X), this.sy(CONTENT_Y + 68), 0xFF7FB2FF);
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.system"),
-                this.sx(CONTENT_X), this.sy(CONTENT_Y + 122), 0xFF7FB2FF);
+                this.sx(CONTENT_X), this.sy(CONTENT_Y + 94), 0xFF7FB2FF);
     }
 
     /** 画一个槽位（逻辑坐标入参，内部换算屏幕坐标；边框 + 空槽图标 + 物品图标 + 数量 + 悬停高亮）。 */
@@ -1257,10 +1292,9 @@ public class BotControlScreen extends Screen {
         }
         if (!stack.isEmpty()) {
             graphics.item(stack, x + 1, y + 1);
-            if (stack.getCount() > 1) {
-                graphics.text(this.font, String.valueOf(stack.getCount()),
-                        x + this.sw(10), y + this.sw(10), 0xFFFFFF, true);
-            }
+            // 数量/附魔角标走原版 itemDecorations（与物品渲染同一位置）
+            graphics.itemDecorations(this.font, stack, x + 1, y + 1);
+            com.mockplayer.gui.BotGui.recordItemDecoration();
         }
     }
 }
