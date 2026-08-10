@@ -44,6 +44,7 @@ public final class BotGui {
     private static volatile int tickCount;
     private static volatile int slotIconCount;
     private static volatile int tooltipCount;
+    private static volatile int carriedCount;
     private static volatile String lastTitle = "";
 
     private BotGui() {
@@ -181,6 +182,13 @@ public final class BotGui {
         }
     }
 
+    /** 鼠标携带物品渲染探针（拿起物品后跟随鼠标绘制；仅测试属性开启时记录）。 */
+    public static void recordCarried() {
+        if (Boolean.getBoolean("mockplayer.guiRenderProbe")) {
+            BotGui.carriedCount++;
+        }
+    }
+
     /** 测试读取：打开次数（0 = 从未打开）。 */
     public static int probeOpenCount() {
         return BotGui.openCount;
@@ -204,6 +212,11 @@ public final class BotGui {
     /** 测试读取：槽位 tooltip 设置次数（0 = 从未设置）。 */
     public static int probeTooltipCount() {
         return BotGui.tooltipCount;
+    }
+
+    /** 测试读取：携带物品渲染次数（0 = 从未绘制）。 */
+    public static int probeCarriedCount() {
+        return BotGui.carriedCount;
     }
 
     /** 测试读取：最近渲染帧的标题文本。 */

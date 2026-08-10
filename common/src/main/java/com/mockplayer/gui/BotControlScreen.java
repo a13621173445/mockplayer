@@ -89,8 +89,8 @@ public class BotControlScreen extends Screen {
     // ===== 控件（init 重建，tick 更新状态） =====
     private Button closeButton;
     private final List<Button> botButtons = new ArrayList<>();
-    private EditBox newName;
-    private EditBox delName;
+    /** 新建/删除共用的假人名字输入框。 */
+    private EditBox nameBox;
     private Button newButton;
     private Button delButton;
     private Button tabStatus;
@@ -167,17 +167,14 @@ public class BotControlScreen extends Screen {
             this.addRenderableWidget(b);
             this.botButtons.add(b);
         }
-        this.newName = new EditBox(this.font, sx(LIST_X), sy(164), sw(LIST_W), sh(12),
-                Component.translatable("gui.mockplayer.new_hint"));
-        this.newName.setMaxLength(16);
-        this.addRenderableWidget(this.newName);
-        this.newButton = this.addButton(LIST_X, 178, LIST_W, 12, "gui.mockplayer.new_bot",
+        // 新建/删除共用一个输入框（并排两个按钮，点哪个就用哪个操作）
+        this.nameBox = new EditBox(this.font, sx(LIST_X), sy(164), sw(LIST_W), sh(12),
+                Component.translatable("gui.mockplayer.name_hint"));
+        this.nameBox.setMaxLength(16);
+        this.addRenderableWidget(this.nameBox);
+        this.newButton = this.addButton(LIST_X, 178, 43, 12, "gui.mockplayer.new_bot",
                 () -> this.tryCreate());
-        this.delName = new EditBox(this.font, sx(LIST_X), sy(192), sw(LIST_W), sh(12),
-                Component.translatable("gui.mockplayer.delete_hint"));
-        this.delName.setMaxLength(16);
-        this.addRenderableWidget(this.delName);
-        this.delButton = this.addButton(LIST_X, 206, LIST_W, 12, "gui.mockplayer.delete_bot",
+        this.delButton = this.addButton(LIST_X + 45, 178, 43, 12, "gui.mockplayer.delete_bot",
                 () -> this.tryDelete());
 
         // ===== 顶部 Tab =====
@@ -606,25 +603,25 @@ public class BotControlScreen extends Screen {
     }
 
     private void tryCreate() {
-        String name = this.newName.getValue().trim();
+        String name = this.nameBox.getValue().trim();
         if (name.isEmpty() || name.length() > 16) {
             this.setError(Component.translatable("gui.mockplayer.feedback.invalid_name"));
             return;
         }
         Component result = FakePlayerCommands.newPlayer(name);
         this.setFeedback(result);
-        this.newName.setValue("");
+        this.nameBox.setValue("");
     }
 
     private void tryDelete() {
-        String name = this.delName.getValue().trim();
+        String name = this.nameBox.getValue().trim();
         if (name.isEmpty()) {
             this.setError(Component.translatable("gui.mockplayer.feedback.invalid_name"));
             return;
         }
         Component result = FakePlayerCommands.delPlayer(name);
         this.setFeedback(result);
-        this.delName.setValue("");
+        this.nameBox.setValue("");
         if (this.selected != null && this.selected.getName().equals(name)) {
             this.selected = null;
         }
@@ -938,6 +935,24 @@ public class BotControlScreen extends Screen {
         // 控件全部按屏幕坐标直排（init 时 sx/sy/sw 换算好），命中与渲染同一坐标系
         super.extractRenderState(graphics, mouseX, mouseY, a);
         this.drawContent(graphics, mouseX, mouseY);
+        if (this.tab == 1 && this.selected != null) {
+            this.drawCarried(graphics, mouseX, mouseY);
+        }
+    }
+
+    /** 鼠标携带物品（拿起后跟随鼠标绘制，原版背包同款；数量用原版 itemDecorations）。 */
+    private void drawCarried(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        net.minecraft.client.player.LocalPlayer player = this.selected.getLocalPlayer();
+        if (player == null) {
+            return;
+        }
+        ItemStack carried = player.containerMenu.getCarried();
+        if (carried.isEmpty()) {
+            return;
+        }
+        graphics.item(carried, mouseX - 8, mouseY - 8);
+        graphics.itemDecorations(this.font, carried, mouseX - 8, mouseY - 8);
+        com.mockplayer.gui.BotGui.recordCarried();
     }
 
     /** 面板内手动绘制内容（状态文本/网格/反馈，全部换算为屏幕坐标）。 */
