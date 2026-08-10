@@ -68,6 +68,15 @@ public final class ModConfigIO {
                     && root.get("debugOverlayEnabled").getAsJsonPrimitive().isBoolean()) {
                 config.setDebugOverlayEnabled(root.get("debugOverlayEnabled").getAsBoolean());
             }
+            // GUI 开关：缺失/非布尔 → 默认 true；按键名交给 ModConfig 规范化（空串 = 禁用）
+            if (root.has("guiEnabled") && root.get("guiEnabled").isJsonPrimitive()
+                    && root.get("guiEnabled").getAsJsonPrimitive().isBoolean()) {
+                config.setGuiEnabled(root.get("guiEnabled").getAsBoolean());
+            }
+            if (root.has("guiKeyName") && root.get("guiKeyName").isJsonPrimitive()
+                    && root.get("guiKeyName").getAsJsonPrimitive().isString()) {
+                config.setGuiKeyName(ModConfig.normalizeGuiKeyName(root.get("guiKeyName").getAsString()));
+            }
             config.setFakePlayerChunkRadius(readInt(root, "fakePlayerChunkRadius",
                     ModConfig.DEFAULT_FAKE_PLAYER_CHUNK_RADIUS,
                     ModConfig.MIN_FAKE_PLAYER_CHUNK_RADIUS, ModConfig.MAX_FAKE_PLAYER_CHUNK_RADIUS));
@@ -99,6 +108,8 @@ public final class ModConfigIO {
         normalized.setEventMoveSampleDistance(config.getEventMoveSampleDistance());
         normalized.setCommands(config.getCommands());
         normalized.setDebugOverlayEnabled(config.isDebugOverlayEnabled());
+        normalized.setGuiEnabled(config.isGuiEnabled());
+        normalized.setGuiKeyName(config.getGuiKeyName());
         normalized.setFakePlayerChunkRadius(config.getFakePlayerChunkRadius());
         normalized.setBatchMaxCount(config.getBatchMaxCount());
         normalized.normalize();

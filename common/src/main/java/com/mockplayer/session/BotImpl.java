@@ -214,6 +214,16 @@ public class BotImpl implements Bot {
         return BotMemoryEstimator.estimate(this);
     }
 
+    @Override
+    public boolean isAutoRespawn() {
+        return this.session.isAutoRespawn();
+    }
+
+    @Override
+    public void setAutoRespawn(boolean autoRespawn) {
+        this.session.setAutoRespawn(autoRespawn);
+    }
+
     // ===== 事件触发辅助（FakePlayListener / FakeSession / BotActionsImpl 调用） =====
 
     void fireOnSpawned() {

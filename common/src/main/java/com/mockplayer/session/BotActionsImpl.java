@@ -182,6 +182,36 @@ public class BotActionsImpl implements BotActions {
         return this;
     }
 
+    @Override
+    public boolean isSneaking() {
+        return this.sneaking || this.dismountShiftTicks > 0;
+    }
+
+    @Override
+    public boolean isSprinting() {
+        return this.sprinting;
+    }
+
+    @Override
+    public boolean isJumping() {
+        return this.jumping;
+    }
+
+    @Override
+    public boolean isMining() {
+        return this.miningPos != null;
+    }
+
+    @Override
+    public boolean isSustainedAttacking() {
+        return this.sustainedAttackTarget != null || this.sustainedAttackLook;
+    }
+
+    @Override
+    public boolean isSustainedUsing() {
+        return this.sustainedUseTarget != null || this.sustainedUseLook;
+    }
+
     /** 取消持续挖掘：清目标 + 发 ABORT_DESTROY_BLOCK（原版松开左键等价）。 */
     private void stopMining() {
         if (this.miningPos != null && this.bot.getGameMode() != null) {

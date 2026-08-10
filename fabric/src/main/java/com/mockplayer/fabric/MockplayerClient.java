@@ -9,6 +9,7 @@ import com.mockplayer.config.CommandTreeReloader;
 import com.mockplayer.config.ModCommands;
 import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.MockplayerConfig;
+import com.mockplayer.gui.BotGui;
 import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.SessionManager;
@@ -180,6 +181,8 @@ public class MockplayerClient implements ClientModInitializer {
         // 每 tick 驱动假人连接，保持在线
         ClientTickEvents.END_CLIENT_TICK.register(minecraft -> {
             SessionManager.getInstance().tick();
+            // GUI 快捷键（配置 guiEnabled/guiKeyName 控制，BotGui 内部边沿检测）
+            BotGui.tick(minecraft);
         });
     }
 

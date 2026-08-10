@@ -147,6 +147,20 @@ public interface Bot {
     BotActions actions();
 
     /**
+     * 死亡后是否自动重生（默认 true；GUI/命令可关闭后由 {@link BotActions#respawn()} 手动重生）。
+     *
+     * @return true 自动重生
+     */
+    boolean isAutoRespawn();
+
+    /**
+     * 设置死亡后是否自动重生（只影响该假人，与主玩家无关）。
+     *
+     * @param autoRespawn true 自动重生
+     */
+    void setAutoRespawn(boolean autoRespawn);
+
+    /**
      * 当前打开的容器菜单（服务端 openScreen 后才有值）。
      *
      * @return {@code Optional<BotContainer>}，未打开容器则为 empty

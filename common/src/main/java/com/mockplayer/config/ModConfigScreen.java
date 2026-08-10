@@ -93,6 +93,12 @@ public final class ModConfigScreen extends YACLScreen {
                                         ModConfig.MIN_BATCH_MAX_COUNT, ModConfig.MAX_BATCH_MAX_COUNT,
                                         cfg::getBatchMaxCount, cfg::setBatchMaxCount))
                                 .build())
+                        .group(OptionGroup.createBuilder()
+                                .name(Component.translatable("config.mockplayer.group.gui"))
+                                .option(booleanOption("guiEnabled", true,
+                                        cfg::isGuiEnabled, cfg::setGuiEnabled))
+                                .option(guiKeyOption(cfg::getGuiKeyName, cfg::setGuiKeyName))
+                                .build())
                         .build())
                 .category(ConfigCategory.createBuilder()
                         .name(Component.translatable("config.mockplayer.category.commands"))
@@ -184,6 +190,17 @@ public final class ModConfigScreen extends YACLScreen {
                         Component.translatable("config.mockplayer.option." + key + ".description")))
                 .binding(fallback, getter, setter)
                 .controller(option -> TickBoxControllerBuilder.create(option))
+                .build();
+    }
+
+    /** GUI 按键名字符串选项（空串 = 禁用按键，YACL 可改；名称/描述走 option 前缀）。 */
+    private static Option<String> guiKeyOption(Supplier<String> getter, Consumer<String> setter) {
+        return Option.<String>createBuilder()
+                .name(Component.translatable("config.mockplayer.option.guiKeyName"))
+                .description(OptionDescription.of(
+                        Component.translatable("config.mockplayer.option.guiKeyName.description")))
+                .binding(ModConfig.DEFAULT_GUI_KEY_NAME, getter, setter)
+                .controller(option -> StringControllerBuilder.create(option))
                 .build();
     }
 }

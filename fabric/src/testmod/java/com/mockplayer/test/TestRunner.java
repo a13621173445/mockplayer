@@ -58,7 +58,7 @@ public final class TestRunner {
     private static final List<String> ALL_SUITES = List.of(
             "api-smoke", "api-full", "use-items", "containers", "containers-all", "crafting", "furnace",
             "combat-stab", "combat-sprint", "enchanting", "merchant", "gui-actions", "listener-events", "control-commands",
-            "batch", "config", "debug-name-tag");
+            "batch", "config", "debug-name-tag", "bot-gui");
 
     private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }
 
@@ -96,6 +96,7 @@ public final class TestRunner {
             case "batch" -> "tbot-bat";
             case "config" -> "tbot-cfg";
             case "debug-name-tag" -> "tbot-dbg";
+            case "bot-gui" -> "tbot-gui";
             default -> "tbot";
         };
     }
@@ -251,6 +252,7 @@ public final class TestRunner {
             case "batch" -> runBatch(mc);
             case "config" -> runConfig(mc);
             case "debug-name-tag" -> runDebugNameTag(mc);
+            case "bot-gui" -> runBotGui(mc);
             default -> {
                 fail("unknown suite: " + suite);
                 finishSuite();
@@ -6100,6 +6102,737 @@ public final class TestRunner {
         try (var reader = resource.get().openAsReader()) {
             return com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
         }
+    }
+
+    // ===== bot-gui：BotControlScreen（打开/渲染探针/状态/移动/快捷栏/左键右键射线/容器点击/区块半径/聊天/自动重生/guiEnabled/i18n/多分辨率） =====
+
+    private static volatile String bgChatMsg = "";
+    private static final com.mockplayer.api.event.BotListener bgListener = new com.mockplayer.api.event.BotListener() {
+        @Override
+        public void onChat(com.mockplayer.api.Bot b, net.minecraft.network.chat.Component message) {
+            bgChatMsg = message.getString();
+        }
+    };
+    private static boolean bgGuiOpened;
+    private static boolean bgActionTab;
+    private static boolean bgFwdClicked;
+    private static boolean bgMoved;
+    private static double bgBaseX;
+    private static double bgBaseZ;
+    private static volatile double bgServerX;
+    private static volatile double bgServerZ;
+    private static boolean bgHotbarGiven;
+    private static volatile boolean bgHotbarSynced;
+    private static volatile boolean bgHotbarServer;
+    private static boolean bgHuskSummoned;
+    private static volatile float bgHuskHp = 20;
+    private static net.minecraft.core.BlockPos bgHuskPos;
+    private static boolean bgHoldPressed;
+    private static net.minecraft.client.gui.components.Button bgHoldButton;
+    private static boolean bgChestPlaced;
+    private static volatile boolean bgChestOpen;
+    private static net.minecraft.core.BlockPos bgChestPos;
+    private static boolean bgChestTabClicked;
+    private static boolean bgTabChecked;
+    private static boolean bgChestHotbarClicked;
+    private static boolean bgChestSlotClicked;
+    private static boolean bgChestHotbarOk;
+    private static boolean bgChestSlotOk;
+    private static volatile boolean bgChestHasStone;
+    private static boolean bgChestActionsTab;
+    private static boolean bgChestCloseClicked;
+    private static volatile boolean bgChestClosed;
+    private static boolean bgChunkClicked;
+    private static volatile int bgChunkServer = -1;
+    private static boolean bgChatSent;
+    private static boolean bgAutoToggled;
+    private static boolean bgDisabledChecked;
+
+    private static void runBotGui(Minecraft mc) {
+        MinecraftServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            fail("no singleplayer server");
+            finishSuite();
+            return;
+        }
+        switch (step) {
+            case 0 -> {
+                prepareBot(server);
+                if (bot != null && bot.getLifecycle() == BotLifecycle.PLAYING) {
+                    // 渲染探针属性（记录打开/帧；生产默认零开销）
+                    System.setProperty("mockplayer.guiRenderProbe", "true");
+                    MockplayerApi.listen(bgListener);
+                    MockplayerConfig.save(new ModConfig());
+                    bgStep(1);
+                }
+            }
+            case 1 -> { // i18n 双语言 + 配置默认/规范化
+                i18nGuiLangChecks();
+                check("gui config default on", MockplayerConfig.get().isGuiEnabled());
+                check("gui key default g", "key.keyboard.g".equals(MockplayerConfig.get().getGuiKeyName()));
+                ModConfig off = new ModConfig();
+                off.setGuiEnabled(false);
+                off.setGuiKeyName("bad name!");
+                MockplayerConfig.save(off);
+                MockplayerConfig.reload();
+                check("gui config normalize", !MockplayerConfig.get().isGuiEnabled()
+                        && "key.keyboard.g".equals(MockplayerConfig.get().getGuiKeyName()));
+                MockplayerConfig.save(new ModConfig());
+                bgStep(2);
+            }
+            case 2 -> { // 打开 GUI + 渲染探针 + 状态面板文本
+                if (!bgGuiOpened) {
+                    bgGuiOpened = true;
+                    check("bot gui opened", com.mockplayer.gui.BotGui.open(mc));
+                    check("screen is BotControlScreen",
+                            mc.gui.screen() instanceof com.mockplayer.gui.BotControlScreen);
+                    com.mockplayer.gui.BotControlScreen screen =
+                            (com.mockplayer.gui.BotControlScreen) mc.gui.screen();
+                    check("title translated", screen != null
+                            && !screen.getTitle().getString().contains("gui.mockplayer."));
+                    check("probe open counted", com.mockplayer.gui.BotGui.probeOpenCount() > 0);
+                    waitTicks = 0;
+                }
+                if (com.mockplayer.gui.BotGui.probeFrameCount() == 0) {
+                    if (++waitTicks > 100) {
+                        fail("bot gui never rendered");
+                        bgStep(3);
+                    }
+                    return;
+                }
+                check("probe frame rendered", com.mockplayer.gui.BotGui.probeFrameCount() > 0);
+                check("probe tick ran", com.mockplayer.gui.BotGui.probeTickCount() > 0,
+                        "ticks=" + com.mockplayer.gui.BotGui.probeTickCount());
+                boolean listHasBot = bgScreen().children().stream().anyMatch(child ->
+                        child instanceof net.minecraft.client.gui.components.Button b
+                                && b.getMessage().getString().contains(botName));
+                check("bot list shows bot", listHasBot);
+                check("probe title rendered", com.mockplayer.gui.BotGui.probeLastTitle().contains(
+                        net.minecraft.network.chat.Component.translatable("gui.mockplayer.title").getString()));
+                java.util.List<net.minecraft.network.chat.Component> lines =
+                        com.mockplayer.gui.BotControlScreen.statusLines(bot);
+                int health = Math.round(bot.getLocalPlayer().getHealth());
+                check("status health line", lines.stream().anyMatch(l ->
+                        l.getString().startsWith("❤" + health)));
+                check("status food line", lines.stream().anyMatch(l -> l.getString().contains("🍗")));
+                check("status pos line", lines.stream().anyMatch(l ->
+                        l.getString().contains("位置") || l.getString().contains("Pos")));
+                check("status slot line", lines.stream().anyMatch(l ->
+                        l.getString().contains("槽") || l.getString().contains("Slot")));
+                check("status no container", lines.stream().anyMatch(l ->
+                        l.getString().contains("无") || l.getString().contains("none")));
+                bgStep(3);
+            }
+            case 3 -> { // 多分辨率：layoutScale 纯函数 + 面板边界
+                check("layout 1280x720 scale 1", com.mockplayer.gui.BotGui.layoutScale(1280, 720) == 1.0F);
+                check("layout 854x480 scale 1", com.mockplayer.gui.BotGui.layoutScale(854, 480) == 1.0F);
+                float tiny = com.mockplayer.gui.BotGui.layoutScale(400, 200);
+                check("layout tiny scaled down", tiny > 0.0F && tiny < 1.0F);
+                int px = com.mockplayer.gui.BotGui.panelX(400, 200);
+                int py = com.mockplayer.gui.BotGui.panelY(400, 200);
+                check("layout panel inside tiny", px >= 0 && py >= 0
+                        && px + com.mockplayer.gui.BotGui.panelWidth(400, 200) <= 400
+                        && py + com.mockplayer.gui.BotGui.panelHeight(400, 200) <= 200);
+                bgStep(4);
+            }
+            case 4 -> { // 动作 Tab：移动（按住前 → 服务端移动 → 停止）
+                com.mockplayer.gui.BotControlScreen screen = bgScreen();
+                if (screen == null) {
+                    fail("gui screen lost");
+                    bgStep(5);
+                    return;
+                }
+                if (!bgActionTab) {
+                    bgActionTab = true;
+                    waitTicks = 0;
+                    net.minecraft.client.gui.components.Button tab =
+                            bgFindButton(screen, "gui.mockplayer.tab.actions");
+                    if (tab != null) {
+                        bgClick(tab);
+                    }
+                    return;
+                }
+                if (++waitTicks < 5) {
+                    return; // 等 tick 激活动作按钮
+                }
+                if (!bgMoved) {
+                    net.minecraft.client.gui.components.Button fwd =
+                            bgFindButton(screen, "gui.mockplayer.action.move_forward");
+                    if (fwd == null) {
+                        fail("move forward button missing");
+                        bgStep(5);
+                        return;
+                    }
+                    bgFwdClicked = true;
+                    server.execute(() -> {
+                        var sp = server.getPlayerList().getPlayerByName(botName);
+                        bgBaseX = sp != null ? sp.getX() : 0;
+                        bgBaseZ = sp != null ? sp.getZ() : 0;
+                    });
+                    bgMoved = true;
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 3) {
+                    return; // 等基线读完成
+                }
+                if (bgFwdClicked) {
+                    bgFwdClicked = false;
+                    net.minecraft.client.gui.components.Button fwd =
+                            bgFindButton(screen, "gui.mockplayer.action.move_forward");
+                    if (fwd != null) {
+                        bgClick(fwd);
+                    }
+                    check("move feedback translated", !screen.lastFeedback().getString().contains("%s")
+                            && !screen.lastFeedback().getString().contains("gui.mockplayer.")
+                            && screen.lastFeedback().getString().contains(
+                            net.minecraft.network.chat.Component.translatable(
+                                    "gui.mockplayer.action.move_forward").getString()));
+                    waitTicks = 0;
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    bgServerX = sp != null ? sp.getX() : 0;
+                    bgServerZ = sp != null ? sp.getZ() : 0;
+                });
+                if (Math.abs(bgServerX - bgBaseX) > 1.0 || Math.abs(bgServerZ - bgBaseZ) > 1.0) {
+                    check("gui move forward server moved", true);
+                    net.minecraft.client.gui.components.Button stop =
+                            bgFindButton(screen, "gui.mockplayer.action.stop");
+                    if (stop != null) {
+                        bgClick(stop);
+                    }
+                    bgStep(5);
+                } else if (++waitTicks > 150) {
+                    fail("gui move timeout");
+                    bgStep(5);
+                }
+            }
+            case 5 -> { // 快捷栏：给 3 个物品 → 点槽 2 → 服务端 selected=1 + 主手物品
+                com.mockplayer.gui.BotControlScreen screen = bgScreen();
+                if (screen == null) {
+                    fail("gui screen lost");
+                    bgStep(6);
+                    return;
+                }
+                if (!bgHotbarGiven) {
+                    bgHotbarGiven = true;
+                    server.execute(() -> {
+                        var cmds = server.getCommands();
+                        var src = server.createCommandSourceStack();
+                        cmds.performPrefixedCommand(src, "item replace entity " + botName
+                                + " hotbar.0 with minecraft:stone");
+                        cmds.performPrefixedCommand(src, "item replace entity " + botName
+                                + " hotbar.1 with minecraft:stick");
+                        cmds.performPrefixedCommand(src, "item replace entity " + botName
+                                + " hotbar.2 with minecraft:bread");
+                    });
+                }
+                if (!bgHotbarSynced) {
+                    bgHotbarSynced = bot.getLocalPlayer().getInventory().getItem(1)
+                            .is(net.minecraft.world.item.Items.STICK);
+                    if (!bgHotbarSynced) {
+                        if (++waitTicks > 150) {
+                            fail("hotbar give timeout");
+                            bgStep(6);
+                        }
+                        return;
+                    }
+                    waitTicks = 0;
+                    net.minecraft.client.gui.components.Button two = bgFindButtonByLiteral(screen, "2");
+                    if (two == null) {
+                        fail("hotbar button missing");
+                        bgStep(6);
+                        return;
+                    }
+                    bgClick(two);
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    bgHotbarServer = sp != null && sp.getInventory().getSelectedSlot() == 1
+                            && sp.getInventory().getSelectedItem().is(net.minecraft.world.item.Items.STICK);
+                });
+                if (bgHotbarServer) {
+                    check("gui hotbar switch server", true);
+                    bgStep(6);
+                } else if (++waitTicks > 120) {
+                    fail("gui hotbar timeout");
+                    bgStep(6);
+                }
+            }
+            case 6 -> { // 左键（attackLook）：husk 满血出现 → 点左键 → 服务端掉血
+                com.mockplayer.gui.BotControlScreen screen = bgScreen();
+                if (screen == null) {
+                    fail("gui screen lost");
+                    bgStep(7);
+                    return;
+                }
+                if (!bgHuskSummoned) {
+                    bgHuskSummoned = true;
+                    bgHuskPos = bot.getLocalPlayer().blockPosition().offset(3, 0, 0);
+                    net.minecraft.core.BlockPos hp = bgHuskPos;
+                    server.execute(() -> server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack(),
+                            String.format("summon minecraft:husk %.2f %.2f %.2f {NoAI:1b}",
+                                    hp.getX() + 0.5, (double) hp.getY(), hp.getZ() + 0.5)));
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        var level = server.getLevel(Level.OVERWORLD);
+                        var husk = level != null ? level.getEntitiesOfClass(
+                                net.minecraft.world.entity.monster.zombie.Zombie.class,
+                                new net.minecraft.world.phys.AABB(sp.getX() - 16, sp.getY() - 16, sp.getZ() - 16,
+                                        sp.getX() + 16, sp.getY() + 16, sp.getZ() + 16)).stream()
+                                .min(Comparator.comparingDouble(e -> e.distanceToSqr(sp)))
+                                .orElse(null) : null;
+                        bgHuskHp = husk != null ? husk.getHealth() : -1;
+                    }
+                });
+                // 无敌帧：实体受击后 ~0.5s 无敌，且客户端实体要先同步到位——
+                // 满血期间每 tick 重新 lookAt + 点左键重试，直到伤害落地
+                if (bgHuskHp >= 20.0F && bot.getEntitiesNear(16).stream()
+                        .anyMatch(e -> e instanceof net.minecraft.world.entity.monster.zombie.Zombie)) {
+                    bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(bgHuskPos));
+                    net.minecraft.client.gui.components.Button atk =
+                            bgFindButton(screen, "gui.mockplayer.action.attack_look");
+                    if (atk != null) {
+                        bgClick(atk);
+                    }
+                    waitTicks = 0;
+                }
+                if (bgHuskHp < 20.0F) {
+                    check("gui attack look damaged", true);
+                    bgStep(7);
+                } else if (++waitTicks > 240) {
+                    fail("gui attack look timeout hp=" + bgHuskHp);
+                    bgStep(7);
+                }
+            }
+            case 7 -> { // 长按左键（sustainedAttackLook）：按住 → 服务端连击 <13 → 松开
+                com.mockplayer.gui.BotControlScreen screen = bgScreen();
+                if (screen == null) {
+                    fail("gui screen lost");
+                    bgStep(8);
+                    return;
+                }
+                if (!bgHoldPressed) {
+                    bgHoldPressed = true;
+                    bgHoldButton = bgFindButton(screen, "gui.mockplayer.action.hold_attack");
+                    if (bgHoldButton == null) {
+                        fail("hold attack button missing");
+                        bgStep(8);
+                        return;
+                    }
+                    bgClick(bgHoldButton);
+                    waitTicks = 0;
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        var level = server.getLevel(Level.OVERWORLD);
+                        var husk = level != null ? level.getEntitiesOfClass(
+                                net.minecraft.world.entity.monster.zombie.Zombie.class,
+                                new net.minecraft.world.phys.AABB(sp.getX() - 16, sp.getY() - 16, sp.getZ() - 16,
+                                        sp.getX() + 16, sp.getY() + 16, sp.getZ() + 16)).stream()
+                                .min(Comparator.comparingDouble(e -> e.distanceToSqr(sp)))
+                                .orElse(null) : null;
+                        bgHuskHp = husk != null ? husk.getHealth() : -1;
+                    }
+                });
+                if (bgHuskHp < 13.0F) {
+                    check("gui hold attack continuous damage", true);
+                    bgRelease(bgHoldButton);
+                    check("hold attack state off after release", !bot.actions().isSustainedAttacking());
+                    bgStep(8);
+                } else if (++waitTicks > 400) {
+                    fail("gui hold attack timeout hp=" + bgHuskHp);
+                    bgRelease(bgHoldButton);
+                    bgStep(8);
+                }
+            }
+            case 8 -> { // 右键（useLook）：箱子 +2 → 点右键 → 服务端容器打开
+                com.mockplayer.gui.BotControlScreen screen = bgScreen();
+                if (screen == null) {
+                    fail("gui screen lost");
+                    bgStep(9);
+                    return;
+                }
+                if (!bgChestPlaced) {
+                    bgChestPlaced = true;
+                    // 清掉碍事的 husk（射线开箱/容器点击不再有实体干扰）
+                    server.execute(() -> server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack(), "kill @e[type=!minecraft:player]"));
+                    bgChestPos = bot.getLocalPlayer().blockPosition().offset(2, 0, 0);
+                    net.minecraft.core.BlockPos p = bgChestPos;
+                    server.execute(() -> server.getLevel(Level.OVERWORLD)
+                            .setBlock(p, Blocks.CHEST.defaultBlockState(), 3));
+                }
+                if (!bgChestOpen && bot.getBlockState(bgChestPos).is(Blocks.CHEST)) {
+                    // 每 tick 重新 lookAt（防位置漂移）再点右键
+                    bot.actions().lookAt(net.minecraft.world.phys.Vec3.atCenterOf(bgChestPos));
+                    net.minecraft.client.gui.components.Button use =
+                            bgFindButton(screen, "gui.mockplayer.action.use_look");
+                    if (use != null) {
+                        bgClick(use);
+                    }
+                }
+                bgChestOpen = bot.getContainer().isPresent();
+                if (bgChestOpen) {
+                    check("gui use look opens chest", true);
+                    bgStep(9);
+                } else if (++waitTicks > 180) {
+                    fail("gui use look chest timeout");
+                    bgStep(9);
+                }
+            }
+            case 9 -> { // 容器 Tab：切页 → 点快捷栏槽（拿起石头）→ 点箱子槽 0（放入）→ 服务端箱子证据 → 关容器
+                com.mockplayer.gui.BotControlScreen screen = bgScreen();
+                if (screen == null) {
+                    fail("gui screen lost");
+                    bgStep(10);
+                    return;
+                }
+                if (!bgChestTabClicked) {
+                    bgChestTabClicked = true;
+                    waitTicks = 0;
+                    net.minecraft.client.gui.components.Button tab =
+                            bgFindButton(screen, "gui.mockplayer.tab.container");
+                    if (tab != null) {
+                        bgClick(tab);
+                    }
+                    return;
+                }
+                if (++waitTicks < 5) {
+                    return; // 等 tick 切换完成
+                }
+                if (!bgTabChecked) {
+                    bgTabChecked = true;
+                    check("container tab active", screen.currentTab() == 2,
+                            "tab=" + screen.currentTab());
+                }
+                if (!bgChestHotbarClicked) {
+                    // 等容器菜单槽位同步完成（ContainerContent 比 OpenScreen 晚到，点空槽无效）
+                    Optional<com.mockplayer.api.container.BotContainer> opened = bot.getContainer();
+                    if (opened.isEmpty() || !opened.get().getSlot(54).is(net.minecraft.world.item.Items.STONE)) {
+                        if (++waitTicks > 120) {
+                            fail("container slots never synced");
+                            bgStep(10);
+                        }
+                        return;
+                    }
+                    bgChestHotbarClicked = true;
+                    // ChestMenu(27)：容器 0-26 / 假人主背包 27-53 / 快捷栏 54-62。
+                    // 快捷栏第 1 格（hotbar.0 = 石头）→ 容器槽 54（player 行 3 列 0）
+                    bgChestHotbarOk = bgClickContainerCell(screen, 0, 3);
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 3) {
+                    return; // 等第一个点击包被服务端处理
+                }
+                if (!bgChestSlotClicked) {
+                    bgChestSlotClicked = true;
+                    // 箱子槽 0 在容器区（CONTENT_X, CONTENT_Y）起，不是玩家区
+                    bgChestSlotOk = bgClickContainerPart(screen, 0, 0);
+                    waitTicks = 0;
+                }
+                // 客户端菜单证据：点击后石头应出现在箱子槽 0（或仍在鼠标上）
+                if (waitTicks == 0) {
+                    check("container grid clicks dispatched", bgChestHotbarOk && bgChestSlotOk,
+                            "hotbar=" + bgChestHotbarOk + " slot=" + bgChestSlotOk);
+                    boolean clientMoved = bot.getContainer().map(c ->
+                            c.getSlot(0).is(net.minecraft.world.item.Items.STONE)
+                                    || c.getCarried().is(net.minecraft.world.item.Items.STONE)).orElse(false);
+                    check("container click moved stone (client)", clientMoved,
+                            "feedback=" + screen.lastFeedback().getString()
+                                    + " slot0=" + bot.getContainer().map(c -> c.getSlot(0).toString()).orElse("none")
+                                    + " carried=" + bot.getContainer().map(c -> c.getCarried().toString()).orElse("none"));
+                }
+                server.execute(() -> {
+                    var level = server.getLevel(Level.OVERWORLD);
+                    if (level != null && level.getBlockEntity(bgChestPos)
+                            instanceof net.minecraft.world.level.block.entity.ChestBlockEntity chest) {
+                        bgChestHasStone = chest.getItem(0).is(net.minecraft.world.item.Items.STONE);
+                    }
+                });
+                if (bgChestHasStone) {
+                    check("gui container click put stone (server)", true);
+                    bgStep(10);
+                } else if (++waitTicks > 180) {
+                    fail("gui container click timeout");
+                    bgStep(10);
+                }
+            }
+            case 10 -> { // 关容器按钮 → 服务端菜单关闭
+                com.mockplayer.gui.BotControlScreen screen = bgScreen();
+                if (screen == null) {
+                    fail("gui screen lost");
+                    bgStep(11);
+                    return;
+                }
+                // 关容器按钮只在动作 Tab 可见/激活：先切回动作 Tab
+                if (!bgChestActionsTab) {
+                    bgChestActionsTab = true;
+                    waitTicks = 0;
+                    net.minecraft.client.gui.components.Button actions =
+                            bgFindButton(screen, "gui.mockplayer.tab.actions");
+                    if (actions != null) {
+                        bgClick(actions);
+                    }
+                    return;
+                }
+                if (++waitTicks < 5) {
+                    return;
+                }
+                if (!bgChestCloseClicked) {
+                    bgChestCloseClicked = true;
+                    waitTicks = 0;
+                    net.minecraft.client.gui.components.Button close =
+                            bgFindButton(screen, "gui.mockplayer.action.close_container");
+                    if (close != null) {
+                        bgClick(close);
+                    }
+                }
+                bgChestClosed = bot.getContainer().isEmpty();
+                if (bgChestClosed) {
+                    check("gui close container", true);
+                    bgStep(11);
+                } else if (++waitTicks > 120) {
+                    fail("gui close container timeout");
+                    bgStep(11);
+                }
+            }
+            case 11 -> { // 区块半径：+1 → 本地 3 + 服务端 requestedViewDistance=3
+                com.mockplayer.gui.BotControlScreen screen = bgScreen();
+                if (screen == null) {
+                    fail("gui screen lost");
+                    bgStep(12);
+                    return;
+                }
+                if (!bgChunkClicked) {
+                    bgChunkClicked = true;
+                    waitTicks = 0;
+                    net.minecraft.client.gui.components.Button plus =
+                            bgFindButton(screen, "gui.mockplayer.action.chunk_plus");
+                    if (plus != null) {
+                        bgClick(plus);
+                    }
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    bgChunkServer = sp != null ? ccServerRequestedViewDistance(sp) : -1;
+                });
+                if (bot.getChunkRadius() == 3 && bgChunkServer == 3) {
+                    check("gui chunk radius +1 server", true);
+                    bgStep(12);
+                } else if (++waitTicks > 120) {
+                    fail("gui chunk radius timeout local=" + bot.getChunkRadius()
+                            + " server=" + bgChunkServer);
+                    bgStep(12);
+                }
+            }
+            case 12 -> { // 聊天：输入框 + 发送 → 服务端广播 → 假人 onChat
+                com.mockplayer.gui.BotControlScreen screen = bgScreen();
+                if (screen == null) {
+                    fail("gui screen lost");
+                    bgStep(13);
+                    return;
+                }
+                if (!bgChatSent) {
+                    bgChatSent = true;
+                    bgChatMsg = "";
+                    net.minecraft.client.gui.components.EditBox chat =
+                            bgFindEditBox(screen, "gui.mockplayer.action.chat_hint");
+                    net.minecraft.client.gui.components.Button send =
+                            bgFindButton(screen, "gui.mockplayer.action.send");
+                    if (chat != null) {
+                        chat.setValue("mockplayer-gui-chat");
+                    }
+                    if (send != null) {
+                        bgClick(send);
+                    }
+                }
+                if (bgChatMsg.contains("mockplayer-gui-chat")) {
+                    check("gui chat broadcast", true);
+                    bgStep(13);
+                } else if (++waitTicks > 150) {
+                    fail("gui chat timeout");
+                    bgStep(13);
+                }
+            }
+            case 13 -> { // 自动重生开关：开 → 关 → 开
+                com.mockplayer.gui.BotControlScreen screen = bgScreen();
+                if (screen == null) {
+                    fail("gui screen lost");
+                    bgStep(14);
+                    return;
+                }
+                if (!bgAutoToggled) {
+                    bgAutoToggled = true;
+                    net.minecraft.client.gui.components.Button auto =
+                            bgFindButton(screen, "gui.mockplayer.action.auto_respawn");
+                    if (auto != null) {
+                        boolean before = bot.isAutoRespawn();
+                        bgClick(auto);
+                        check("gui auto respawn off", bot.isAutoRespawn() == !before);
+                        bgClick(auto);
+                        check("gui auto respawn back on", bot.isAutoRespawn() == before);
+                    } else {
+                        fail("auto respawn button missing");
+                    }
+                }
+                bgStep(14);
+            }
+            case 14 -> { // guiEnabled=false：打不开 + 命令不受影响；恢复后能打开
+                if (!bgDisabledChecked) {
+                    bgDisabledChecked = true;
+                    mc.gui.setScreen(null);
+                    ModConfig off = new ModConfig();
+                    off.setGuiEnabled(false);
+                    MockplayerConfig.save(off);
+                    check("gui disabled open blocked", !com.mockplayer.gui.BotGui.open(mc)
+                            && !(mc.gui.screen() instanceof com.mockplayer.gui.BotControlScreen));
+                    String help = com.mockplayer.session.ControlCommands.help(botName).getString();
+                    check("commands unaffected when gui off", !help.isBlank()
+                            && help.contains(net.minecraft.network.chat.Component.translatable(
+                            "commands.mockplayer.control.action.attack").getString()));
+                    MockplayerConfig.save(new ModConfig());
+                    check("gui re-enabled opens", com.mockplayer.gui.BotGui.open(mc)
+                            && mc.gui.screen() instanceof com.mockplayer.gui.BotControlScreen);
+                    mc.gui.setScreen(null);
+                }
+                check("gui screen closed", mc.gui.screen() == null);
+                System.clearProperty("mockplayer.guiRenderProbe");
+                finishSuite();
+            }
+        }
+    }
+
+    /** bot-gui 步骤切换：统一清零等待计数（共享 waitTicks 会被上个 case 残留，超时误判）。 */
+    private static void bgStep(int next) {
+        waitTicks = 0;
+        step = next;
+    }
+
+    /** bot-gui 语言文件级 i18n：gui.mockplayer.* + config gui 选项 en/zh key 集合一致、值非空。 */
+    private static void i18nGuiLangChecks() {
+        try {
+            com.google.gson.JsonObject en = parseLang("en_us.json");
+            com.google.gson.JsonObject zh = parseLang("zh_cn.json");
+            java.util.Set<String> enKeys = new java.util.TreeSet<>();
+            java.util.Set<String> zhKeys = new java.util.TreeSet<>();
+            en.entrySet().forEach(e -> {
+                if (e.getKey().startsWith("gui.mockplayer.")
+                        || e.getKey().startsWith("config.mockplayer.option.gui")
+                        || e.getKey().equals("config.mockplayer.group.gui")) {
+                    enKeys.add(e.getKey());
+                }
+            });
+            zh.entrySet().forEach(e -> {
+                if (e.getKey().startsWith("gui.mockplayer.")
+                        || e.getKey().startsWith("config.mockplayer.option.gui")
+                        || e.getKey().equals("config.mockplayer.group.gui")) {
+                    zhKeys.add(e.getKey());
+                }
+            });
+            check("gui i18n key sets identical (en/zh)", enKeys.equals(zhKeys),
+                    "en=" + enKeys.size() + " zh=" + zhKeys.size());
+            check("gui i18n key count sane", enKeys.size() > 40);
+            check("gui i18n values non-empty",
+                    enKeys.stream().allMatch(k -> !en.get(k).getAsString().isBlank())
+                            && zhKeys.stream().allMatch(k -> !zh.get(k).getAsString().isBlank()));
+        } catch (Exception e) {
+            check("gui i18n lang files parse", false, e.toString());
+        }
+    }
+
+    private static com.mockplayer.gui.BotControlScreen bgScreen() {
+        net.minecraft.client.gui.screens.Screen s = Minecraft.getInstance().gui.screen();
+        return s instanceof com.mockplayer.gui.BotControlScreen screen ? screen : null;
+    }
+
+    /** 按翻译文本找按钮（消息包含目标 key 的翻译，兼容 ● 前缀/开关状态后缀）。 */
+    private static net.minecraft.client.gui.components.Button bgFindButton(
+            com.mockplayer.gui.BotControlScreen screen, String key) {
+        // %s 占位符 key（如 tab 前缀）不带参数取 label 会得到 %s动作，去掉占位符再匹配；
+        // 消息可能带 "● " 当前 Tab 前缀，同样剥掉。
+        String label = net.minecraft.network.chat.Component.translatable(key).getString().replace("%s", "");
+        for (Object child : screen.children()) {
+            if (child instanceof net.minecraft.client.gui.components.Button b
+                    && b.getMessage().getString().replace("● ", "").contains(label)) {
+                return b;
+            }
+        }
+        return null;
+    }
+
+    /** 按字面文本精确找按钮（快捷栏数字等）。 */
+    private static net.minecraft.client.gui.components.Button bgFindButtonByLiteral(
+            com.mockplayer.gui.BotControlScreen screen, String text) {
+        for (Object child : screen.children()) {
+            if (child instanceof net.minecraft.client.gui.components.Button b
+                    && text.equals(b.getMessage().getString())) {
+                return b;
+            }
+        }
+        return null;
+    }
+
+    private static net.minecraft.client.gui.components.EditBox bgFindEditBox(
+            com.mockplayer.gui.BotControlScreen screen, String key) {
+        String label = net.minecraft.network.chat.Component.translatable(key).getString();
+        for (Object child : screen.children()) {
+            if (child instanceof net.minecraft.client.gui.components.EditBox e
+                    && label.equals(e.getMessage().getString())) {
+                return e;
+            }
+        }
+        return null;
+    }
+
+    /** 模拟按钮按下（面板逻辑坐标命中）。 */
+    private static void bgClick(net.minecraft.client.gui.components.Button b) {
+        b.mouseClicked(new net.minecraft.client.input.MouseButtonEvent(
+                b.getX() + b.getWidth() / 2.0,
+                b.getY() + b.getHeight() / 2.0,
+                new net.minecraft.client.input.MouseButtonInfo(0, 0)), false);
+    }
+
+    /** 模拟按钮松开（按住按钮结束）。 */
+    private static void bgRelease(net.minecraft.client.gui.components.Button b) {
+        b.mouseReleased(new net.minecraft.client.input.MouseButtonEvent(
+                b.getX() + b.getWidth() / 2.0,
+                b.getY() + b.getHeight() / 2.0,
+                new net.minecraft.client.input.MouseButtonInfo(0, 0)));
+    }
+
+    /** 容器 Tab 网格点击（playerRow 3 = 快捷栏行；col 0-8）。屏幕坐标 = 面板原点 + 逻辑坐标 * scale。 */
+    private static boolean bgClickContainerCell(com.mockplayer.gui.BotControlScreen screen, int col, int playerRow) {
+        Minecraft mc = Minecraft.getInstance();
+        int w = mc.getWindow().getGuiScaledWidth();
+        int h = mc.getWindow().getGuiScaledHeight();
+        float scale = com.mockplayer.gui.BotGui.layoutScale(w, h);
+        double lx = 104 + col * 20 + 2;
+        double ly = 44 + (3 * 20 + 8) + playerRow * 20 + 2; // 27 格容器 = 3 行，玩家区从 rows*20+8 起
+        double sx = com.mockplayer.gui.BotGui.panelX(w, h) + lx * scale;
+        double sy = com.mockplayer.gui.BotGui.panelY(w, h) + ly * scale;
+        return screen.mouseClicked(new net.minecraft.client.input.MouseButtonEvent(
+                sx, sy, new net.minecraft.client.input.MouseButtonInfo(0, 0)), false);
+    }
+
+    /** 容器 Tab 的「容器区」格子点击（row 0 = 容器槽 0；与玩家区不同）。 */
+    private static boolean bgClickContainerPart(com.mockplayer.gui.BotControlScreen screen, int col, int row) {
+        Minecraft mc = Minecraft.getInstance();
+        int w = mc.getWindow().getGuiScaledWidth();
+        int h = mc.getWindow().getGuiScaledHeight();
+        float scale = com.mockplayer.gui.BotGui.layoutScale(w, h);
+        double lx = 104 + col * 20 + 2;
+        double ly = 44 + row * 20 + 2;
+        double sx = com.mockplayer.gui.BotGui.panelX(w, h) + lx * scale;
+        double sy = com.mockplayer.gui.BotGui.panelY(w, h) + ly * scale;
+        return screen.mouseClicked(new net.minecraft.client.input.MouseButtonEvent(
+                sx, sy, new net.minecraft.client.input.MouseButtonInfo(0, 0)), false);
     }
 
     // ===== 断言与结果 =====

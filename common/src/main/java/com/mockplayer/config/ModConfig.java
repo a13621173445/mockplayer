@@ -61,6 +61,15 @@ public class ModConfig {
     /** F3 调试信息打开时，在假人名字下方显示额外信息（血量/饱食度/内存/速度/容器）。 */
     private boolean debugOverlayEnabled = true;
 
+    /** GUI 功能总开关（默认启用；关闭后按键/快捷键不打开 BotControlScreen，命令不受影响）。 */
+    public static final boolean DEFAULT_GUI_ENABLED = true;
+    /** GUI 打开按键（GLFW key name，如 key.keyboard.g；空串 = 禁用）。 */
+    public static final String DEFAULT_GUI_KEY_NAME = "key.keyboard.g";
+    public static final int MAX_GUI_KEY_NAME_LENGTH = 64;
+
+    private boolean guiEnabled = DEFAULT_GUI_ENABLED;
+    private String guiKeyName = DEFAULT_GUI_KEY_NAME;
+
     /** 假人默认区块加载半径（节约性能：默认最低 2，范围 1-32）。 */
     public static final int DEFAULT_FAKE_PLAYER_CHUNK_RADIUS = 2;
     public static final int MIN_FAKE_PLAYER_CHUNK_RADIUS = 1;
@@ -162,6 +171,45 @@ public class ModConfig {
         this.debugOverlayEnabled = debugOverlayEnabled;
     }
 
+    public boolean isGuiEnabled() {
+        return this.guiEnabled;
+    }
+
+    public void setGuiEnabled(boolean guiEnabled) {
+        this.guiEnabled = guiEnabled;
+    }
+
+    public String getGuiKeyName() {
+        return this.guiKeyName;
+    }
+
+    public void setGuiKeyName(String guiKeyName) {
+        this.guiKeyName = guiKeyName;
+    }
+
+    /** GUI 按键名规范化：null → 默认；trim 空 → 禁用；非法字符/超长 → 默认。 */
+    static String normalizeGuiKeyName(String value) {
+        if (value == null) {
+            return DEFAULT_GUI_KEY_NAME;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+        if (trimmed.length() > MAX_GUI_KEY_NAME_LENGTH) {
+            return DEFAULT_GUI_KEY_NAME;
+        }
+        for (int i = 0; i < trimmed.length(); i++) {
+            char c = trimmed.charAt(i);
+            boolean valid = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.';
+            if (!valid) {
+                return DEFAULT_GUI_KEY_NAME;
+            }
+        }
+        return trimmed;
+    }
+
     public int getFakePlayerChunkRadius() {
         return this.fakePlayerChunkRadius;
     }
@@ -199,6 +247,7 @@ public class ModConfig {
         this.batchMaxCount = clampInt(this.batchMaxCount,
                 MIN_BATCH_MAX_COUNT, MAX_BATCH_MAX_COUNT, DEFAULT_BATCH_MAX_COUNT);
         this.commands = ModCommands.normalize(this.commands);
+        this.guiKeyName = normalizeGuiKeyName(this.guiKeyName);
     }
 
     private static int clampInt(int value, int min, int max, int fallback) {

@@ -12,6 +12,7 @@ import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.config.MissingYaclScreen;
 import com.mockplayer.config.ModConfigScreenFactory;
+import com.mockplayer.gui.BotGui;
 import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.SessionManager;
@@ -193,6 +194,8 @@ public class MockplayerNeoForgeClient {
     private static void onClientTick(ClientTickEvent.Post event) {
         // 每 tick 驱动假人连接，保持在线
         SessionManager.getInstance().tick();
+        // GUI 快捷键（配置 guiEnabled/guiKeyName 控制，BotGui 内部边沿检测）
+        BotGui.tick(Minecraft.getInstance());
     }
 
     private static void onPlayerLogout(ClientPlayerNetworkEvent.LoggingOut event) {

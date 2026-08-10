@@ -153,6 +153,26 @@ public interface BotActions {
      */
     BotActions stop();
 
+    // ===== 持续状态查询（GUI 状态面板/测试只读） =====
+
+    /** 当前是否潜行。 */
+    boolean isSneaking();
+
+    /** 当前是否疾跑。 */
+    boolean isSprinting();
+
+    /** 当前是否持续跳跃。 */
+    boolean isJumping();
+
+    /** 当前是否正在持续挖掘方块。 */
+    boolean isMining();
+
+    /** 当前是否正在持续攻击（sustainedAttack / sustainedAttackLook）。 */
+    boolean isSustainedAttacking();
+
+    /** 当前是否正在持续使用（sustainedUse / sustainedUseLook）。 */
+    boolean isSustainedUsing();
+
     // ===== 一次性动作（立即执行一次） =====
 
     /**
