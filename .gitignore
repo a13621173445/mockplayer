@@ -25,7 +25,7 @@ run
 runs
 .opencode-toolkit/
 AGENTS.md
-HANDOFF.md
+HANDOFF*.md
 CLAUDE.md
 PLAN*.md
 TODO.md
