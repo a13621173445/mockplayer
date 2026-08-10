@@ -6283,6 +6283,13 @@ public final class TestRunner {
     private static boolean bgDigSoundRecorded;
     private static boolean bgDigParticleRecorded;
     private static int bgDigEventTicks;
+    private static boolean bgDiscardGiven;
+    private static boolean bgDiscardOpened;
+    private static boolean bgDiscardPicked;
+    private static boolean bgDiscardSlotFilled;
+    private static boolean bgDiscardClicked;
+    private static volatile boolean bgDiscardServerHas;
+    private static volatile int bgDiscardServerItemCount;
 
     private static void runBotGui(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -7865,7 +7872,148 @@ public final class TestRunner {
                 mc.gameMode.stopDestroyBlock();
                 bgStep(36);
             }
-            case 36 -> { // 收尾
+            case 36 -> { // 背包丢弃格子：拿起物品放红色格子 = 原版点击菜单外（-999），服务端真实掉落
+                if (!bgDiscardGiven) {
+                    bgDiscardGiven = true;
+                    mc.gui.setScreen(null);
+                    System.setProperty("mockplayer.guiRenderProbe", "true");
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            sp.getInventory().clearContent();
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    "give " + botName + " minecraft:emerald 1");
+                        }
+                    });
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 10) {
+                    return; // 等槽位同步
+                }
+                net.minecraft.client.player.LocalPlayer lp = bot.getLocalPlayer();
+                if (!bgDiscardOpened) {
+                    if (lp == null || !lp.getInventory().getItem(0).is(net.minecraft.world.item.Items.EMERALD)) {
+                        if (waitTicks > 200) {
+                            fail("discard item sync timeout");
+                            System.clearProperty("mockplayer.guiRenderProbe");
+                            bgStep(37);
+                        }
+                        return;
+                    }
+                    bgDiscardOpened = true;
+                    com.mockplayer.gui.BotGui.open(mc);
+                    net.minecraft.client.gui.screens.Screen opened = bgScreen();
+                    if (opened instanceof com.mockplayer.gui.BotControlScreen s) {
+                        net.minecraft.client.gui.components.Button invTab =
+                                bgFindButton(s, "gui.mockplayer.tab.inventory");
+                        if (invTab != null) {
+                            bgClick(invTab);
+                        }
+                    }
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 5) {
+                    return;
+                }
+                if (!bgDiscardPicked) {
+                    bgDiscardPicked = true;
+                    com.mockplayer.gui.BotControlScreen s = bgScreen();
+                    if (s != null) {
+                        bgClickInventorySlot(s, 36); // 左键拿起快捷栏 0 的绿宝石
+                    }
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 5) {
+                    return;
+                }
+                if (!bgDiscardSlotFilled) {
+                    // 把空出来的快捷栏 0 填成石头：丢弃后无空位可瞬捡，掉落物实体证据稳定
+                    if (lp == null || !lp.getInventory().getItem(0).isEmpty()
+                            || !lp.containerMenu.getCarried().is(net.minecraft.world.item.Items.EMERALD)) {
+                        if (waitTicks > 80) {
+                            fail("discard slot fill timeout carried="
+                                    + (lp != null ? lp.containerMenu.getCarried() : "null"));
+                            System.clearProperty("mockplayer.guiRenderProbe");
+                            bgStep(37);
+                        }
+                        return;
+                    }
+                    bgDiscardSlotFilled = true;
+                    server.execute(() -> {
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + botName + " hotbar.0 with minecraft:stone");
+                    });
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 5) {
+                    return;
+                }
+                if (lp == null || !lp.getInventory().getItem(0).is(net.minecraft.world.item.Items.STONE)) {
+                    if (waitTicks > 80) {
+                        fail("discard slot stone sync timeout");
+                        System.clearProperty("mockplayer.guiRenderProbe");
+                        bgStep(37);
+                    }
+                    return;
+                }
+                if (!bgDiscardClicked) {
+                    if (!lp.containerMenu.getCarried().is(net.minecraft.world.item.Items.EMERALD)) {
+                        if (waitTicks > 60) {
+                            fail("discard pickup timeout carried="
+                                    + (lp != null ? lp.containerMenu.getCarried() : "null"));
+                            System.clearProperty("mockplayer.guiRenderProbe");
+                            bgStep(37);
+                        }
+                        return;
+                    }
+                    bgDiscardClicked = true;
+                    check("discard slot rendered", com.mockplayer.gui.BotGui.probeDiscardCount() > 0);
+                    com.mockplayer.gui.BotControlScreen s = bgScreen();
+                    check("discard slot click dispatched", s != null && bgClickDiscardSlot(s));
+                    waitTicks = 0;
+                    return;
+                }
+                boolean clientDropped = lp != null && lp.containerMenu.getCarried().isEmpty();
+                server.execute(() -> {
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    bgDiscardServerHas = sp != null
+                            && sp.getInventory().countItem(net.minecraft.world.item.Items.EMERALD) > 0;
+                    bgDiscardServerItemCount = 0;
+                    if (sp != null) {
+                        bgDiscardServerItemCount = server.getLevel(net.minecraft.world.level.Level.OVERWORLD)
+                                .getEntities(
+                                        net.minecraft.world.level.entity.EntityTypeTest.forClass(
+                                                net.minecraft.world.entity.item.ItemEntity.class),
+                                        new net.minecraft.world.phys.AABB(sp.blockPosition()).inflate(4.0),
+                                        ie -> ie.getItem().is(net.minecraft.world.item.Items.EMERALD))
+                                .size();
+                    }
+                });
+                if (!clientDropped || bgDiscardServerHas || bgDiscardServerItemCount == 0) {
+                    if (++waitTicks > 120) {
+                        check("discard carried cleared", clientDropped);
+                        check("discard server inventory empty", !bgDiscardServerHas,
+                                "has=" + bgDiscardServerHas);
+                        check("discard item entity spawned", bgDiscardServerItemCount > 0,
+                                "items=" + bgDiscardServerItemCount);
+                        mc.gui.setScreen(null);
+                        System.clearProperty("mockplayer.guiRenderProbe");
+                        bgStep(37);
+                    }
+                    return;
+                }
+                check("discard carried cleared", true);
+                check("discard server inventory empty", true);
+                check("discard item entity spawned", true, "items=" + bgDiscardServerItemCount);
+                mc.gui.setScreen(null);
+                System.clearProperty("mockplayer.guiRenderProbe");
+                bgStep(37);
+            }
+            case 37 -> { // 收尾
                 if (++waitTicks < 20) {
                     return;
                 }
@@ -8112,6 +8260,20 @@ public final class TestRunner {
         double sy = com.mockplayer.gui.BotGui.panelY(w, h) + (44 + ly + 10) * scale;
         return screen.mouseClicked(new net.minecraft.client.input.MouseButtonEvent(
                 sx, sy, new net.minecraft.client.input.MouseButtonInfo(button, 0)), false);
+    }
+
+    /** 背包 Tab 红色丢弃格子点击（逻辑坐标 = 副手右侧一格；左键 = 丢弃整组）。 */
+    private static boolean bgClickDiscardSlot(com.mockplayer.gui.BotControlScreen screen) {
+        Minecraft mc = Minecraft.getInstance();
+        int w = mc.getWindow().getGuiScaledWidth();
+        int h = mc.getWindow().getGuiScaledHeight();
+        float scale = com.mockplayer.gui.BotGui.layoutScale(w, h);
+        double lx = 24 + 10 * 20;
+        double ly = 3 * 20;
+        double sx = com.mockplayer.gui.BotGui.panelX(w, h) + (104 + lx + 10) * scale;
+        double sy = com.mockplayer.gui.BotGui.panelY(w, h) + (44 + ly + 10) * scale;
+        return screen.mouseClicked(new net.minecraft.client.input.MouseButtonEvent(
+                sx, sy, new net.minecraft.client.input.MouseButtonInfo(0, 0)), false);
     }
 
     /** 容器 Tab 的「容器区」格子点击（row 0 = 容器槽 0；与玩家区不同）。 */

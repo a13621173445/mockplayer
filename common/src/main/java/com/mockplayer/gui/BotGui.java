@@ -52,6 +52,7 @@ public final class BotGui {
     private static volatile int healthFoodCount;
     private static volatile float lastHealth;
     private static volatile int lastFood;
+    private static volatile int discardCount;
     private static volatile String lastTitle = "";
 
     private BotGui() {
@@ -182,6 +183,13 @@ public final class BotGui {
         }
     }
 
+    /** 红色丢弃格子渲染探针（仅测试属性开启时记录）。 */
+    public static void recordDiscardSlot() {
+        if (Boolean.getBoolean("mockplayer.guiRenderProbe")) {
+            BotGui.discardCount++;
+        }
+    }
+
     /** 槽位 tooltip 渲染探针（悬停物品时设置原版 tooltip；仅测试属性开启时记录）。 */
     public static void recordTooltip() {
         if (Boolean.getBoolean("mockplayer.guiRenderProbe")) {
@@ -269,6 +277,11 @@ public final class BotGui {
     /** 测试读取：最近一次经验条进度（0-1）。 */
     public static float probeXpBarProgress() {
         return BotGui.xpBarProgress;
+    }
+
+    /** 测试读取：丢弃格子渲染次数（0 = 从未绘制红色丢弃格）。 */
+    public static int probeDiscardCount() {
+        return BotGui.discardCount;
     }
 
     /** 测试读取：血量/饥饿条渲染次数（0 = 从未绘制）。 */

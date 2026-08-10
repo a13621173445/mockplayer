@@ -1175,6 +1175,10 @@ public class BotControlScreen extends Screen {
             } else {
                 net.minecraft.client.player.LocalPlayer player = this.selected.getLocalPlayer();
                 int slot = this.inventorySlotAt(mx, my);
+                if (slot == net.minecraft.world.inventory.AbstractContainerMenu.SLOT_CLICKED_OUTSIDE) {
+                    this.discardClick(info);
+                    return true;
+                }
                 if (slot >= 0) {
                     if (slot >= 36 && slot < 45) {
                         // 右键空手点快捷栏 = 切换选中槽；左键/携带时保持原版物品交互
@@ -1219,8 +1223,29 @@ public class BotControlScreen extends Screen {
             if (gxOff == 0) {
                 return 45;
             }
+            if (gxOff == 1) {
+                return net.minecraft.world.inventory.AbstractContainerMenu.SLOT_CLICKED_OUTSIDE;
+            }
         }
         return -1;
+    }
+
+    /** 红色丢弃格子：原版点击菜单外（-999）——携带物品左键整组/右键 1 个丢弃；空手无害。 */
+    private void discardClick(MouseButtonInfo info) {
+        net.minecraft.client.player.LocalPlayer player = this.selected.getLocalPlayer();
+        net.minecraft.client.multiplayer.MultiPlayerGameMode gameMode = this.selected.getGameMode();
+        if (player == null || gameMode == null) {
+            return;
+        }
+        net.minecraft.world.item.ItemStack carried = player.containerMenu.getCarried();
+        if (carried.isEmpty()) {
+            this.setFeedback(Component.translatable("gui.mockplayer.feedback.discard_empty"));
+            return;
+        }
+        gameMode.handleContainerInput(player.containerMenu.containerId,
+                net.minecraft.world.inventory.AbstractContainerMenu.SLOT_CLICKED_OUTSIDE,
+                info.button(), ContainerInput.PICKUP, player);
+        this.setFeedback(Component.translatable("gui.mockplayer.feedback.discard", carried.getHoverName()));
     }
 
     private void inventoryClick(int slot, MouseButtonInfo info) {
@@ -1860,6 +1885,9 @@ public class BotControlScreen extends Screen {
         // 副手（槽 45）
         this.drawSlot(graphics, CONTENT_X + 24 + 9 * CELL, CONTENT_Y + 3 * CELL,
                 inventoryItem(player, 45), hovered == 45, slotIcon(player, 45));
+        // 红色丢弃格子（副手右侧一格）：物品放进去 = 原版点击菜单外丢弃
+        this.drawDiscardSlot(graphics, CONTENT_X + 24 + 10 * CELL, CONTENT_Y + 3 * CELL,
+                hovered == net.minecraft.world.inventory.AbstractContainerMenu.SLOT_CLICKED_OUTSIDE);
         // 选中槽高亮
         int sel = player.getInventory().getSelectedSlot();
         graphics.outline(this.sx(CONTENT_X + 24 + sel * CELL), this.sy(CONTENT_Y + 3 * CELL),
@@ -1872,7 +1900,29 @@ public class BotControlScreen extends Screen {
                         lines.stream().map(Component::getVisualOrderText).toList(), mouseX, mouseY);
                 com.mockplayer.gui.BotGui.recordTooltip();
             }
+        } else if (hovered == net.minecraft.world.inventory.AbstractContainerMenu.SLOT_CLICKED_OUTSIDE) {
+            graphics.setTooltipForNextFrame(this.font,
+                    List.of(Component.translatable("gui.mockplayer.discard").getVisualOrderText()), mouseX, mouseY);
+            com.mockplayer.gui.BotGui.recordTooltip();
         }
+    }
+
+    /** 红色丢弃格子（红色底 + 白色 ×；悬停变亮，hover 时提示「丢弃」）。 */
+    private void drawDiscardSlot(GuiGraphicsExtractor graphics, int lx, int ly, boolean hovered) {
+        int x = this.sx(lx);
+        int y = this.sy(ly);
+        int cell = this.sw(CELL);
+        float opacity = MockplayerConfig.get().getGuiOpacity();
+        graphics.fill(x, y, x + cell, y + cell,
+                hovered ? withAlpha(0x8FDF6060, opacity) : withAlpha(0x8FC04040, opacity));
+        graphics.outline(x, y, cell, cell,
+                hovered ? withAlpha(0xBFE07070, opacity) : withAlpha(0xBFB03030, opacity));
+        String mark = "×";
+        int tw = this.font.width(mark);
+        graphics.text(this.font, Component.literal(mark),
+                x + (cell - tw) / 2, y + (cell - this.font.lineHeight) / 2,
+                hovered ? 0xFFFFFFFF : 0xFFE8E8E8);
+        com.mockplayer.gui.BotGui.recordDiscardSlot();
     }
 
     /**
