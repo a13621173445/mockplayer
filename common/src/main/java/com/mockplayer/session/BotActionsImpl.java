@@ -383,7 +383,8 @@ public class BotActionsImpl implements BotActions {
                 && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
             this.useItemOn(blockHit.getBlockPos(), blockHit.getDirection());
         } else {
-            this.useItem(InteractionHand.MAIN_HAND);
+            // 原版单点右键空气：主手优先，主手无使用动画自动 fallback 副手（如副手盾举盾）
+            this.useItemLikeVanilla();
         }
     }
 

@@ -6172,6 +6172,9 @@ public final class TestRunner {
     private static boolean bgShieldHeld;
     private static volatile boolean bgShieldServerUsing;
     private static net.minecraft.client.gui.components.Button bgShieldUseButton;
+    private static boolean bgCmdShieldUsed;
+    private static boolean bgManySummoned;
+    private static boolean bgManyChecked;
 
     private static void runBotGui(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -7307,14 +7310,117 @@ public final class TestRunner {
                     check("hold use releases shield", true);
                     mc.gui.setScreen(null);
                     System.clearProperty("mockplayer.guiRenderProbe");
-                    finishSuite();
+                    bgStep(29);
                 } else if (++waitTicks > 80) {
                     check("hold use releases shield", false,
                             "using=" + lp.isUsingItem());
                     mc.gui.setScreen(null);
                     System.clearProperty("mockplayer.guiRenderProbe");
-                    finishSuite();
+                    bgStep(29);
                 }
+            }
+            case 29 -> { // 命令 useLook 单点举盾（副手盾 fallback，与 GUI 同实现）
+                if (!bgCmdShieldUsed) {
+                    bgCmdShieldUsed = true;
+                    // 先抬头让射线命中空气（原版单击右键命中方块 = 交互方块，不举盾）
+                    bot.actions().look(bot.getLocalPlayer() != null
+                            ? bot.getLocalPlayer().getYRot() : 0.0F, -90.0F);
+                    com.mockplayer.session.ControlCommands.useLook(botName);
+                    waitTicks = 0;
+                    return;
+                }
+                net.minecraft.client.player.LocalPlayer lp = bot.getLocalPlayer();
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    bgShieldServerUsing = sp != null && sp.isUsingItem()
+                            && sp.getUseItem().is(net.minecraft.world.item.Items.SHIELD);
+                });
+                boolean clientUsing = lp != null && lp.isUsingItem()
+                        && lp.getUsedItemHand() == net.minecraft.world.InteractionHand.OFF_HAND;
+                if (clientUsing && bgShieldServerUsing) {
+                    check("command useLook raises offhand shield", true);
+                    check("command useLook shield server using", true);
+                    com.mockplayer.session.ControlCommands.stopSustained(botName);
+                    waitTicks = 0;
+                    bgStep(30);
+                } else if (++waitTicks > 120) {
+                    fail("command useLook shield timeout client=" + clientUsing
+                            + " server=" + bgShieldServerUsing);
+                    bgStep(30);
+                }
+            }
+            case 30 -> { // 命令 stopSustained 释放盾
+                net.minecraft.client.player.LocalPlayer lp = bot.getLocalPlayer();
+                if (lp == null || !lp.isUsingItem()) {
+                    check("command stopSustained releases shield", true);
+                    bgStep(31);
+                } else if (++waitTicks > 80) {
+                    check("command stopSustained releases shield", false,
+                            "using=" + lp.isUsingItem());
+                    bgStep(31);
+                }
+            }
+            case 31 -> { // 附近实体很多：实体按钮最多 2 个 + 文字按宽度截断不溢出
+                if (!bgManySummoned) {
+                    bgManySummoned = true;
+                    server.execute(() -> {
+                        var sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            for (int i = 0; i < 6; i++) {
+                                server.getCommands().performPrefixedCommand(
+                                        server.createCommandSourceStack(), String.format(
+                                        "summon minecraft:husk %.1f %.1f %.1f {CustomName:'{\"text\":\"VeryLongHuskName%d\"}',NoAI:1b}",
+                                        sp.getX() + (i % 3), sp.getY(), sp.getZ() + (i / 3)));
+                            }
+                        }
+                    });
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 15) {
+                    return; // 等实体刷新进按钮
+                }
+                if (!bgManyChecked) {
+                    bgManyChecked = true;
+                    mc.gui.setScreen(null);
+                    com.mockplayer.gui.BotGui.open(mc);
+                    net.minecraft.client.gui.screens.Screen opened = bgScreen();
+                    if (opened instanceof com.mockplayer.gui.BotControlScreen s) {
+                        net.minecraft.client.gui.components.Button actions =
+                                bgFindButton(s, "gui.mockplayer.tab.actions");
+                        if (actions != null) {
+                            bgClick(actions);
+                        }
+                    }
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 10) {
+                    return; // 等动作 Tab 实体按钮刷新
+                }
+                com.mockplayer.gui.BotControlScreen s = bgScreen();
+                boolean noOverflow = true;
+                int overflowCount = 0;
+                int entityShown = 0;
+                if (s != null) {
+                    for (Object child : s.children()) {
+                        if (child instanceof net.minecraft.client.gui.components.Button b && b.visible) {
+                            if (mc.font.width(b.getMessage()) > b.getWidth()) {
+                                noOverflow = false;
+                                overflowCount++;
+                            }
+                            if (b.getMessage().getString().contains("·")) {
+                                entityShown++;
+                            }
+                        }
+                    }
+                }
+                check("many entities no button text overflow", noOverflow,
+                        "overflow=" + overflowCount);
+                check("entity buttons capped at 2", entityShown <= 2,
+                        "shown=" + entityShown);
+                mc.gui.setScreen(null);
+                finishSuite();
             }
         }
     }

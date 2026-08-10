@@ -72,8 +72,6 @@ public class BotControlScreen extends Screen {
     public static final int SLOT_BG_HOVER = 0x8F3E4C66;
     public static final int SLOT_BORDER = 0x8F0E1420;
     public static final int SLOT_BORDER_HOVER = 0xBF7FB2FF;
-    /** 单点/长按判定阈值（毫秒，原版 Util 时间，不受 TPS/分辨率影响）。 */
-    public static final int HOLD_START_MS = 250;
     /** 调整型按钮长按重复间隔（毫秒）：视线 200ms、区块 300ms。 */
     public static final int TURN_REPEAT_MS = 200;
     public static final int CHUNK_REPEAT_MS = 300;
@@ -127,8 +125,6 @@ public class BotControlScreen extends Screen {
     private final List<Button> entityButtons = new ArrayList<>();
     /** 实体按钮当前绑定的实体（防重建时取到已死实体）。 */
     private final List<Entity> entityTargets = new ArrayList<>();
-    /** 单击/长按按钮（attack/use：快速松开=单点，按住超阈值=持续）。 */
-    private final List<TapHoldButton> tapHoldButtons = new ArrayList<>();
     /** 长按重复按钮（turn/chunk 等调整型控件，tick 驱动重复触发）。 */
     private final List<RepeatHoldButton> repeatButtons = new ArrayList<>();
 
@@ -148,7 +144,6 @@ public class BotControlScreen extends Screen {
         this.botButtons.clear();
         this.entityButtons.clear();
         this.entityTargets.clear();
-        this.tapHoldButtons.clear();
         this.repeatButtons.clear();
         this.selected = firstSelectableBot();
         if (this.tab > 2) {
@@ -227,7 +222,7 @@ public class BotControlScreen extends Screen {
         this.jumpButton = this.addButton(CONTENT_X + 54, 96, 52, 16, "gui.mockplayer.action.jump",
                 () -> this.toggleJump());
 
-        // 左键/右键：快速松开 = 单点（attackLook/useLook），按住超阈值 = 持续动作（松开停止）
+        // 左键/右键：按下 = 单点 + 立即进入持续，松开 = 停止释放（原版按住键语义，无时间阈值）
         this.attackLookButton = this.addTapHold(CONTENT_X, 122, ACT_BTN_W, ACT_BTN_H,
                 "gui.mockplayer.action.attack_look",
                 () -> this.actQuiet(b -> b.actions().attackLook()),
@@ -259,15 +254,15 @@ public class BotControlScreen extends Screen {
         this.sendButton = this.addButton(CONTENT_X + 182, 172, 66, 14, "gui.mockplayer.action.send",
                 () -> this.sendChat());
 
-        // ===== 附近实体（动作 Tab 顶部，点击 = bot 转头） =====
-        for (int i = 0; i < 4; i++) {
+        // ===== 附近实体（动作 Tab 顶部单行 2 个，点击 = bot 转头；实体再多也只显示最近 2 个，防拥挤重叠） =====
+        for (int i = 0; i < 2; i++) {
             int index = i;
             Button b = Button.builder(Component.literal(""), btn -> {
                 if (index < this.entityTargets.size()) {
                     Entity target = this.entityTargets.get(index);
                     this.act(bot -> bot.actions().lookAt(target), "gui.mockplayer.action.look_at");
                 }
-            }).bounds(sx(CONTENT_X + 156 + (index % 2) * 46), sy(54 + (index / 2) * 17),
+            }).bounds(sx(CONTENT_X + 156 + index * 46), sy(54),
                     sw(44), sh(16)).build();
             b.setAlpha(BUTTON_ALPHA);
             this.addRenderableWidget(b);
@@ -295,14 +290,13 @@ public class BotControlScreen extends Screen {
         return b;
     }
 
-    /** 单击/长按按钮：快速松开=单点，按住超阈值后持续（attack/use 共用）。 */
+    /** 单击/长按按钮：按下 = 单点 + 立即持续，松开 = 停止（attack/use 共用）。 */
     private TapHoldButton addTapHold(int x, int y, int w, int h, String key,
                                      Runnable tap, Runnable holdStart, Runnable holdEnd) {
         TapHoldButton b = new TapHoldButton(sx(x), sy(y), sw(w), sw(h),
-                Component.translatable(key), tap, holdStart, holdEnd, HOLD_START_MS);
+                Component.translatable(key), tap, holdStart, holdEnd);
         b.setAlpha(BUTTON_ALPHA);
         this.addRenderableWidget(b);
-        this.tapHoldButtons.add(b);
         return b;
     }
 
@@ -348,51 +342,32 @@ public class BotControlScreen extends Screen {
     }
 
     /**
-     * 单击/长按按钮：onClick 立即单点（tap），按住超过阈值才转持续动作（holdStart），
-     * 松开时若已转持续则 holdEnd。阈值用 {@link Util#getMillis()}（原版时间，不受 TPS 影响）。
+     * 单击/长按按钮：onClick 立即执行单点（tap）并进入持续状态（holdStart），
+     * onRelease 停止（holdEnd）——按下即动、松开即停，与原版按键一致（无时间阈值）。
      */
     private static final class TapHoldButton extends Button {
         private final Runnable tap;
         private final Runnable holdStart;
         private final Runnable holdEnd;
-        private final long holdStartMs;
-        private boolean pressed;
-        private boolean sustained;
-        private long pressMillis;
 
         TapHoldButton(int x, int y, int w, int h, Component message,
-                      Runnable tap, Runnable holdStart, Runnable holdEnd, long holdStartMs) {
+                      Runnable tap, Runnable holdStart, Runnable holdEnd) {
             super(x, y, w, h, message, btn -> {
             }, DEFAULT_NARRATION);
             this.tap = tap;
             this.holdStart = holdStart;
             this.holdEnd = holdEnd;
-            this.holdStartMs = holdStartMs;
         }
 
         @Override
         public void onClick(MouseButtonEvent event, boolean doubleClick) {
-            this.pressed = true;
-            this.sustained = false;
-            this.pressMillis = Util.getMillis();
             this.tap.run();
+            this.holdStart.run();
         }
 
         @Override
         public void onRelease(MouseButtonEvent event) {
-            this.pressed = false;
-            // 单击也要释放：原版点一下右键 = startUseItem，松开键即 releaseUsingItem；
-            // 长按则 stopSustained 同时负责持续停止与物品释放
             this.holdEnd.run();
-            this.sustained = false;
-        }
-
-        /** tick 驱动：按住超过阈值 → 转入持续动作。 */
-        void onTick(long now) {
-            if (this.pressed && !this.sustained && now - this.pressMillis >= this.holdStartMs) {
-                this.sustained = true;
-                this.holdStart.run();
-            }
         }
 
         @Override
@@ -635,9 +610,6 @@ public class BotControlScreen extends Screen {
     public void tick() {
         BotGui.recordTick();
         long now = Util.getMillis();
-        for (TapHoldButton b : this.tapHoldButtons) {
-            b.onTick(now);
-        }
         for (RepeatHoldButton b : this.repeatButtons) {
             b.onTick(now);
         }
@@ -704,7 +676,7 @@ public class BotControlScreen extends Screen {
         List<Entity> near = ready ? this.selected.getEntitiesNear(12.0).stream()
                 .filter(e -> !(e instanceof net.minecraft.world.entity.player.Player))
                 .sorted(Comparator.comparingDouble(e -> e.distanceToSqr(this.selected.getLocalPlayer())))
-                .limit(4).toList() : List.of();
+                .limit(2).toList() : List.of();
         for (int i = 0; i < this.entityButtons.size(); i++) {
             Button b = this.entityButtons.get(i);
             if (i < near.size()) {
@@ -712,9 +684,12 @@ public class BotControlScreen extends Screen {
                 this.entityTargets.add(e);
                 b.visible = actionsTab;
                 b.active = ready;
-                b.setMessage(Component.literal(e.getName().getString() + "·"
+                String label = e.getName().getString() + "·"
                         + String.format(Locale.ROOT, "%.0f",
-                        Math.sqrt(e.distanceToSqr(this.selected.getLocalPlayer()))) + "m"));
+                        Math.sqrt(e.distanceToSqr(this.selected.getLocalPlayer()))) + "m";
+                // 按按钮像素宽度截断：附近实体多/名字长时文字不溢出到旁边按钮
+                b.setMessage(Component.literal(
+                        this.font.plainSubstrByWidth(label, Math.max(4, this.sw(44) - 4))));
             } else {
                 b.visible = false;
             }
