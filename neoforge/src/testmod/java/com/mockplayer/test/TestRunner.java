@@ -4283,6 +4283,11 @@ public final class TestRunner {
     private static boolean stabSpearGiven;
     private static volatile boolean stabSpearServer;
     private static boolean stabAttacked;
+    private static boolean bgGuiStabCharged;
+    private static boolean bgGuiStabAttacked;
+    private static volatile float bgGuiStabHpBefore = -1;
+    private static volatile float bgGuiStabHp = -1;
+    private static volatile boolean bgGuiSpearUsing;
     private static boolean sprintSummoned;
     private static boolean sprintCleared;
     private static boolean sprintSpearGiven;
@@ -4407,7 +4412,7 @@ public final class TestRunner {
                 if (combatLastDamageIsSpear && combatHuskHealth >= 0 && combatHuskHealth < 20) {
                     check("husk hurt by SPEAR (left-click stab)", true);
                     check("fake still PLAYING (no server crash)", bot.getLifecycle() == BotLifecycle.PLAYING);
-                    step = 6;
+                    step = 7;
                 } else if (combatServerScale >= 1.0F) {
                     // 戳刺射线沿视线方向（ProjectileUtil.getHitEntitiesAlong），必须先面向僵尸
                     net.minecraft.world.entity.Entity target = bot.getEntitiesNear(64).stream()
@@ -4422,10 +4427,86 @@ public final class TestRunner {
                     }
                 } else if (++waitTicks > 400) {
                     fail("stab timeout (no SPEAR damage)");
-                    step = 6;
+                    step = 7;
                 }
             }
-            case 6 -> {
+            case 7 -> { // GUI 左键（attackLook）持矛戳刺：等蓄力满 → 记录当前血 → attackLook → 血继续降
+                if (!bgGuiStabCharged) {
+                    if (bot.getLocalPlayer() != null
+                            && bot.getLocalPlayer().getAttackStrengthScale(1.0F) >= 0.99F) {
+                        bgGuiStabCharged = true;
+                        net.minecraft.world.entity.Entity target = bot.getEntitiesNear(64).stream()
+                                .filter(e -> e instanceof net.minecraft.world.entity.monster.zombie.Zombie)
+                                .findFirst().orElse(null);
+                        if (target != null) {
+                            bot.actions().lookAt(target);
+                            server.execute(() -> {
+                                var level = server.getLevel(Level.OVERWORLD);
+                                var husk = level != null ? level.getEntitiesOfClass(
+                                        net.minecraft.world.entity.monster.zombie.Zombie.class,
+                                        new net.minecraft.world.phys.AABB(-64, -64, -64, 64, 64, 64))
+                                        .stream().findFirst().orElse(null) : null;
+                                bgGuiStabHpBefore = husk != null ? husk.getHealth() : -1;
+                            });
+                            waitTicks = 0;
+                        }
+                    } else if (++waitTicks > 200) {
+                        fail("gui spear charge timeout");
+                        bgGuiStabCharged = true;
+                        waitTicks = 0;
+                    }
+                    return;
+                }
+                if (!bgGuiStabAttacked) {
+                    bgGuiStabAttacked = true;
+                    bot.actions().attackLook(); // GUI 左键路径：持矛 → pierceStab（STAB 包）
+                    waitTicks = 0;
+                    return;
+                }
+                server.execute(() -> {
+                    var level = server.getLevel(Level.OVERWORLD);
+                    var husk = level != null ? level.getEntitiesOfClass(
+                            net.minecraft.world.entity.monster.zombie.Zombie.class,
+                            new net.minecraft.world.phys.AABB(-64, -64, -64, 64, 64, 64))
+                            .stream().findFirst().orElse(null) : null;
+                    bgGuiStabHp = husk != null ? husk.getHealth() : -1;
+                });
+                if (bgGuiStabHp >= 0 && bgGuiStabHpBefore > 0 && bgGuiStabHp < bgGuiStabHpBefore) {
+                    check("gui left-click spear stabs", true,
+                            "hp " + bgGuiStabHpBefore + " -> " + bgGuiStabHp);
+                    net.minecraft.world.entity.Entity target = bot.getEntitiesNear(64).stream()
+                            .filter(e -> e instanceof net.minecraft.world.entity.monster.zombie.Zombie)
+                            .findFirst().orElse(null);
+                    if (target != null) {
+                        bot.actions().lookAt(target);
+                    }
+                    bot.actions().useLook(); // GUI 右键路径：实体 fallthrough → useItem（举矛）
+                    waitTicks = 0;
+                    step = 8;
+                } else if (++waitTicks > 120) {
+                    fail("gui spear stab timeout hp=" + bgGuiStabHp
+                            + " before=" + bgGuiStabHpBefore);
+                    step = 8;
+                }
+            }
+            case 8 -> { // GUI 右键举矛：服务端 isUsingItem + 使用中物品是矛
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    bgGuiSpearUsing = sp != null && sp.isUsingItem()
+                            && sp.getUseItem().is(net.minecraft.world.item.Items.IRON_SPEAR);
+                });
+                if (bgGuiSpearUsing) {
+                    check("gui right-click raises spear", true);
+                    bot.actions().stopSustained();
+                    waitTicks = 0;
+                    step = 9;
+                } else if (++waitTicks > 100) {
+                    fail("gui spear raise timeout using=" + bgGuiSpearUsing);
+                    bot.actions().stopSustained();
+                    step = 9;
+                }
+            }
+            case 9 -> {
                 removeHusks(server);
                 MockplayerApi.bots().removeBot(botName, "command");
                 finishSuite();
@@ -6182,6 +6263,26 @@ public final class TestRunner {
     private static boolean bgChatActionsTab;
     private static boolean bgAutoActionsTab;
     private static int bgBlurBefore = -1;
+    private static boolean bgPvpGiven;
+    private static boolean bgPvpTargetFound;
+    private static boolean bgPvpTpDone;
+    private static boolean bgPvpLooked;
+    private static boolean bgPvpAttacked;
+    private static volatile float bgPvpTargetHp = -1;
+    private static double bgPvpDist = -1;
+    private static volatile double bgPvpClientX;
+    private static volatile double bgPvpClientZ;
+    private static volatile double bgPvpServerX;
+    private static volatile double bgPvpServerZ;
+    private static volatile boolean bgPvpServerReady;
+    private static boolean bgDigSet;
+    private static boolean bgDigStarted;
+    private static volatile int bgDigMaxEntries = -1;
+    private static net.minecraft.core.BlockPos bgDigPos;
+    private static volatile int bgDigFakeParticles = -1;
+    private static boolean bgDigSoundRecorded;
+    private static boolean bgDigParticleRecorded;
+    private static int bgDigEventTicks;
 
     private static void runBotGui(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -7473,9 +7574,10 @@ public final class TestRunner {
                         if (sp != null) {
                             for (int i = 0; i < 6; i++) {
                                 server.getCommands().performPrefixedCommand(
-                                        server.createCommandSourceStack(), String.format(
-                                        "summon minecraft:husk %.1f %.1f %.1f {CustomName:'{\"text\":\"VeryLongHuskName%d\"}',NoAI:1b}",
-                                        sp.getX() + (i % 3), sp.getY(), sp.getZ() + (i / 3)));
+                                        server.createCommandSourceStack(),
+                                        "summon minecraft:husk " + (sp.getX() + (i % 3)) + " "
+                                                + sp.getY() + " " + (sp.getZ() + (i / 3))
+                                                + " {CustomName:'{\"text\":\"VeryLongHuskName" + i + "\"}',NoAI:1b}");
                             }
                         }
                     });
@@ -7580,7 +7682,282 @@ public final class TestRunner {
                 mc.gui.setScreen(null);
                 check("gui blur restored",
                         mc.options.getMenuBackgroundBlurriness() == bgBlurBefore);
+                bgStep(33);
+            }
+            case 33 -> { // 假人攻击另一个假人（玩家实体）：复现「打不到玩家」
+                if (!bgPvpGiven) {
+                    bgPvpGiven = true;
+                    com.mockplayer.session.FakePlayerCommands.newPlayer("tbot-gui3");
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 40) {
+                    return; // 等第二个假人注册
+                }
+                if (!bgPvpTargetFound) {
+                    bgPvpTargetFound = true;
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks > 200) {
+                    fail("pvp target never PLAYING");
+                    bgStep(34);
+                    return;
+                }
+                server.execute(() -> {
+                    var spB = server.getPlayerList().getPlayerByName("tbot-gui3");
+                    bgPvpServerReady = spB != null && spB.connection != null;
+                });
+                if (!bgPvpServerReady) {
+                    return; // 等服务端 PLAYING
+                }
+                if (!bgPvpTpDone) {
+                    bgPvpTpDone = true;
+                    // 假人A 主动 teleport 到假人B 面前 1.5 格（假人A 自身 tp 同步可靠）
+                    server.execute(() -> {
+                        var spA = server.getPlayerList().getPlayerByName(botName);
+                        var spB = server.getPlayerList().getPlayerByName("tbot-gui3");
+                        if (spA != null && spB != null) {
+                            spA.teleportTo(spB.getX() - 1.5, spB.getY(), spB.getZ());
+                        }
+                    });
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 20) {
+                    return; // 等 tp 同步
+                }
+                if (!bgPvpLooked) {
+                    bgPvpLooked = true;
+                    net.minecraft.world.entity.Entity target = bot.getEntitiesNear(20).stream()
+                            .filter(e -> e instanceof net.minecraft.world.entity.player.Player
+                                    && "tbot-gui3".equals(e.getName().getString()))
+                            .findFirst().orElse(null);
+                    StringBuilder all = new StringBuilder();
+                    int count = 0;
+                    for (net.minecraft.world.entity.Entity e : bot.getEntitiesNear(64)) {
+                        if (e instanceof net.minecraft.world.entity.player.Player
+                                && "tbot-gui3".equals(e.getName().getString())) {
+                            count++;
+                            all.append("(").append(e.getX()).append(",").append(e.getZ()).append(") ");
+                        }
+                    }
+                    check("pvp single entity in level", count == 1,
+                            "count=" + count + " all=" + all);
+                    if (target != null) {
+                        bgPvpDist = Math.sqrt(target.distanceToSqr(bot.getLocalPlayer()));
+                        bgPvpClientX = target.getX();
+                        bgPvpClientZ = target.getZ();
+                        server.execute(() -> {
+                            var spB = server.getPlayerList().getPlayerByName("tbot-gui3");
+                            if (spB != null) {
+                                bgPvpServerX = spB.getX();
+                                bgPvpServerZ = spB.getZ();
+                            }
+                        });
+                        bot.actions().lookAt(target);
+                    }
+                    check("pvp target exists in bot level", target != null,
+                            "client=(" + bgPvpClientX + "," + bgPvpClientZ
+                                    + ") server=(" + bgPvpServerX + "," + bgPvpServerZ + ")");
+                    if (target != null) {
+                        check("pvp client position synced",
+                                Math.abs(bgPvpClientX - bgPvpServerX) < 4.0
+                                        && Math.abs(bgPvpClientZ - bgPvpServerZ) < 4.0,
+                                "client=(" + bgPvpClientX + "," + bgPvpClientZ
+                                        + ") server=(" + bgPvpServerX + "," + bgPvpServerZ
+                                        + ") dist=" + bgPvpDist);
+                    }
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 5) {
+                    return; // 等 faceEntity 生效
+                }
+                if (!bgPvpAttacked) {
+                    bgPvpAttacked = true;
+                    net.minecraft.world.phys.HitResult hit = bot.getLocalPlayer()
+                            .raycastHitResult(1.0F, bot.getLocalPlayer());
+                    check("pvp ray hits player", hit instanceof net.minecraft.world.phys.EntityHitResult,
+                            "hit=" + hit + " dist=" + bgPvpDist);
+                    bot.actions().attackLook();
+                    waitTicks = 0;
+                    return;
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName("tbot-gui3");
+                    bgPvpTargetHp = sp != null ? sp.getHealth() : -1;
+                });
+                if (bgPvpTargetHp >= 0 && bgPvpTargetHp < 20) {
+                    check("pvp attack damages player", true, "hp=" + bgPvpTargetHp);
+                    com.mockplayer.session.FakePlayerCommands.delPlayer("tbot-gui3");
+                    waitTicks = 0;
+                    bgStep(34);
+                } else if (++waitTicks > 120) {
+                    check("pvp attack damages player", false,
+                            "hp=" + bgPvpTargetHp + " dist=" + bgPvpDist);
+                    com.mockplayer.session.FakePlayerCommands.delPlayer("tbot-gui3");
+                    bgStep(34);
+                }
+            }
+            case 34 -> { // 收尾
+                if (++waitTicks < 20) {
+                    return;
+                }
+                mc.gui.setScreen(null);
+                bgStep(35);
+            }
+            case 35 -> { // 主玩家挖方块隔离：主玩家 level 破坏进度只有主玩家（无假人叠加）
+                if (!bgDigSet) {
+                    bgDigSet = true;
+                    bgDigPos = mc.player.blockPosition().offset(2, 0, 0);
+                    server.execute(() -> {
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                "item replace entity " + mc.player.getName().getString()
+                                        + " weapon.mainhand with minecraft:diamond_pickaxe");
+                        server.getLevel(net.minecraft.world.level.Level.OVERWORLD)
+                                .setBlock(bgDigPos, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), 3);
+                    });
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 10) {
+                    return; // 等方块/镐同步
+                }
+                if (!bgDigStarted) {
+                    bgDigStarted = true;
+                    mc.gameMode.startDestroyBlock(bgDigPos, net.minecraft.core.Direction.UP);
+                    waitTicks = 0;
+                    return;
+                }
+                if (!mc.level.getBlockState(bgDigPos).isAir()) {
+                    // 挖掘中：主玩家 level 破坏进度条目必须只有主玩家（id=1），无假人条目叠加
+                    int entries = mainLevelDestroyCount();
+                    if (entries > bgDigMaxEntries) {
+                        bgDigMaxEntries = entries;
+                    }
+                    if (++waitTicks > 120) {
+                        mc.gameMode.continueDestroyBlock(bgDigPos, net.minecraft.core.Direction.UP);
+                        if (waitTicks > 200) {
+                            fail("main dig timeout");
+                            mc.gameMode.stopDestroyBlock();
+                            bgStep(36);
+                        }
+                    }
+                    return;
+                }
+                // 方块已破坏：等假人收到 2001 广播并处理，抓「假人 level 往共享粒子引擎塞粒子/播主玩家音箱」
+                if (++bgDigEventTicks <= 15) {
+                    int fakeParticles = mainEngineFakeParticleCount(bot.getLevel());
+                    if (fakeParticles > bgDigFakeParticles) {
+                        bgDigFakeParticles = fakeParticles;
+                    }
+                    checkFakeDigRecords();
+                    return;
+                }
+                check("main dig destroyed", true);
+                check("main dig progress not polluted", bgDigMaxEntries <= 1,
+                        "maxEntries=" + bgDigMaxEntries);
+                check("main engine no fake particles", bgDigFakeParticles == 0,
+                        "fakeParticles=" + bgDigFakeParticles);
+                check("fake records break sound", bgDigSoundRecorded);
+                check("fake records break particle", bgDigParticleRecorded);
+                mc.gameMode.stopDestroyBlock();
+                bgStep(36);
+            }
+            case 36 -> { // 收尾
+                if (++waitTicks < 20) {
+                    return;
+                }
+                mc.gui.setScreen(null);
                 finishSuite();
+            }
+        }
+    }
+
+    /** 反射读主玩家 level 破坏进度条目数（私有字段 destructionProgress）。 */
+    private static int mainLevelDestroyCount() {
+        try {
+            var f = net.minecraft.client.multiplayer.ClientLevel.class.getDeclaredField("destructionProgress");
+            f.setAccessible(true);
+            return ((java.util.Map<?, ?>) f.get(Minecraft.getInstance().level)).size();
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /** 主玩家 particleEngine 中 level 属于假人 level 的粒子数（渲染污染直接证据）。 */
+    private static int mainEngineFakeParticleCount(net.minecraft.client.multiplayer.ClientLevel fakeLevel) {
+        if (fakeLevel == null) {
+            return -1;
+        }
+        int count = 0;
+        try {
+            net.minecraft.client.particle.ParticleEngine engine = Minecraft.getInstance().particleEngine;
+            java.lang.reflect.Field toAddF = net.minecraft.client.particle.ParticleEngine.class
+                    .getDeclaredField("particlesToAdd");
+            toAddF.setAccessible(true);
+            for (Object p : (java.util.Queue<?>) toAddF.get(engine)) {
+                if (particleLevel(p) == fakeLevel) {
+                    count++;
+                }
+            }
+            java.lang.reflect.Field groupsF = net.minecraft.client.particle.ParticleEngine.class
+                    .getDeclaredField("particles");
+            groupsF.setAccessible(true);
+            java.lang.reflect.Field queueF = null;
+            for (Object group : ((java.util.Map<?, ?>) groupsF.get(engine)).values()) {
+                if (queueF == null) {
+                    for (Class<?> c = group.getClass(); c != null; c = c.getSuperclass()) {
+                        try {
+                            queueF = c.getDeclaredField("particles");
+                            break;
+                        } catch (java.lang.NoSuchFieldException ignored) {
+                            // 继续向父类找（ParticleGroup.particles）
+                        }
+                    }
+                    if (queueF == null) {
+                        return -1;
+                    }
+                    queueF.setAccessible(true);
+                }
+                for (Object p : (java.util.Collection<?>) queueF.get(group)) {
+                    if (particleLevel(p) == fakeLevel) {
+                        count++;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            return -1;
+        }
+        return count;
+    }
+
+    /** 反射取粒子的 level（Particle.level，protected final）。 */
+    private static net.minecraft.client.multiplayer.ClientLevel particleLevel(Object particle) {
+        try {
+            java.lang.reflect.Field f = net.minecraft.client.particle.Particle.class.getDeclaredField("level");
+            f.setAccessible(true);
+            return (net.minecraft.client.multiplayer.ClientLevel) f.get(particle);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 假人 state 是否已记录本次破坏的方块粒子/音效（拦截成功的证据）。 */
+    private static void checkFakeDigRecords() {
+        var state = com.mockplayer.session.SessionManager.getInstance().getSession(botName).getState();
+        if (state == null) {
+            return;
+        }
+        for (var c : state.getSoundLog()) {
+            if (c.getString().contains("block.stone.break")) {
+                bgDigSoundRecorded = true;
+            }
+        }
+        for (var c : state.getParticleLog()) {
+            if (c.getString().contains("minecraft:block")) {
+                bgDigParticleRecorded = true;
             }
         }
     }

@@ -11,6 +11,7 @@
   "client": [
     "MixinAccountProfileKeyPairManager",
     "MixinClientConfigurationPacketListenerImpl",
+    "MixinClientLevel",
     "MixinConnection",
     "MixinClientCommonPacketListenerImpl",
     "MixinEntityRenderer",

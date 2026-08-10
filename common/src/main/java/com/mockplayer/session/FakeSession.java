@@ -378,6 +378,7 @@ public class FakeSession {
      */
     public void disconnect() {
         if (connection != null) {
+            com.mockplayer.session.SessionManager.unregisterFakeLevel(this.getFakeLevel());
             FakeConnectionRegistry.unmarkFake(connection);
             connection.disconnect(net.minecraft.network.chat.Component.translatable("disconnect.mockplayer.fake_player_removed"));
             // 注意：不再手动调 connection.handleDisconnection()。

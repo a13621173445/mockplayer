@@ -289,6 +289,11 @@ public class BotControlScreen extends Screen {
             this.addRenderableWidget(b);
             this.botButtons.add(b);
         }
+        // 初始列表可见性：只显示已有假人（防止打开首帧在 tick 前闪出空槽按钮）
+        List<Bot> initialBots = coreBots();
+        for (int i = 0; i < this.botButtons.size(); i++) {
+            this.botButtons.get(i).visible = i < Math.min(initialBots.size(), VISIBLE_BOT_SLOTS);
+        }
         // 左栏底部：名字输入框一行，下面并排「+ 新建 / - 删除」
         this.nameBox = new EditBox(this.font, sx(LIST_X), sy(BOT_INPUT_Y), sw(LIST_W), sh(BOT_INPUT_H),
                 Component.translatable("gui.mockplayer.name_hint"));
@@ -661,30 +666,126 @@ public class BotControlScreen extends Screen {
     }
 
     /** 按当前 Tab/容器状态立即设置动作控件 visible（切 Tab 与 tick 共用）。 */
+    /** 按当前 Tab/容器状态立即刷新动作控件（active/visible/Tab 高亮/开关/实体），
+     *  init、switchTab、tick 共用，杜绝「等下一帧 tick 才隐藏」的闪烁。 */
     private void refreshActionTabVisibility() {
-        boolean actionsTab = this.tab == 2;
+        boolean ready = this.requireBotSilent();
         boolean containerOpen = this.selected != null && this.selected.getContainer().isPresent();
+        boolean actionsTab = this.tab == 2;
+        this.turnLeft.active = ready && actionsTab;
         this.turnLeft.visible = actionsTab;
+        this.turnRight.active = ready && actionsTab;
         this.turnRight.visible = actionsTab;
+        this.turnUp.active = ready && actionsTab;
         this.turnUp.visible = actionsTab;
+        this.turnDown.active = ready && actionsTab;
         this.turnDown.visible = actionsTab;
+        this.moveForward.active = ready && actionsTab;
         this.moveForward.visible = actionsTab;
+        this.moveBackward.active = ready && actionsTab;
         this.moveBackward.visible = actionsTab;
+        this.moveLeft.active = ready && actionsTab;
         this.moveLeft.visible = actionsTab;
+        this.moveRight.active = ready && actionsTab;
         this.moveRight.visible = actionsTab;
+        this.stopButton.active = ready && actionsTab;
         this.stopButton.visible = actionsTab;
+        this.sneakButton.active = ready && actionsTab;
         this.sneakButton.visible = actionsTab;
+        this.sprintButton.active = ready && actionsTab;
         this.sprintButton.visible = actionsTab;
+        this.jumpButton.active = ready && actionsTab;
         this.jumpButton.visible = actionsTab;
+        this.attackLookButton.active = ready && actionsTab;
         this.attackLookButton.visible = actionsTab;
+        this.useLookButton.active = ready && actionsTab;
         this.useLookButton.visible = actionsTab;
+        this.chunkMinusButton.active = ready && actionsTab;
         this.chunkMinusButton.visible = actionsTab;
+        this.chunkPlusButton.active = ready && actionsTab;
         this.chunkPlusButton.visible = actionsTab;
+        this.respawnButton.active = ready && actionsTab;
         this.respawnButton.visible = actionsTab;
+        this.autoRespawnButton.active = ready && actionsTab;
         this.autoRespawnButton.visible = actionsTab;
+        this.closeContainerButton.active = ready && containerOpen && this.tab == 1;
         this.closeContainerButton.visible = containerOpen && this.tab == 1;
+        this.sendButton.active = ready && actionsTab;
         this.sendButton.visible = actionsTab;
+        this.chatBox.active = ready && actionsTab;
         this.chatBox.visible = actionsTab;
+        this.newButton.active = true;
+        this.delButton.active = true;
+        // Tab 高亮：当前 Tab 全亮，其余半透明（切 Tab 立即生效）
+        float opacity = MockplayerConfig.get().getGuiOpacity();
+        this.tabStatus.setAlpha(this.tab == 0 ? 1.0F : buttonAlpha(opacity));
+        this.tabInventory.setAlpha(this.tab == 1 ? 1.0F : buttonAlpha(opacity));
+        this.tabActions.setAlpha(this.tab == 2 ? 1.0F : buttonAlpha(opacity));
+        this.refreshToggleLabels();
+        this.refreshEntityButtons();
+    }
+
+    /** 假人列表刷新（tick / init 共用：offset 钳制 + 按钮文字/可见性）。 */
+    private void refreshBotList() {
+        List<Bot> bots = coreBots();
+        this.botScrollOffset = clampBotScroll(this.botScrollOffset, bots.size(), VISIBLE_BOT_SLOTS);
+        for (int i = 0; i < this.botButtons.size(); i++) {
+            Button b = this.botButtons.get(i);
+            int index = i + this.botScrollOffset;
+            if (index < bots.size()) {
+                Bot bot = bots.get(index);
+                float hp = bot.getLocalPlayer() != null ? bot.getLocalPlayer().getHealth() : 0.0F;
+                b.visible = true;
+                b.active = true;
+                b.setMessage(Component.literal(bot.getName() + " ❤" + Math.round(hp)));
+                b.setOverrideRenderHighlightedSprite(() -> this.selected == bot);
+            } else {
+                b.visible = false;
+            }
+        }
+    }
+
+    /** 开关按钮文字颜色刷新（开启绿 / 关闭红；tick / 切 Tab 共用）。 */
+    private void refreshToggleLabels() {
+        if (!this.requireBotSilent()) {
+            return;
+        }
+        this.sneakButton.setMessage(Component.translatable("gui.mockplayer.action.sneak")
+                .withColor(this.selected.actions().isSneaking() ? TOGGLE_ON_COLOR : TOGGLE_OFF_COLOR));
+        this.sprintButton.setMessage(Component.translatable("gui.mockplayer.action.sprint")
+                .withColor(this.selected.actions().isSprinting() ? TOGGLE_ON_COLOR : TOGGLE_OFF_COLOR));
+        this.jumpButton.setMessage(Component.translatable("gui.mockplayer.action.jump")
+                .withColor(this.selected.actions().isJumping() ? TOGGLE_ON_COLOR : TOGGLE_OFF_COLOR));
+        this.autoRespawnButton.setMessage(Component.translatable("gui.mockplayer.action.auto_respawn")
+                .withColor(this.selected.isAutoRespawn() ? TOGGLE_ON_COLOR : TOGGLE_OFF_COLOR));
+    }
+
+    /** 附近实体按钮刷新（tick / 切 Tab 共用：实体列表 + 截断文字 + 可见性）。 */
+    private void refreshEntityButtons() {
+        boolean ready = this.requireBotSilent();
+        boolean actionsTab = this.tab == 2;
+        this.entityTargets.clear();
+        List<Entity> near = ready ? this.selected.getEntitiesNear(12.0).stream()
+                .filter(e -> !(e instanceof net.minecraft.world.entity.player.Player))
+                .sorted(Comparator.comparingDouble(e -> e.distanceToSqr(this.selected.getLocalPlayer())))
+                .limit(2).toList() : List.of();
+        for (int i = 0; i < this.entityButtons.size(); i++) {
+            Button b = this.entityButtons.get(i);
+            if (i < near.size()) {
+                Entity e = near.get(i);
+                this.entityTargets.add(e);
+                b.visible = actionsTab;
+                b.active = ready;
+                String label = e.getName().getString() + "·"
+                        + String.format(Locale.ROOT, "%.0f",
+                        Math.sqrt(e.distanceToSqr(this.selected.getLocalPlayer()))) + "m";
+                // 按按钮像素宽度截断：附近实体多/名字长时文字不溢出到旁边按钮
+                b.setMessage(Component.literal(
+                        this.font.plainSubstrByWidth(label, Math.max(4, this.sw(ENTITY_W) - 4))));
+            } else {
+                b.visible = false;
+            }
+        }
     }
 
     private void setFeedback(Component message) {

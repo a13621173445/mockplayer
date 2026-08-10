@@ -52,6 +52,8 @@ public class BotActionsImpl implements BotActions {
     /** 长按右键已交互过的方块（同一方块只 useItemOn 一次，之后持续 useItem）。 */
     private BlockPos sustainedUseLookBlock;
     private BlockPos miningPos;
+    /** 矛戳刺节流（原版 missTime=10 tick ≈ 500ms）。 */
+    private long lastStabMillis = -1000;
 
     public BotActionsImpl(BotImpl bot) {
         this.bot = bot;
@@ -265,6 +267,15 @@ public class BotActionsImpl implements BotActions {
         }
         // 长按左键（原版按住左键）：射线命中实体 → 持续攻击；方块 → 持续挖掘；空 → 挥空
         if (this.sustainedAttackLook) {
+            // 持矛戳刺：原版按住左键每 10 tick（missTime）一次 STAB，不依赖射线
+            if (player.getMainHandItem().has(net.minecraft.core.component.DataComponents.PIERCING_WEAPON)) {
+                long now = net.minecraft.util.Util.getMillis();
+                if (now - this.lastStabMillis >= 500L) {
+                    this.lastStabMillis = now;
+                    this.pierceStab();
+                }
+                return;
+            }
             net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
             if (hit instanceof net.minecraft.world.phys.EntityHitResult entityHit) {
                 if (entityHit.getEntity().isAlive()) {
@@ -285,7 +296,12 @@ public class BotActionsImpl implements BotActions {
             net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
             if (hit instanceof net.minecraft.world.phys.EntityHitResult entityHit) {
                 if (entityHit.getEntity().isAlive()) {
-                    this.interact(entityHit.getEntity());
+                    // 原版按住右键：interact 非 Success（如持矛）→ useItem（举矛蓄力）
+                    if (!(this.interactResult(entityHit.getEntity())
+                            instanceof net.minecraft.world.InteractionResult.Success)
+                            && !player.isUsingItem()) {
+                        this.useItemLikeVanilla();
+                    }
                 }
             } else if (hit instanceof net.minecraft.world.phys.BlockHitResult blockHit
                     && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
@@ -334,28 +350,55 @@ public class BotActionsImpl implements BotActions {
         }
     }
 
+    /** 原版 startAttack 持矛分支：piercingAttack（发 STAB 包）+ swing。 */
+    private void pierceStab() {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null || this.bot.getGameMode() == null) {
+            return;
+        }
+        net.minecraft.world.item.component.PiercingWeapon weapon =
+                player.getMainHandItem().get(net.minecraft.core.component.DataComponents.PIERCING_WEAPON);
+        if (weapon != null) {
+            this.bot.getGameMode().piercingAttack(weapon);
+            player.swing(InteractionHand.MAIN_HAND);
+        }
+    }
+
     @Override
     public void interact(Entity target) {
+        this.interactResult(target);
+    }
+
+    /** 右键实体（交易/喂食/骑乘等），返回原版分发结果（useLook 需判断 fallthrough）。 */
+    private net.minecraft.world.InteractionResult interactResult(Entity target) {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null || target == null || this.bot.getGameMode() == null) {
-            return;
+            return net.minecraft.world.InteractionResult.PASS;
         }
         // 交互前自动看向目标
         this.faceEntity(target);
         // 右键实体（村民交易/喂食/骑乘）：EntityHitResult 定位目标
         net.minecraft.world.phys.EntityHitResult hit = new net.minecraft.world.phys.EntityHitResult(target);
-        InteractionResult result = this.bot.getGameMode().interact(player, target, hit, InteractionHand.MAIN_HAND);
+        net.minecraft.world.InteractionResult result =
+                this.bot.getGameMode().interact(player, target, hit, InteractionHand.MAIN_HAND);
         // 与原版 Minecraft 右键分发一致：Success + swingSource==CLIENT → player.swing（本地动画 + ServerboundSwingPacket 广播）
-        if (result instanceof InteractionResult.Success success && success.swingSource() == InteractionResult.SwingSource.CLIENT) {
+        if (result instanceof net.minecraft.world.InteractionResult.Success success
+                && success.swingSource() == net.minecraft.world.InteractionResult.SwingSource.CLIENT) {
             player.swing(InteractionHand.MAIN_HAND);
         }
         this.bot.fireOnInteractEntity(target);
+        return result;
     }
 
     @Override
     public void attackLook() {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null) {
+            return;
+        }
+        // 原版 Minecraft.startAttack 持矛分支：直接戳刺（STAB 包，不依赖射线命中）
+        if (player.getMainHandItem().has(net.minecraft.core.component.DataComponents.PIERCING_WEAPON)) {
+            this.pierceStab();
             return;
         }
         net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
@@ -378,7 +421,11 @@ public class BotActionsImpl implements BotActions {
         }
         net.minecraft.world.phys.HitResult hit = this.pickLookTarget();
         if (hit instanceof net.minecraft.world.phys.EntityHitResult entityHit) {
-            this.interact(entityHit.getEntity());
+            // 原版 startUseItem：interact 非 Success（如持矛右键实体）→ 继续 useItem（举矛）
+            if (!(this.interactResult(entityHit.getEntity())
+                    instanceof net.minecraft.world.InteractionResult.Success)) {
+                this.useItemLikeVanilla();
+            }
         } else if (hit instanceof net.minecraft.world.phys.BlockHitResult blockHit
                 && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
             this.useItemOn(blockHit.getBlockPos(), blockHit.getDirection());
@@ -409,45 +456,9 @@ public class BotActionsImpl implements BotActions {
         if (player == null) {
             return null;
         }
-        // 26.2 Mojang 映射方法名：blockInteractionRange()/entityInteractionRange()
-        // （getContainerInteractionRange 是容器专用，不要用；攻击/交互范围默认 4.5/3.0，创造 +2）
-        double blockRange = player.blockInteractionRange();
-        double entityRange = player.entityInteractionRange();
-        double maxDistance = Math.max(blockRange, entityRange);
-        double maxDistanceSq = maxDistance * maxDistance;
-        net.minecraft.world.phys.Vec3 from = player.getEyePosition(1.0F);
-        net.minecraft.world.phys.HitResult blockHit = player.pick(maxDistance, 1.0F, false);
-        double blockDistanceSq = blockHit.getLocation().distanceToSqr(from);
-        if (blockHit.getType() != net.minecraft.world.phys.HitResult.Type.MISS) {
-            maxDistanceSq = blockDistanceSq;
-            maxDistance = Math.sqrt(blockDistanceSq);
-        }
-        net.minecraft.world.phys.Vec3 view = player.getViewVector(1.0F);
-        net.minecraft.world.phys.Vec3 to = from.add(
-                view.x * maxDistance, view.y * maxDistance, view.z * maxDistance);
-        net.minecraft.world.phys.AABB box = player.getBoundingBox()
-                .expandTowards(view.scale(maxDistance)).inflate(1.0, 1.0, 1.0);
-        net.minecraft.world.phys.EntityHitResult entityHit =
-                net.minecraft.world.entity.projectile.ProjectileUtil.getEntityHitResult(
-                        player, from, to, box, net.minecraft.world.entity.EntitySelector.CAN_BE_PICKED,
-                        maxDistanceSq);
-        if (entityHit != null && entityHit.getLocation().distanceToSqr(from) < blockDistanceSq) {
-            return filterLookRange(entityHit, from, entityRange);
-        }
-        return filterLookRange(blockHit, from, blockRange);
-    }
-
-    /** 原版 filterHitResult 等价：超出作用距离的命中转 MISS（带命中位置/方向）。 */
-    private static net.minecraft.world.phys.HitResult filterLookRange(
-            net.minecraft.world.phys.HitResult hit, net.minecraft.world.phys.Vec3 from, double range) {
-        net.minecraft.world.phys.Vec3 loc = hit.getLocation();
-        if (loc.closerThan(from, range)) {
-            return hit;
-        }
-        net.minecraft.core.Direction dir = net.minecraft.core.Direction.getApproximateNearest(
-                loc.x - from.x, loc.y - from.y, loc.z - from.z);
-        return net.minecraft.world.phys.BlockHitResult.miss(
-                loc, dir, net.minecraft.core.BlockPos.containing(loc));
+        // 完全复用原版 LocalPlayer.raycastHitResult（含主手 AttackRange 组件、方块/实体
+        // 最近优先与距离过滤）——不再自写射线，任何细微差异都会导致命中不一致
+        return player.raycastHitResult(1.0F, player);
     }
 
     @Override

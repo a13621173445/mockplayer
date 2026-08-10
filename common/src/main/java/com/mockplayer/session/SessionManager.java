@@ -15,6 +15,9 @@ import java.util.Collection;
 public class SessionManager {
 
     private static final SessionManager INSTANCE = new SessionManager();
+    /** 假人 level 集合（粒子隔离：假人 level 的 addParticle 不播主玩家 particleEngine）。 */
+    private static final java.util.Set<net.minecraft.client.multiplayer.ClientLevel> FAKE_LEVELS =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private final BotManagerImpl manager = new BotManagerImpl();
 
@@ -74,5 +77,52 @@ public class SessionManager {
      */
     public FakeSession getSession(String name) {
         return this.manager.getSession(name);
+    }
+
+    /** 注册假人 level（FakePlayListener 创建假人 level 后调用）。 */
+    public static void registerFakeLevel(net.minecraft.client.multiplayer.ClientLevel level) {
+        if (level != null) {
+            FAKE_LEVELS.add(level);
+        }
+    }
+
+    /** 注销假人 level（FakeSession.disconnect 时调用）。 */
+    public static void unregisterFakeLevel(net.minecraft.client.multiplayer.ClientLevel level) {
+        if (level != null) {
+            FAKE_LEVELS.remove(level);
+        }
+    }
+
+    /** 是否为假人 level（MixinClientLevel 拦截 addParticle 用）。 */
+    public static boolean isFakeLevel(net.minecraft.client.multiplayer.ClientLevel level) {
+        return FAKE_LEVELS.contains(level);
+    }
+
+    /** 假人粒子：记录到对应假人 state，不加入主玩家 particleEngine。 */
+    public static void recordFakeParticle(net.minecraft.client.multiplayer.ClientLevel level,
+                                          net.minecraft.core.particles.ParticleOptions particle,
+                                          double x, double y, double z) {
+        for (String name : INSTANCE.getFakePlayerNames()) {
+            FakeSession session = INSTANCE.getSession(name);
+            if (session != null && session.getFakeLevel() == level) {
+                // ParticleType 不重写 toString()，直接 toString 是类名垃圾；用注册表 key（minecraft:block）
+                net.minecraft.resources.Identifier key =
+                        net.minecraft.core.registries.BuiltInRegistries.PARTICLE_TYPE.getKey(particle.getType());
+                session.getState().recordParticle(key != null ? key.toString() : particle.getType().toString(), x, y, z);
+                return;
+            }
+        }
+    }
+
+    /** 假人音效：记录到对应假人 state，不播放到主玩家 SoundManager（2001 等 level 事件链路）。 */
+    public static void recordFakeSound(net.minecraft.client.multiplayer.ClientLevel level,
+                                       String description, double x, double y, double z) {
+        for (String name : INSTANCE.getFakePlayerNames()) {
+            FakeSession session = INSTANCE.getSession(name);
+            if (session != null && session.getFakeLevel() == level) {
+                session.getState().recordSound(description, x, y, z);
+                return;
+            }
+        }
     }
 }

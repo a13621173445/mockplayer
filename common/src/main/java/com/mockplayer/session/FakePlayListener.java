@@ -137,6 +137,7 @@ public class FakePlayListener extends ClientPacketListener {
                 spawnInfo.seed(),
                 seaLevel
         ));
+        com.mockplayer.session.SessionManager.registerFakeLevel(self.mockplayer$getLevel());
         // 假人 chunk 缓存按配置默认半径（默认 2）：本地只保留更少区块，节约内存
         self.mockplayer$getLevel().getChunkSource().updateViewRadius(
                 com.mockplayer.config.MockplayerConfig.get().getFakePlayerChunkRadius());
@@ -963,7 +964,9 @@ public class FakePlayListener extends ClientPacketListener {
             boolean hasRelative = packet.relatives().contains(net.minecraft.world.entity.Relative.X)
                     || packet.relatives().contains(net.minecraft.world.entity.Relative.Y)
                     || packet.relatives().contains(net.minecraft.world.entity.Relative.Z);
-            boolean interpolate = self.mockplayer$getLevel().isTickingEntity(entity) || !entity.isLocalInstanceAuthoritative() || hasRelative;
+            // 原版对非本地实体用插值（lerp）更新位置；假人 level 不推进实体插值，
+            // 位置会永远停在旧值 → 假人无渲染，直接 snap 保证位置准确（等价替代，不丢数据）
+            boolean interpolate = false;
             boolean wasInterpolated = MockplayerClientPacketListenerAccessor.mockplayer$setValuesFromPositionPacket(
                     packet.change(), packet.relatives(), entity, interpolate);
             entity.setOnGround(packet.onGround());
