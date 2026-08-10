@@ -292,7 +292,7 @@
     "gui.mockplayer.status.no_bot": "No bot selected",
     "gui.mockplayer.status.not_playing": "Bot is not ready",
     "gui.mockplayer.status.pos": "Pos %s  Facing %s",
-    "gui.mockplayer.status.speed": "%s m/s  Mem %s  Chunk %s",
+    "gui.mockplayer.status.speed": "%s m/s  Mem %s  Chunk radius %s",
     "gui.mockplayer.status.slot": "Slot %s [%s]",
     "gui.mockplayer.status.container": "Container: %s",
     "gui.mockplayer.status.auto_respawn": "Auto respawn: %s",
