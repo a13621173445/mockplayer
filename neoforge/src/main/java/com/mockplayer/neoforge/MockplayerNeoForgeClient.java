@@ -35,6 +35,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
+import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.ClientCommandHandler;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
@@ -61,6 +62,8 @@ public class MockplayerNeoForgeClient {
         NeoForge.EVENT_BUS.addListener(MockplayerNeoForgeClient::onPlayerLogout);
         // 配置保存/重载后立即重建命令树（GUI 保存即热重载）
         MockplayerConfig.onReload(MockplayerNeoForgeClient::reloadCommands);
+        // 原版按键注册（mod 总线 IModBusEvent）：GUI 快捷键走原版 KeyMapping 链路
+        modBus.addListener(MockplayerNeoForgeClient::registerKeyMappings);
         // YACL 可选：缺 YACL 时模组列表不出现「配置」按钮，配置仍可手改 JSON（零崩溃）
         if (ModList.get().isLoaded("yet_another_config_lib_v3")) {
             container.registerExtensionPoint(IConfigScreenFactory.class,
@@ -194,8 +197,13 @@ public class MockplayerNeoForgeClient {
     private static void onClientTick(ClientTickEvent.Post event) {
         // 每 tick 驱动假人连接，保持在线
         SessionManager.getInstance().tick();
-        // GUI 快捷键（配置 guiEnabled/guiKeyName 控制，BotGui 内部边沿检测）
+        // GUI 快捷键：只消费原版 KeyMapping 点击（界面打开时不触发）
         BotGui.tick(Minecraft.getInstance());
+    }
+
+    /** 原版按键注册：键位/禁用由 BotGui.applyKeyFromConfig 在配置热重载时同步。 */
+    private static void registerKeyMappings(RegisterKeyMappingsEvent event) {
+        event.register(BotGui.KEY_BINDING);
     }
 
     private static void onPlayerLogout(ClientPlayerNetworkEvent.LoggingOut event) {

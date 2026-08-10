@@ -5,6 +5,7 @@ import com.mockplayer.config.MockplayerConfig;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
@@ -12,7 +13,8 @@ import net.minecraft.network.chat.Component;
  * 假人控制台 GUI 入口与多分辨率纯函数（common，双端平台 tick 共用）。
  *
  * 输入：配置 guiEnabled（总开关，默认 true）+ guiKeyName（GLFW key name，空串 = 禁用）
- * 输出：平台 tick 检测按键按下 → {@link #open(Minecraft)} 打开 {@link BotControlScreen}
+ * 输出：原版 {@link KeyMapping} 注册后由原版键盘链路计数（界面打开不计数），
+ *       平台 tick 调 {@link #tick(Minecraft)} 消费点击 → {@link #open(Minecraft)} 打开 {@link BotControlScreen}
  *
  * 渲染路径探针仅测试属性 mockplayer.guiRenderProbe=true 时记录（生产默认零开销）。
  */
@@ -23,15 +25,32 @@ public final class BotGui {
     public static final int PANEL_H = 240;
     public static final int PAD = 24;
 
+    /** 快捷键注册名（语言文件 key.mockplayer.openGui）。 */
+    public static final String KEY_NAME = "key.mockplayer.openGui";
+
+    /**
+     * 原版按键：聊天/命令等界面打开时原版键盘链路不计数（与原版 handleKeybinds 门禁一致）。
+     * 默认绑定 G（与配置 DEFAULT_GUI_KEY_NAME 一致），改键/禁用由 {@link #applyKeyFromConfig()} 同步。
+     */
+    public static final KeyMapping KEY_BINDING = new KeyMapping(
+            KEY_NAME,
+            InputConstants.Type.KEYSYM,
+            InputConstants.KEY_G,
+            KeyMapping.Category.MISC);
+
     /** 渲染路径探针计数（仅测试属性开启时记录；私有字段 + 测试反射读取）。 */
     private static volatile int openCount;
     private static volatile int frameCount;
     private static volatile int tickCount;
     private static volatile String lastTitle = "";
-    /** 按键边沿检测（按下一次只打开一次，防按住连开）。 */
-    private static boolean keyDownPrev;
 
     private BotGui() {
+    }
+
+    static {
+        // 配置热重载（改键/禁用）立即同步原版 KeyMapping；静态块注册保证 Fabric/NeoForge 共用
+        MockplayerConfig.onReload(BotGui::applyKeyFromConfig);
+        applyKeyFromConfig();
     }
 
     /** GUI 功能是否可用（配置总开关 && 按键未禁用）。 */
@@ -59,21 +78,34 @@ public final class BotGui {
     }
 
     /**
-     * 平台 tick 调用：配置按键按下（边沿）→ 打开 GUI。
-     * 按键名非法/禁用时直接忽略；主线程调用。
+     * 平台 tick 调用：消费原版 {@link KeyMapping} 的点击。
+     * 有 screen/overlay 时不消费（与原版 {@link Minecraft#handleKeybinds()} 门禁一致，
+     * 聊天框里按 G 不会弹 GUI）；点击按原版一次一消费，防按住连开。
+     * 主线程调用。
      */
     public static void tick(Minecraft mc) {
-        String keyName = MockplayerConfig.get().getGuiKeyName();
-        if (ModCommands.isDisabled(keyName)) {
-            BotGui.keyDownPrev = false;
+        if (mc.gui.screen() != null || mc.gui.overlay() != null) {
             return;
         }
-        int key = InputConstants.getKey(keyName).getValue();
-        boolean down = InputConstants.isKeyDown(mc.getWindow(), key);
-        if (down && !BotGui.keyDownPrev) {
+        while (KEY_BINDING.consumeClick()) {
             open(mc);
         }
-        BotGui.keyDownPrev = down;
+    }
+
+    /**
+     * 把配置 guiKeyName 同步到原版 KeyMapping：空串 = 禁用（UNKNOWN）；
+     * 非法键名同样落到 UNKNOWN（不崩客户端）。改键后重建原版按键路由 MAP。
+     */
+    public static void applyKeyFromConfig() {
+        String keyName = MockplayerConfig.get().getGuiKeyName();
+        InputConstants.Key key;
+        try {
+            key = ModCommands.isDisabled(keyName) ? InputConstants.UNKNOWN : InputConstants.getKey(keyName);
+        } catch (IllegalArgumentException e) {
+            key = InputConstants.UNKNOWN;
+        }
+        KEY_BINDING.setKey(key);
+        KeyMapping.resetMapping();
     }
 
     /**

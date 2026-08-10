@@ -226,6 +226,7 @@
     "config.mockplayer.option.guiEnabled.description": "Master switch for the bot control screen. When off, the key does not open it; commands still work.",
     "config.mockplayer.option.guiKeyName": "GUI open key",
     "config.mockplayer.option.guiKeyName.description": "GLFW key name (e.g. key.keyboard.g). Empty to disable the keybinding.",
+    "key.mockplayer.openGui": "Open Bot Console",
     "gui.mockplayer.title": "Bot Console",
     "gui.mockplayer.close": "Close",
     "gui.mockplayer.new_hint": "New name...",

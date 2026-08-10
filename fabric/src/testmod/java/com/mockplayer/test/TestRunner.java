@@ -15,6 +15,9 @@ import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.session.EventRecorder;
 import com.mockplayer.session.FakePlayerState;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -6684,22 +6687,60 @@ public final class TestRunner {
                 }
                 bgStep(14);
             }
-            case 14 -> { // guiEnabled=false：打不开 + 命令不受影响；恢复后能打开
+            case 14 -> { // 原版 KeyMapping：绑定/消费打开/界面门禁/禁用改键/guiEnabled 开关
                 if (!bgDisabledChecked) {
                     bgDisabledChecked = true;
+                    // 默认配置：KeyMapping 已注册并绑定（26.2 无公开 getKey，绑定用行为断言）
+                    check("key mapping registered", com.mockplayer.gui.BotGui.KEY_BINDING != null
+                            && !com.mockplayer.gui.BotGui.KEY_BINDING.isUnbound());
+                    check("key mapping name", com.mockplayer.gui.BotGui.KEY_NAME
+                            .equals(com.mockplayer.gui.BotGui.KEY_BINDING.getName()));
+                    // 模拟原版键盘链路点击 → 无界面时 tick 消费 → 打开 GUI
                     mc.gui.setScreen(null);
+                    KeyMapping.click(InputConstants.getKey("key.keyboard.g"));
+                    com.mockplayer.gui.BotGui.tick(mc);
+                    check("keybind click opens gui",
+                            mc.gui.screen() instanceof com.mockplayer.gui.BotControlScreen);
+                    mc.gui.setScreen(null);
+                    // 聊天界面打开：我们按原版语义不消费（tick 门禁），GUI 不会盖在聊天框上
+                    mc.gui.setScreen(new net.minecraft.client.gui.screens.ChatScreen("", false));
+                    KeyMapping.click(InputConstants.getKey("key.keyboard.g"));
+                    com.mockplayer.gui.BotGui.tick(mc);
+                    check("keybind blocked while chat open",
+                            mc.gui.screen() instanceof net.minecraft.client.gui.screens.ChatScreen
+                                    && !(mc.gui.screen() instanceof com.mockplayer.gui.BotControlScreen));
+                    mc.gui.setScreen(null);
+                    while (com.mockplayer.gui.BotGui.KEY_BINDING.consumeClick()) {
+                        // 清掉聊天门禁测试残留的点击计数，避免污染后续步骤
+                    }
+                    // 配置空键名 → KeyMapping 解绑（UNKNOWN），open 也被禁用
                     ModConfig off = new ModConfig();
-                    off.setGuiEnabled(false);
+                    off.setGuiKeyName("");
                     MockplayerConfig.save(off);
+                    check("key unbound when disabled", com.mockplayer.gui.BotGui.KEY_BINDING.isUnbound());
+                    // 解绑后按 G 不再触发打开（行为断言绑定已移除）
+                    KeyMapping.click(InputConstants.getKey("key.keyboard.g"));
+                    com.mockplayer.gui.BotGui.tick(mc);
+                    check("unbound key does not open", mc.gui.screen() == null);
+                    check("gui key disabled open blocked", !com.mockplayer.gui.BotGui.open(mc)
+                            && !(mc.gui.screen() instanceof com.mockplayer.gui.BotControlScreen));
+                    // guiEnabled=false：open 被总开关挡住，命令不受影响
+                    ModConfig off2 = new ModConfig();
+                    off2.setGuiEnabled(false);
+                    MockplayerConfig.save(off2);
                     check("gui disabled open blocked", !com.mockplayer.gui.BotGui.open(mc)
                             && !(mc.gui.screen() instanceof com.mockplayer.gui.BotControlScreen));
                     String help = com.mockplayer.session.ControlCommands.help(botName).getString();
                     check("commands unaffected when gui off", !help.isBlank()
                             && help.contains(net.minecraft.network.chat.Component.translatable(
                             "commands.mockplayer.control.action.attack").getString()));
+                    // 恢复默认配置 → 重新绑定 + 可打开
                     MockplayerConfig.save(new ModConfig());
-                    check("gui re-enabled opens", com.mockplayer.gui.BotGui.open(mc)
-                            && mc.gui.screen() instanceof com.mockplayer.gui.BotControlScreen);
+                    check("gui re-bound", !com.mockplayer.gui.BotGui.KEY_BINDING.isUnbound());
+                    KeyMapping.click(InputConstants.getKey("key.keyboard.g"));
+                    com.mockplayer.gui.BotGui.tick(mc);
+                    check("gui re-enabled opens",
+                            mc.gui.screen() instanceof com.mockplayer.gui.BotControlScreen);
                     mc.gui.setScreen(null);
                 }
                 check("gui screen closed", mc.gui.screen() == null);

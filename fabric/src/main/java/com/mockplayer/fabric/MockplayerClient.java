@@ -23,6 +23,7 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.client.Minecraft;
 
@@ -48,6 +49,8 @@ public class MockplayerClient implements ClientModInitializer {
     public void onInitializeClient() {
         // 配置保存/重载后立即重建命令树（GUI 保存即热重载）
         MockplayerConfig.onReload(MockplayerClient::reloadCommands);
+        // 原版按键注册：GUI 快捷键（配置 guiEnabled/guiKeyName 由 BotGui 静态块同步）
+        KeyMappingHelper.registerKeyMapping(BotGui.KEY_BINDING);
         registerCommands();
         registerTick();
         registerDisconnect();
@@ -181,7 +184,7 @@ public class MockplayerClient implements ClientModInitializer {
         // 每 tick 驱动假人连接，保持在线
         ClientTickEvents.END_CLIENT_TICK.register(minecraft -> {
             SessionManager.getInstance().tick();
-            // GUI 快捷键（配置 guiEnabled/guiKeyName 控制，BotGui 内部边沿检测）
+            // GUI 快捷键：只消费原版 KeyMapping 点击（界面打开时不触发）
             BotGui.tick(minecraft);
         });
     }

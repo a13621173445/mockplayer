@@ -226,6 +226,7 @@
     "config.mockplayer.option.guiEnabled.description": "假人控制台总开关。关闭后按键不会打开界面，命令不受影响。",
     "config.mockplayer.option.guiKeyName": "打开 GUI 的按键",
     "config.mockplayer.option.guiKeyName.description": "GLFW 按键名（例如 key.keyboard.g）。留空 = 禁用按键。",
+    "key.mockplayer.openGui": "打开假人控制台",
     "gui.mockplayer.title": "假人控制台",
     "gui.mockplayer.close": "关闭",
     "gui.mockplayer.new_hint": "新假人名字...",
