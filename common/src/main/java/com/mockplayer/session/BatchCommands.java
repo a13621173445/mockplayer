@@ -217,7 +217,7 @@ public final class BatchCommands {
 
     // ===== 命令树节点（双端共用） =====
 
-    /** /newplayer batch <prefix> <count> [interval [concurrency]] 子树。 */
+    /** {@code /newplayer batch <prefix> <count> [interval [concurrency]]} 子树。 */
     public static <S extends SharedSuggestionProvider> LiteralArgumentBuilder<S> newPlayerBatchNode(
             CommandSupport.CommandFactory<S> f) {
         return f.literal("batch")
@@ -244,7 +244,7 @@ public final class BatchCommands {
                                                 })))));
     }
 
-    /** /delplayer batch <all|prefix> [--dry] 子树。 */
+    /** {@code /delplayer batch <all|prefix> [--dry]} 子树。 */
     public static <S extends SharedSuggestionProvider> LiteralArgumentBuilder<S> delPlayerBatchNode(
             CommandSupport.CommandFactory<S> f) {
         return f.literal("batch")

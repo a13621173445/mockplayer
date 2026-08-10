@@ -52,7 +52,7 @@ public final class DebugNameTagInfo {
         DebugNameTagInfo.lastNameOffsetY = nameOffsetY;
     }
 
-    /** F3 调试信息打开 && 配置启用（渲染 Mixin 调用）。 */
+    /** F3 调试信息打开且配置启用（渲染 Mixin 调用）。 */
     public static boolean shouldShow() {
         return Minecraft.getInstance().getDebugOverlay().showDebugScreen()
                 && MockplayerConfig.get().isDebugOverlayEnabled();

@@ -64,7 +64,7 @@ public final class BotGui {
         applyKeyFromConfig();
     }
 
-    /** GUI 功能是否可用（配置总开关 && 按键未禁用）。 */
+    /** GUI 功能是否可用（配置总开关且按键未禁用）。 */
     public static boolean shouldOpen() {
         var cfg = MockplayerConfig.get();
         return cfg.isGuiEnabled() && !ModCommands.isDisabled(cfg.getGuiKeyName());
@@ -124,7 +124,7 @@ public final class BotGui {
      *
      * @param width  逻辑屏幕宽（guiScaledWidth）
      * @param height 逻辑屏幕高（guiScaledHeight）
-     * @return 缩放系数（0 < scale <= 1）
+     * @return 缩放系数（{@code 0 < scale <= 1}）
      */
     public static float layoutScale(int width, int height) {
         float sx = (width - PAD * 2) / (float) PANEL_W;
