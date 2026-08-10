@@ -282,6 +282,7 @@
     "gui.mockplayer.feedback.inventory_click": "Inventory click: %s",
     "gui.mockplayer.feedback.container_click": "Container click: %s",
     "gui.mockplayer.feedback.hotbar_selected": "Hotbar: %s",
+    "gui.mockplayer.feedback.selected_bot": "Selected: %s",
     "gui.mockplayer.value.on": "ON",
     "gui.mockplayer.value.off": "OFF",
     "gui.mockplayer.value.empty": "empty",

@@ -282,6 +282,7 @@
     "gui.mockplayer.feedback.inventory_click": "背包点击：%s",
     "gui.mockplayer.feedback.container_click": "容器点击：%s",
     "gui.mockplayer.feedback.hotbar_selected": "快捷栏：%s",
+    "gui.mockplayer.feedback.selected_bot": "选中：%s",
     "gui.mockplayer.value.on": "开",
     "gui.mockplayer.value.off": "关",
     "gui.mockplayer.value.empty": "空",

@@ -6168,6 +6168,10 @@ public final class TestRunner {
     private static boolean bgHotbarSlotClicked;
     private static boolean bgXpGiven;
     private static boolean bgAttackActionsTab;
+    private static boolean bgShieldGiven;
+    private static boolean bgShieldHeld;
+    private static volatile boolean bgShieldServerUsing;
+    private static net.minecraft.client.gui.components.Button bgShieldUseButton;
 
     private static void runBotGui(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -6205,6 +6209,8 @@ public final class TestRunner {
                 if (!bgGuiOpened) {
                     bgGuiOpened = true;
                     check("bot gui opened", com.mockplayer.gui.BotGui.open(mc));
+                    check("selected bot label", com.mockplayer.gui.BotControlScreen
+                            .selectedText(bot).getString().contains(botName));
                     check("screen is BotControlScreen",
                             mc.gui.screen() instanceof com.mockplayer.gui.BotControlScreen);
                     com.mockplayer.gui.BotControlScreen screen =
@@ -7177,6 +7183,13 @@ public final class TestRunner {
                     check("buttons semi-transparent",
                             com.mockplayer.gui.BotControlScreen.BUTTON_ALPHA > 0.0F
                                     && com.mockplayer.gui.BotControlScreen.BUTTON_ALPHA < 1.0F);
+                    check("xp bar uses vanilla sprites",
+                            com.mockplayer.gui.BotControlScreen.XP_BAR_BACKGROUND.equals(
+                                    net.minecraft.resources.Identifier.withDefaultNamespace(
+                                            "hud/experience_bar_background"))
+                                    && com.mockplayer.gui.BotControlScreen.XP_BAR_PROGRESS.equals(
+                                    net.minecraft.resources.Identifier.withDefaultNamespace(
+                                            "hud/experience_bar_progress")));
                     mc.gui.setScreen(null);
                     com.mockplayer.gui.BotGui.open(mc);
                     net.minecraft.client.gui.screens.Screen opened = bgScreen();
@@ -7206,11 +7219,98 @@ public final class TestRunner {
                                     + " progress=" + com.mockplayer.gui.BotGui.probeXpBarProgress());
                     mc.gui.setScreen(null);
                     System.clearProperty("mockplayer.guiRenderProbe");
-                    finishSuite();
+                    bgStep(27);
                 } else if (++waitTicks > 100) {
                     check("xp bar rendered with level and progress", false,
                             "level=" + com.mockplayer.gui.BotGui.probeXpBarLevel()
                                     + " progress=" + com.mockplayer.gui.BotGui.probeXpBarProgress());
+                    mc.gui.setScreen(null);
+                    System.clearProperty("mockplayer.guiRenderProbe");
+                    bgStep(27);
+                }
+            }
+            case 27 -> { // 长按右键举盾：主手剑+副手盾 → 按住 use_look → 副手盾 using → 松开
+                if (!bgShieldGiven) {
+                    bgShieldGiven = true;
+                    System.setProperty("mockplayer.guiRenderProbe", "true");
+                    server.execute(() -> {
+                        var cmds = server.getCommands();
+                        var src = server.createCommandSourceStack();
+                        cmds.performPrefixedCommand(src, "item replace entity " + botName
+                                + " weapon.mainhand with minecraft:iron_sword");
+                        cmds.performPrefixedCommand(src, "item replace entity " + botName
+                                + " weapon.offhand with minecraft:shield");
+                    });
+                    waitTicks = 0;
+                    return;
+                }
+                net.minecraft.client.player.LocalPlayer lp = bot.getLocalPlayer();
+                if (!bgShieldHeld) {
+                    if (lp == null || !lp.getOffhandItem().is(net.minecraft.world.item.Items.SHIELD)) {
+                        if (++waitTicks > 120) {
+                            fail("shield give timeout");
+                            bgStep(28);
+                        }
+                        return;
+                    }
+                    mc.gui.setScreen(null);
+                    com.mockplayer.gui.BotGui.open(mc);
+                    net.minecraft.client.gui.screens.Screen opened = bgScreen();
+                    if (opened instanceof com.mockplayer.gui.BotControlScreen s) {
+                        net.minecraft.client.gui.components.Button actions =
+                                bgFindButton(s, "gui.mockplayer.tab.actions");
+                        if (actions != null) {
+                            bgClick(actions);
+                        }
+                    }
+                    bgShieldHeld = true;
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 5) {
+                    return; // 等动作 Tab 激活
+                }
+                if (bgShieldUseButton == null) {
+                    bgShieldUseButton = bgFindButton(bgScreen(), "gui.mockplayer.action.use_look");
+                    if (bgShieldUseButton == null) {
+                        fail("use look button missing");
+                        bgStep(28);
+                        return;
+                    }
+                    bgClick(bgShieldUseButton); // 按住（长按开始）
+                    waitTicks = 0;
+                    return;
+                }
+                server.execute(() -> {
+                    var sp = server.getPlayerList().getPlayerByName(botName);
+                    bgShieldServerUsing = sp != null && sp.isUsingItem()
+                            && sp.getUseItem().is(net.minecraft.world.item.Items.SHIELD);
+                });
+                boolean clientUsing = lp != null && lp.isUsingItem()
+                        && lp.getUsedItemHand() == net.minecraft.world.InteractionHand.OFF_HAND;
+                if (clientUsing && bgShieldServerUsing) {
+                    check("hold use raises offhand shield", true);
+                    check("hold use shield server using", true);
+                    bgRelease(bgShieldUseButton);
+                    waitTicks = 0;
+                    bgStep(28);
+                } else if (++waitTicks > 150) {
+                    fail("shield raise timeout client=" + clientUsing
+                            + " server=" + bgShieldServerUsing);
+                    bgRelease(bgShieldUseButton);
+                    bgStep(28);
+                }
+            }
+            case 28 -> { // 松开后盾牌释放（不再 using）
+                net.minecraft.client.player.LocalPlayer lp = bot.getLocalPlayer();
+                if (lp == null || !lp.isUsingItem()) {
+                    check("hold use releases shield", true);
+                    mc.gui.setScreen(null);
+                    System.clearProperty("mockplayer.guiRenderProbe");
+                    finishSuite();
+                } else if (++waitTicks > 80) {
+                    check("hold use releases shield", false,
+                            "using=" + lp.isUsingItem());
                     mc.gui.setScreen(null);
                     System.clearProperty("mockplayer.guiRenderProbe");
                     finishSuite();

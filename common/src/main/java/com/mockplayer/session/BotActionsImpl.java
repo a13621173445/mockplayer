@@ -162,6 +162,11 @@ public class BotActionsImpl implements BotActions {
         this.sustainedUseLook = false;
         this.sustainedUseLookBlock = null;
         this.stopMining();
+        // 原版松开右键：正在使用物品（举盾/拉弓/吃东西）→ releaseUsingItem
+        LocalPlayer usingPlayer = this.bot.getLocalPlayer();
+        if (usingPlayer != null && usingPlayer.isUsingItem()) {
+            this.releaseUsingItem();
+        }
         return this;
     }
 
@@ -288,9 +293,12 @@ public class BotActionsImpl implements BotActions {
                     this.sustainedUseLookBlock = blockHit.getBlockPos();
                     this.useItemOn(blockHit.getBlockPos(), blockHit.getDirection());
                 }
-                this.useItem(InteractionHand.MAIN_HAND);
+                this.useItemLikeVanilla();
             } else {
-                this.useItem(InteractionHand.MAIN_HAND);
+                // 原版按住右键：未在使用时才 startUseItem（主手优先，副手 fallback 举盾）
+                if (!player.isUsingItem()) {
+                    this.useItemLikeVanilla();
+                }
             }
         }
     }
@@ -520,6 +528,30 @@ public class BotActionsImpl implements BotActions {
             player.swing(hand);
         }
         this.bot.fireOnUseItem(hand, player.getItemInHand(hand));
+    }
+
+    /**
+     * 原版 startUseItem 的空气/交互失败分支：主手优先，主手无使用动画（如剑）时
+     * 自动 fallback 副手（如副手盾举盾），与原版按住右键行为一致。
+     */
+    public void useItemLikeVanilla() {
+        LocalPlayer player = this.bot.getLocalPlayer();
+        if (player == null || this.bot.getGameMode() == null) {
+            return;
+        }
+        for (InteractionHand hand : InteractionHand.values()) {
+            if (player.getItemInHand(hand).isEmpty()) {
+                continue;
+            }
+            InteractionResult result = this.bot.getGameMode().useItem(player, hand);
+            if (result instanceof InteractionResult.Success success) {
+                if (success.swingSource() == InteractionResult.SwingSource.CLIENT) {
+                    player.swing(hand);
+                }
+                this.bot.fireOnUseItem(hand, player.getItemInHand(hand));
+                return;
+            }
+        }
     }
 
     @Override

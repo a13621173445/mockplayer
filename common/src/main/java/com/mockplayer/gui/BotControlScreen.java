@@ -54,6 +54,11 @@ public class BotControlScreen extends Screen {
     private static final int FEEDBACK_Y = BotGui.PANEL_H - 14;
     private static final int CELL = 20;
     private static final int SLOT = 18;
+    /** 原版 HUD 经验条 sprite（与主玩家 ExperienceBar 同源）。 */
+    public static final Identifier XP_BAR_BACKGROUND =
+            Identifier.withDefaultNamespace("hud/experience_bar_background");
+    public static final Identifier XP_BAR_PROGRESS =
+            Identifier.withDefaultNamespace("hud/experience_bar_progress");
 
     // ===== 半透明面板配色（alpha < 0xFF，透出游戏场景） =====
     public static final int PANEL_BG_TOP = 0xB0253047;
@@ -376,10 +381,10 @@ public class BotControlScreen extends Screen {
         @Override
         public void onRelease(MouseButtonEvent event) {
             this.pressed = false;
-            if (this.sustained) {
-                this.holdEnd.run();
-                this.sustained = false;
-            }
+            // 单击也要释放：原版点一下右键 = startUseItem，松开键即 releaseUsingItem；
+            // 长按则 stopSustained 同时负责持续停止与物品释放
+            this.holdEnd.run();
+            this.sustained = false;
         }
 
         /** tick 驱动：按住超过阈值 → 转入持续动作。 */
@@ -985,6 +990,11 @@ public class BotControlScreen extends Screen {
                 : this.feedback.getString().isEmpty() ? 0xFFAAAAAA : 0xFF55FF55;
         graphics.centeredText(this.font, this.feedback,
                 this.sx(BotGui.PANEL_W / 2), this.sy(FEEDBACK_Y), feedbackColor);
+        // 底部常驻：当前选中假人（所有 Tab 都显示，不只在快捷栏）
+        Component selectedText = selectedText(this.selected);
+        graphics.text(this.font, selectedText,
+                this.sx(BotGui.PANEL_W - 8 - this.font.width(selectedText)),
+                this.sy(FEEDBACK_Y), 0xFFB0C4DE);
         // 左栏标题
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.bots"),
                 this.sx(LIST_X), this.sy(26), 0xFF7FB2FF);
@@ -1007,6 +1017,14 @@ public class BotControlScreen extends Screen {
         }
     }
 
+    /** 底部常驻「当前选中假人」文本（绘制与测试共用）。 */
+    public static Component selectedText(Bot selected) {
+        return Component.translatable("gui.mockplayer.feedback.selected_bot",
+                selected == null
+                        ? Component.translatable("gui.mockplayer.value.none")
+                        : Component.literal(selected.getName()));
+    }
+
     private void drawStatus(GuiGraphicsExtractor graphics) {
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.status"),
                 this.sx(CONTENT_X), this.sy(CONTENT_Y), 0xFF7FB2FF);
@@ -1022,22 +1040,37 @@ public class BotControlScreen extends Screen {
         this.drawXpBar(graphics, y + 4);
     }
 
-    /** 状态 Tab 经验条（主玩家 HUD 同款语义：绿色渐变填充 + 等级数字）。 */
+    /**
+     * 状态 Tab 经验条：与主玩家 HUD 同款（原版 sprite 背景 182x5 + 进度裁剪 +
+     * ContextualBar 同款绿色等级文字）。
+     */
     private void drawXpBar(GuiGraphicsExtractor graphics, int y) {
         net.minecraft.client.player.LocalPlayer player = this.selected.getLocalPlayer();
         if (player == null) {
             return;
         }
-        int x = this.sx(CONTENT_X);
-        int w = this.sw(CONTENT_W);
-        int h = this.sh(4);
-        graphics.fill(x, y, x + w, y + h, 0x8F000000); // 半透明背景
-        int fill = Math.round(w * player.experienceProgress);
-        if (fill > 0) {
-            graphics.fillGradient(x, y, x + fill, y + h, 0xFF80FF20, 0xFF64FF20);
+        // 面板内居中放原版 182x5 经验条
+        int x = this.sx(CONTENT_X + (CONTENT_W - 182) / 2);
+        if (player.getXpNeededForNextLevel() > 0) {
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, XP_BAR_BACKGROUND, x, y, 182, 5);
+            int progress = (int) (player.experienceProgress * 183.0F);
+            if (progress > 0) {
+                // 原版裁剪：从进度 sprite 裁 0..progress 宽
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, XP_BAR_PROGRESS,
+                        182, 5, 0, 0, x, y, progress, 5);
+            }
         }
-        graphics.text(this.font, String.valueOf(player.experienceLevel),
-                x + w - this.sw(14), y - this.sh(9), 0xFFFFFF, true);
+        // 等级文字：ContextualBar.extractExperienceLevel 同款（绿色 + 四向黑阴影）
+        if (player.experienceLevel > 0) {
+            Component level = Component.translatable("gui.experience.level", player.experienceLevel);
+            int tx = x + (182 - this.font.width(level)) / 2;
+            int ty = y - 11;
+            graphics.text(this.font, level, tx + 1, ty, -16777216, false);
+            graphics.text(this.font, level, tx - 1, ty, -16777216, false);
+            graphics.text(this.font, level, tx, ty + 1, -16777216, false);
+            graphics.text(this.font, level, tx, ty - 1, -16777216, false);
+            graphics.text(this.font, level, tx, ty, -8323296, false);
+        }
         com.mockplayer.gui.BotGui.recordXpBar(player.experienceLevel, player.experienceProgress);
     }
 
