@@ -6187,6 +6187,9 @@ public final class TestRunner {
     private static boolean bgListChecked;
     private static boolean bgListSecondShown;
     private static boolean bgListSecondChecked;
+    private static boolean bgChunkActionsTab;
+    private static boolean bgChatActionsTab;
+    private static boolean bgAutoActionsTab;
 
     private static void runBotGui(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -6226,6 +6229,26 @@ public final class TestRunner {
                     check("bot gui opened", com.mockplayer.gui.BotGui.open(mc));
                     check("selected bot label", com.mockplayer.gui.BotControlScreen
                             .selectedText(bot).getString().contains(botName));
+                    // 所有控件必须完整落在面板内（防任何布局溢出）
+                    int pw = mc.getWindow().getGuiScaledWidth();
+                    int ph = mc.getWindow().getGuiScaledHeight();
+                    int px = com.mockplayer.gui.BotGui.panelX(pw, ph);
+                    int py = com.mockplayer.gui.BotGui.panelY(pw, ph);
+                    int pwr = px + com.mockplayer.gui.BotGui.panelWidth(pw, ph);
+                    int phr = py + com.mockplayer.gui.BotGui.panelHeight(pw, ph);
+                    boolean inside = true;
+                    int outsideCount = 0;
+                    for (Object child : bgScreen().children()) {
+                        if (child instanceof net.minecraft.client.gui.components.AbstractWidget w) {
+                            if (w.getX() < px || w.getY() < py
+                                    || w.getX() + w.getWidth() > pwr
+                                    || w.getY() + w.getHeight() > phr) {
+                                inside = false;
+                                outsideCount++;
+                            }
+                        }
+                    }
+                    check("all widgets inside panel", inside, "outside=" + outsideCount);
                     check("screen is BotControlScreen",
                             mc.gui.screen() instanceof com.mockplayer.gui.BotControlScreen);
                     com.mockplayer.gui.BotControlScreen screen =
@@ -6254,8 +6277,10 @@ public final class TestRunner {
                 java.util.List<net.minecraft.network.chat.Component> lines =
                         com.mockplayer.gui.BotControlScreen.statusLines(bot);
                 int health = Math.round(bot.getLocalPlayer().getHealth());
-                check("status health line", lines.stream().anyMatch(l ->
-                        l.getString().startsWith("❤" + health)));
+                    check("status health line", lines.stream().anyMatch(l ->
+                            l.getString().startsWith("❤" + health)));
+                    check("health food bars rendered",
+                            com.mockplayer.gui.BotGui.probeHealthFoodCount() > 0);
                 check("status food line", lines.stream().anyMatch(l -> l.getString().contains("🍗")));
                 check("status pos line", lines.stream().anyMatch(l ->
                         l.getString().contains("位置") || l.getString().contains("Pos")));
@@ -6639,21 +6664,21 @@ public final class TestRunner {
                     bgStep(10);
                 }
             }
-            case 10 -> { // 关容器按钮 → 服务端菜单关闭
+            case 10 -> { // 背包容器模式 X 按钮 → 服务端菜单关闭
                 com.mockplayer.gui.BotControlScreen screen = bgScreen();
                 if (screen == null) {
                     fail("gui screen lost");
                     bgStep(11);
                     return;
                 }
-                // 关容器按钮只在动作 Tab 可见/激活：先切回动作 Tab
+                // X 按钮只在背包 Tab 容器模式显示：确保在背包 Tab
                 if (!bgChestActionsTab) {
                     bgChestActionsTab = true;
                     waitTicks = 0;
-                    net.minecraft.client.gui.components.Button actions =
-                            bgFindButton(screen, "gui.mockplayer.tab.actions");
-                    if (actions != null) {
-                        bgClick(actions);
+                    net.minecraft.client.gui.components.Button invTab =
+                            bgFindButton(screen, "gui.mockplayer.tab.inventory");
+                    if (invTab != null) {
+                        bgClick(invTab);
                     }
                     return;
                 }
@@ -6664,10 +6689,13 @@ public final class TestRunner {
                     bgChestCloseClicked = true;
                     waitTicks = 0;
                     net.minecraft.client.gui.components.Button close =
-                            bgFindButton(screen, "gui.mockplayer.action.close_container");
-                    if (close != null) {
-                        bgClick(close);
+                            bgFindButtonByLiteral(screen, "×");
+                    if (close == null) {
+                        fail("close container X missing");
+                        bgStep(11);
+                        return;
                     }
+                    bgClick(close);
                 }
                 bgChestClosed = bot.getContainer().isEmpty();
                 if (bgChestClosed) {
@@ -6683,6 +6711,19 @@ public final class TestRunner {
                 if (screen == null) {
                     fail("gui screen lost");
                     bgStep(12);
+                    return;
+                }
+                if (!bgChunkActionsTab) {
+                    bgChunkActionsTab = true;
+                    waitTicks = 0;
+                    net.minecraft.client.gui.components.Button actions =
+                            bgFindButton(screen, "gui.mockplayer.tab.actions");
+                    if (actions != null) {
+                        bgClick(actions);
+                    }
+                    return;
+                }
+                if (++waitTicks < 5) {
                     return;
                 }
                 if (!bgChunkClicked) {
@@ -6714,6 +6755,19 @@ public final class TestRunner {
                     bgStep(13);
                     return;
                 }
+                if (!bgChatActionsTab) {
+                    bgChatActionsTab = true;
+                    waitTicks = 0;
+                    net.minecraft.client.gui.components.Button actions =
+                            bgFindButton(screen, "gui.mockplayer.tab.actions");
+                    if (actions != null) {
+                        bgClick(actions);
+                    }
+                    return;
+                }
+                if (++waitTicks < 5) {
+                    return;
+                }
                 if (!bgChatSent) {
                     bgChatSent = true;
                     bgChatMsg = "";
@@ -6741,6 +6795,19 @@ public final class TestRunner {
                 if (screen == null) {
                     fail("gui screen lost");
                     bgStep(14);
+                    return;
+                }
+                if (!bgAutoActionsTab) {
+                    bgAutoActionsTab = true;
+                    waitTicks = 0;
+                    net.minecraft.client.gui.components.Button actions =
+                            bgFindButton(screen, "gui.mockplayer.tab.actions");
+                    if (actions != null) {
+                        bgClick(actions);
+                    }
+                    return;
+                }
+                if (++waitTicks < 5) {
                     return;
                 }
                 if (!bgAutoToggled) {
@@ -7205,6 +7272,16 @@ public final class TestRunner {
                                     && com.mockplayer.gui.BotControlScreen.XP_BAR_PROGRESS.equals(
                                     net.minecraft.resources.Identifier.withDefaultNamespace(
                                             "hud/experience_bar_progress")));
+                    check("health food bars use vanilla sprites",
+                            com.mockplayer.gui.BotControlScreen.HEART_CONTAINER.equals(
+                                    net.minecraft.resources.Identifier.withDefaultNamespace(
+                                            "hud/heart/container"))
+                                    && com.mockplayer.gui.BotControlScreen.HEART_FULL.equals(
+                                    net.minecraft.resources.Identifier.withDefaultNamespace(
+                                            "hud/heart/full"))
+                                    && com.mockplayer.gui.BotControlScreen.FOOD_FULL.equals(
+                                    net.minecraft.resources.Identifier.withDefaultNamespace(
+                                            "hud/food_full")));
                     mc.gui.setScreen(null);
                     com.mockplayer.gui.BotGui.open(mc);
                     net.minecraft.client.gui.screens.Screen opened = bgScreen();
@@ -7463,7 +7540,6 @@ public final class TestRunner {
                     bgListSecondChecked = true;
                     net.minecraft.client.gui.screens.Screen opened = bgScreen();
                     boolean secondShown = false;
-                    int arrowCount = 0;
                     if (opened instanceof com.mockplayer.gui.BotControlScreen s) {
                         for (Object child : s.children()) {
                             if (child instanceof net.minecraft.client.gui.components.Button b) {
@@ -7471,15 +7547,13 @@ public final class TestRunner {
                                 if (msg.contains("tbot-gui2")) {
                                     secondShown = true;
                                 }
-                                if (msg.equals("▲") || msg.equals("▼")) {
-                                    arrowCount++;
-                                }
                             }
                         }
                     }
                     check("bot list shows second bot", secondShown);
-                    check("bot list scroll buttons present", arrowCount == 2,
-                            "arrows=" + arrowCount);
+                    check("bot list scrollbar logic",
+                            com.mockplayer.gui.BotControlScreen.shouldShowScrollbar(12, 10)
+                                    && !com.mockplayer.gui.BotControlScreen.shouldShowScrollbar(2, 10));
                     com.mockplayer.session.FakePlayerCommands.delPlayer("tbot-gui2");
                     waitTicks = 0;
                     return;
@@ -7598,7 +7672,7 @@ public final class TestRunner {
         int h = mc.getWindow().getGuiScaledHeight();
         float scale = com.mockplayer.gui.BotGui.layoutScale(w, h);
         double lx = 104 + col * 20 + 2;
-        double ly = 44 + (3 * 20 + 8) + playerRow * 20 + 2; // 27 格容器 = 3 行，玩家区从 rows*20+8 起
+        double ly = 44 + 16 + (3 * 20 + 8) + playerRow * 20 + 2; // 27 格容器 = 3 行，玩家区从 rows*20+8 起
         double sx = com.mockplayer.gui.BotGui.panelX(w, h) + lx * scale;
         double sy = com.mockplayer.gui.BotGui.panelY(w, h) + ly * scale;
         return screen.mouseClicked(new net.minecraft.client.input.MouseButtonEvent(
@@ -7652,7 +7726,7 @@ public final class TestRunner {
         int h = mc.getWindow().getGuiScaledHeight();
         float scale = com.mockplayer.gui.BotGui.layoutScale(w, h);
         double lx = 104 + col * 20 + 2;
-        double ly = 44 + row * 20 + 2;
+        double ly = 44 + 16 + row * 20 + 2;
         double sx = com.mockplayer.gui.BotGui.panelX(w, h) + lx * scale;
         double sy = com.mockplayer.gui.BotGui.panelY(w, h) + ly * scale;
         return screen.mouseClicked(new net.minecraft.client.input.MouseButtonEvent(

@@ -47,8 +47,19 @@ public class BotControlScreen extends Screen {
 
     private static final int LIST_X = 8;
     private static final int LIST_W = 88;
-    /** 左栏假人列表可见槽位数（多假人时滚轮/▲▼ 滚动选择）。 */
-    public static final int VISIBLE_BOT_SLOTS = 10;
+    private static final int LIST_TITLE_Y = 26;
+    private static final int LIST_TOP = 34;
+    private static final int BOT_ROW_H = 15;
+    /** 底部输入区上限：名字输入框一行 + 新建/删除一行（假人多时固定在此，列表区滚动）。 */
+    private static final int BOT_INPUT_Y = BotGui.PANEL_H - 14 - 32;
+    private static final int BOT_BTN_Y = BOT_INPUT_Y + 16;
+    private static final int BOT_INPUT_H = 14;
+    /** 左栏列表区底部（滑条轨道范围），输入区固定底部，列表区固定高度。 */
+    public static final int LIST_BOTTOM = BOT_INPUT_Y - 4;
+    /** 左栏假人列表最大可见槽位数（输入区固定底部，超过则滑条滚动）。 */
+    public static final int VISIBLE_BOT_SLOTS = (LIST_BOTTOM - LIST_TOP) / BOT_ROW_H;
+    /** 背包容器模式顶部标题行高度（X 按钮 + 容器标题）。 */
+    public static final int CONTAINER_HEADER_H = 16;
     private static final int CONTENT_X = 104;
     private static final int CONTENT_W = BotGui.PANEL_W - CONTENT_X - 8;
     private static final int TAB_Y = 24;
@@ -61,6 +72,31 @@ public class BotControlScreen extends Screen {
             Identifier.withDefaultNamespace("hud/experience_bar_background");
     public static final Identifier XP_BAR_PROGRESS =
             Identifier.withDefaultNamespace("hud/experience_bar_progress");
+    /** 原版 HUD 血量条 sprite（主玩家 Hud.HeartType 同源）。 */
+    public static final Identifier HEART_CONTAINER =
+            Identifier.withDefaultNamespace("hud/heart/container");
+    public static final Identifier HEART_FULL =
+            Identifier.withDefaultNamespace("hud/heart/full");
+    public static final Identifier HEART_HALF =
+            Identifier.withDefaultNamespace("hud/heart/half");
+    /** 原版 HUD 饥饿条 sprite（主玩家 Hud 同源）。 */
+    public static final Identifier FOOD_EMPTY =
+            Identifier.withDefaultNamespace("hud/food_empty");
+    public static final Identifier FOOD_HALF =
+            Identifier.withDefaultNamespace("hud/food_half");
+    public static final Identifier FOOD_FULL =
+            Identifier.withDefaultNamespace("hud/food_full");
+    /** 原版 HUD 盔甲条 sprite。 */
+    public static final Identifier ARMOR_EMPTY = Identifier.withDefaultNamespace("hud/armor_empty");
+    public static final Identifier ARMOR_HALF = Identifier.withDefaultNamespace("hud/armor_half");
+    public static final Identifier ARMOR_FULL = Identifier.withDefaultNamespace("hud/armor_full");
+    /** 原版 HUD 饥饿（饥饿效果）sprite。 */
+    public static final Identifier FOOD_EMPTY_HUNGER =
+            Identifier.withDefaultNamespace("hud/food_empty_hunger");
+    public static final Identifier FOOD_HALF_HUNGER =
+            Identifier.withDefaultNamespace("hud/food_half_hunger");
+    public static final Identifier FOOD_FULL_HUNGER =
+            Identifier.withDefaultNamespace("hud/food_full_hunger");
 
     // ===== 半透明面板配色（alpha < 0xFF，透出游戏场景） =====
     public static final int PANEL_BG_TOP = 0xB0253047;
@@ -79,10 +115,44 @@ public class BotControlScreen extends Screen {
     public static final int CHUNK_REPEAT_MS = 300;
     /** 交互行按钮尺寸/间距（逻辑坐标，多分辨率由 sx/sw 缩放）。 */
     public static final int ACT_BTN_W = 74;
-    public static final int ACT_BTN_H = 16;
+    public static final int ACT_BTN_H = 14;
     public static final int ACT_GAP = 76;
+    /** 动作 Tab 响应式布局：分区高度常量，按顺序堆叠（标题 = 分区顶 - TITLE_H，不重叠）。 */
+    public static final int TAB_BOTTOM = 38;
+    public static final int ACT_TOP = CONTENT_Y + 2;
+    public static final int BTN_H = 13;
+    public static final int BTN_GAP = 1;
+    public static final int SECTION_GAP = 3;
+    public static final int ROW_H = BTN_H + BTN_GAP;
+    public static final int TITLE_H = 8;
+    /** 标题行高度（标题文字 + 与按钮间距），标题独立占一行不压按钮。 */
+    public static final int TITLE_ROW_H = TITLE_H + 2;
+    /** 动作 Tab 十字/列/系统行的逻辑坐标常量（全部相对 CONTENT_X 推导，不写散落数字）。 */
+    public static final int CROSS_LEFT_OFF = 4;
+    public static final int CROSS_MID_OFF = 40;
+    public static final int CROSS_RIGHT_OFF = 76;
+    public static final int PAD_BTN_W = 30;
+    public static final int SIDE_COL_1_OFF = 130;
+    public static final int SIDE_COL_2_OFF = 184;
+    public static final int SIDE_BTN_W = 52;
+    public static final int ENTITY_W = 44;
+    public static final int ENTITY_GAP = 46;
+    /** 实体按钮从内容区右缘向左排（宽度/间距推导，永不超出面板）。 */
+    public static final int ENTITY_X_OFF = CONTENT_W - ENTITY_W * 2 - ENTITY_GAP - 4;
+    public static final int CHUNK_BTN_W = 40;
+    public static final int CHUNK_GAP = 4;
+    public static final int RESPAWN_W = 44;
+    public static final int RESPAWN_X_OFF = CHUNK_BTN_W * 2 + CHUNK_GAP * 2;
+    public static final int AUTO_X_OFF = RESPAWN_X_OFF + RESPAWN_W + CHUNK_GAP;
+    public static final int AUTO_W = 66;
+    public static final int CHAT_W = 180;
+    public static final int SEND_X_OFF = 182;
+    public static final int SEND_W = 66;
     /** 按钮贴图透明度（0-1：半透明保留原版悬停/高亮/禁用贴图，文字保持不透明）。 */
     public static final float BUTTON_ALPHA = 0.65F;
+    /** 开关按钮状态色：开启绿 / 关闭红（文字颜色表示状态，不再拼 开/关 后缀）。 */
+    public static final int TOGGLE_ON_COLOR = 0xFF55FF55;
+    public static final int TOGGLE_OFF_COLOR = 0xFFFF5555;
 
     /** 当前选中假人（null = 未选中）。 */
     private Bot selected;
@@ -100,10 +170,17 @@ public class BotControlScreen extends Screen {
     private EditBox nameBox;
     private Button newButton;
     private Button delButton;
-    private Button scrollUpButton;
-    private Button scrollDownButton;
     /** 左栏假人列表滚动偏移（0 = 显示第一个）。 */
     private int botScrollOffset;
+    /** 左栏滑条是否正在拖动。 */
+    private boolean scrollbarDragging;
+    /** 原版 HUD 血量渲染状态（闪烁动画，与 Hud 同逻辑）。 */
+    private int tickCount;
+    private long lastHealthTime;
+    private int displayHealth = -1;
+    private int lastHealth = -1;
+    private long healthBlinkTime;
+    private final java.util.Random heartRandom = new java.util.Random();
     private Button tabStatus;
     private Button tabInventory;
     private Button tabActions;
@@ -133,6 +210,11 @@ public class BotControlScreen extends Screen {
     private final List<Entity> entityTargets = new ArrayList<>();
     /** 长按重复按钮（turn/chunk 等调整型控件，tick 驱动重复触发）。 */
     private final List<RepeatHoldButton> repeatButtons = new ArrayList<>();
+    /** 动作 Tab 分区标题逻辑 y（init 响应式计算，drawActions 渲染用）。 */
+    private int lookTitleY;
+    private int moveTitleY;
+    private int interactTitleY;
+    private int systemTitleY;
 
     public BotControlScreen() {
         super(Component.translatable("gui.mockplayer.title"));
@@ -170,23 +252,19 @@ public class BotControlScreen extends Screen {
                 if (target < bots.size()) {
                     this.select(bots.get(target));
                 }
-            }).bounds(sx(LIST_X), sy(34 + i * 16), sw(LIST_W), sh(15)).build();
+            }).bounds(sx(LIST_X), sy(LIST_TOP + i * BOT_ROW_H), sw(LIST_W), sh(BOT_ROW_H - 1)).build();
             b.setAlpha(BUTTON_ALPHA);
             this.addRenderableWidget(b);
             this.botButtons.add(b);
         }
-        this.scrollUpButton = this.addLiteralButton(LIST_X, 196, 43, 10, "▲",
-                () -> this.scrollBotList(-1));
-        this.scrollDownButton = this.addLiteralButton(LIST_X + 45, 196, 43, 10, "▼",
-                () -> this.scrollBotList(1));
-        // 新建/删除共用一个输入框（并排两个按钮，点哪个就用哪个操作；位于面板底部）
-        this.nameBox = new EditBox(this.font, sx(LIST_X), sy(210), sw(150), sh(14),
+        // 左栏底部：名字输入框一行，下面并排「+ 新建 / - 删除」
+        this.nameBox = new EditBox(this.font, sx(LIST_X), sy(BOT_INPUT_Y), sw(LIST_W), sh(BOT_INPUT_H),
                 Component.translatable("gui.mockplayer.name_hint"));
         this.nameBox.setMaxLength(16);
         this.addRenderableWidget(this.nameBox);
-        this.newButton = this.addButton(LIST_X + 152, 210, 44, 14, "gui.mockplayer.new_bot",
+        this.newButton = this.addButton(LIST_X, BOT_BTN_Y, 43, BOT_INPUT_H, "gui.mockplayer.new_bot",
                 () -> this.tryCreate());
-        this.delButton = this.addButton(LIST_X + 198, 210, 44, 14, "gui.mockplayer.delete_bot",
+        this.delButton = this.addButton(LIST_X + 45, BOT_BTN_Y, 43, BOT_INPUT_H, "gui.mockplayer.delete_bot",
                 () -> this.tryDelete());
 
         // ===== 顶部 Tab =====
@@ -198,75 +276,90 @@ public class BotControlScreen extends Screen {
         this.tabActions = this.addButton(CONTENT_X + (tabW + 2) * 2, TAB_Y, tabW, 14,
                 "gui.mockplayer.tab.actions", () -> this.switchTab(2));
 
-        // ===== 动作 Tab 控件（视线/移动十字 + 右侧开关，交互/系统/聊天分组） =====
-        // 视线十字：↑ 上 / ← → 左右 / ↓ 下
-        this.turnUp = this.addRepeat(CONTENT_X + 40, 52, 30, 14, "gui.mockplayer.action.turn_up",
+        // ===== 动作 Tab（响应式：分区按顺序堆叠，标题 = 分区顶 - TITLE_H，改常量自动重排） =====
+        int actY = ACT_TOP;
+        int rowH = ROW_H;
+        int crossX = CONTENT_X + CROSS_MID_OFF;
+        int leftX = CONTENT_X + CROSS_LEFT_OFF;
+        int rightX = CONTENT_X + CROSS_RIGHT_OFF;
+        this.lookTitleY = actY;
+        actY += TITLE_ROW_H;
+        this.turnUp = this.addRepeat(crossX, actY, PAD_BTN_W, BTN_H, "gui.mockplayer.action.turn_up",
                 () -> this.act(b -> b.actions().turn(0.0F, -8.0F), "gui.mockplayer.action.turn_up"),
                 TURN_REPEAT_MS);
-        this.turnLeft = this.addRepeat(CONTENT_X + 4, 68, 30, 14, "gui.mockplayer.action.turn_left",
+        this.turnLeft = this.addRepeat(leftX, actY + rowH, PAD_BTN_W, BTN_H, "gui.mockplayer.action.turn_left",
                 () -> this.act(b -> b.actions().turn(-15.0F, 0.0F), "gui.mockplayer.action.turn_left"),
                 TURN_REPEAT_MS);
-        this.turnRight = this.addRepeat(CONTENT_X + 76, 68, 30, 14, "gui.mockplayer.action.turn_right",
+        this.turnRight = this.addRepeat(rightX, actY + rowH, PAD_BTN_W, BTN_H, "gui.mockplayer.action.turn_right",
                 () -> this.act(b -> b.actions().turn(15.0F, 0.0F), "gui.mockplayer.action.turn_right"),
                 TURN_REPEAT_MS);
-        this.turnDown = this.addRepeat(CONTENT_X + 40, 84, 30, 14, "gui.mockplayer.action.turn_down",
+        this.turnDown = this.addRepeat(crossX, actY + rowH * 2, PAD_BTN_W, BTN_H, "gui.mockplayer.action.turn_down",
                 () -> this.act(b -> b.actions().turn(0.0F, 8.0F), "gui.mockplayer.action.turn_down"),
                 TURN_REPEAT_MS);
+        int lookTop = actY;
+        actY += rowH * 3 + SECTION_GAP;
 
-        // 移动十字（WASD 手感）+ 右侧 2x2 开关
-        this.moveForward = this.addHold(CONTENT_X + 40, 100, 30, 14, "gui.mockplayer.action.move_forward",
+        this.moveTitleY = actY;
+        actY += TITLE_ROW_H;
+        this.moveForward = this.addHold(crossX, actY, PAD_BTN_W, BTN_H, "gui.mockplayer.action.move_forward",
                 () -> this.act(b -> b.actions().setForward(1.0F), "gui.mockplayer.action.move_forward"),
                 () -> this.actQuiet(b -> b.actions().setForward(0.0F)));
-        this.moveLeft = this.addHold(CONTENT_X + 4, 116, 30, 14, "gui.mockplayer.action.move_left",
+        this.moveLeft = this.addHold(leftX, actY + rowH, PAD_BTN_W, BTN_H, "gui.mockplayer.action.move_left",
                 () -> this.act(b -> b.actions().setStrafe(-1.0F), "gui.mockplayer.action.move_left"),
                 () -> this.actQuiet(b -> b.actions().setStrafe(0.0F)));
-        this.moveRight = this.addHold(CONTENT_X + 76, 116, 30, 14, "gui.mockplayer.action.move_right",
+        this.moveRight = this.addHold(rightX, actY + rowH, PAD_BTN_W, BTN_H, "gui.mockplayer.action.move_right",
                 () -> this.act(b -> b.actions().setStrafe(1.0F), "gui.mockplayer.action.move_right"),
                 () -> this.actQuiet(b -> b.actions().setStrafe(0.0F)));
-        this.moveBackward = this.addHold(CONTENT_X + 40, 132, 30, 14, "gui.mockplayer.action.move_backward",
+        this.moveBackward = this.addHold(crossX, actY + rowH * 2, PAD_BTN_W, BTN_H, "gui.mockplayer.action.move_backward",
                 () -> this.act(b -> b.actions().setForward(-1.0F), "gui.mockplayer.action.move_backward"),
                 () -> this.actQuiet(b -> b.actions().setForward(0.0F)));
-        this.stopButton = this.addButton(CONTENT_X + 130, 100, 52, 14, "gui.mockplayer.action.stop",
+        this.stopButton = this.addButton(CONTENT_X + SIDE_COL_1_OFF, actY, SIDE_BTN_W, BTN_H, "gui.mockplayer.action.stop",
                 () -> this.act(b -> b.actions().stop(), "gui.mockplayer.action.stop"));
-        this.sneakButton = this.addButton(CONTENT_X + 184, 100, 52, 14, "gui.mockplayer.action.sneak",
+        this.sneakButton = this.addButton(CONTENT_X + SIDE_COL_2_OFF, actY, SIDE_BTN_W, BTN_H, "gui.mockplayer.action.sneak",
                 () -> this.toggleSneak());
-        this.sprintButton = this.addButton(CONTENT_X + 130, 116, 52, 14, "gui.mockplayer.action.sprint",
+        this.sprintButton = this.addButton(CONTENT_X + SIDE_COL_1_OFF, actY + rowH, SIDE_BTN_W, BTN_H, "gui.mockplayer.action.sprint",
                 () -> this.toggleSprint());
-        this.jumpButton = this.addButton(CONTENT_X + 184, 116, 52, 14, "gui.mockplayer.action.jump",
+        this.jumpButton = this.addButton(CONTENT_X + SIDE_COL_2_OFF, actY + rowH, SIDE_BTN_W, BTN_H, "gui.mockplayer.action.jump",
                 () -> this.toggleJump());
+        actY += rowH * 3 + SECTION_GAP;
 
-        // 交互：左键/右键（按下 = 单点 + 立即持续，松开 = 停止释放，原版按住键语义）
-        this.attackLookButton = this.addTapHold(CONTENT_X, 150, ACT_BTN_W, ACT_BTN_H,
+        this.interactTitleY = actY;
+        actY += TITLE_ROW_H;
+        this.attackLookButton = this.addTapHold(CONTENT_X, actY, ACT_BTN_W, ACT_BTN_H,
                 "gui.mockplayer.action.attack_look",
                 () -> this.actQuiet(b -> b.actions().attackLook()),
                 () -> this.actQuiet(b -> b.actions().sustainedAttackLook()),
                 () -> this.actQuiet(b -> b.actions().stopSustained()));
-        this.useLookButton = this.addTapHold(CONTENT_X + ACT_GAP, 150, ACT_BTN_W, ACT_BTN_H,
+        this.useLookButton = this.addTapHold(CONTENT_X + ACT_GAP, actY, ACT_BTN_W, ACT_BTN_H,
                 "gui.mockplayer.action.use_look",
                 () -> this.actQuiet(b -> b.actions().useLook()),
                 () -> this.actQuiet(b -> b.actions().sustainedUseLook()),
                 () -> this.actQuiet(b -> b.actions().stopSustained()));
+        actY += ACT_BTN_H + SECTION_GAP;
 
-        // 系统：区块加载半径步进 + 重生/自动重生/关容器
-        this.chunkMinusButton = this.addRepeat(CONTENT_X, 176, 30, 14,
+        this.systemTitleY = actY;
+        actY += TITLE_ROW_H;
+        this.chunkMinusButton = this.addRepeat(CONTENT_X, actY, CHUNK_BTN_W, BTN_H,
                 "gui.mockplayer.action.chunk_minus", () -> this.changeChunk(-1), CHUNK_REPEAT_MS);
-        this.chunkPlusButton = this.addRepeat(CONTENT_X + 32, 176, 30, 14,
+        this.chunkPlusButton = this.addRepeat(CONTENT_X + CHUNK_BTN_W + CHUNK_GAP, actY, CHUNK_BTN_W, BTN_H,
                 "gui.mockplayer.action.chunk_plus", () -> this.changeChunk(1), CHUNK_REPEAT_MS);
-        this.respawnButton = this.addButton(CONTENT_X + 66, 176, 44, 14,
+        this.respawnButton = this.addButton(CONTENT_X + RESPAWN_X_OFF, actY, RESPAWN_W, BTN_H,
                 "gui.mockplayer.action.respawn",
                 () -> this.act(Bot::actions, "gui.mockplayer.action.respawn", actions -> actions.respawn()));
-        this.autoRespawnButton = this.addButton(CONTENT_X + 112, 176, 66, 14,
+        this.autoRespawnButton = this.addButton(CONTENT_X + AUTO_X_OFF, actY, AUTO_W, BTN_H,
                 "gui.mockplayer.action.auto_respawn", () -> this.toggleAutoRespawn());
-        this.closeContainerButton = this.addButton(CONTENT_X + 180, 176, 68, 14,
-                "gui.mockplayer.action.close_container",
-                () -> this.actQuiet(b -> b.getContainer().ifPresent(BotContainer::close)));
+        actY += BTN_H + SECTION_GAP;
 
-        this.chatBox = new EditBox(this.font, sx(CONTENT_X), sy(198), sw(180), sh(14),
+        this.chatBox = new EditBox(this.font, sx(CONTENT_X), sy(actY), sw(CHAT_W), sh(BTN_H),
                 Component.translatable("gui.mockplayer.action.chat_hint"));
         this.chatBox.setMaxLength(256);
         this.addRenderableWidget(this.chatBox);
-        this.sendButton = this.addButton(CONTENT_X + 182, 198, 66, 14, "gui.mockplayer.action.send",
+        this.sendButton = this.addButton(CONTENT_X + SEND_X_OFF, actY, SEND_W, BTN_H, "gui.mockplayer.action.send",
                 () -> this.sendChat());
+
+        // 关闭容器 X 按钮：仅背包 Tab 容器模式显示（动作 Tab 不再有关闭按钮）
+        this.closeContainerButton = this.addLiteralButton(CONTENT_X, CONTENT_Y, 12, 12, "×",
+                () -> this.actQuiet(b -> b.getContainer().ifPresent(BotContainer::close)));
 
         // ===== 附近实体（视线区右侧单行 2 个，点击 = bot 转头；实体再多也只显示最近 2 个） =====
         for (int i = 0; i < 2; i++) {
@@ -276,8 +369,8 @@ public class BotControlScreen extends Screen {
                     Entity target = this.entityTargets.get(index);
                     this.act(bot -> bot.actions().lookAt(target), "gui.mockplayer.action.look_at");
                 }
-            }).bounds(sx(CONTENT_X + 200 + index * 46), sy(52),
-                    sw(44), sh(14)).build();
+            }).bounds(sx(CONTENT_X + ENTITY_X_OFF + index * ENTITY_GAP), sy(lookTop),
+                    sw(ENTITY_W), sh(BTN_H)).build();
             b.setAlpha(BUTTON_ALPHA);
             this.addRenderableWidget(b);
             this.entityButtons.add(b);
@@ -294,7 +387,7 @@ public class BotControlScreen extends Screen {
         return b;
     }
 
-    /** 字面文本按钮（▲▼ 等符号，无需 i18n）。 */
+    /** 字面文本按钮（× 等符号，无需 i18n）。 */
     private Button addLiteralButton(int x, int y, int w, int h, String text, Runnable action) {
         Button b = Button.builder(Component.literal(text), btn -> action.run())
                 .bounds(sx(x), sy(y), sw(w), sw(h)).build();
@@ -479,12 +572,36 @@ public class BotControlScreen extends Screen {
         return Math.max(0, Math.min(offset, total - visible));
     }
 
+    /** 是否显示滑条（假人数量超过可见槽位时）。 */
+    public static boolean shouldShowScrollbar(int total, int visible) {
+        return total > visible;
+    }
+
+    /** 滑条区域命中（左栏列表右侧窄条）。 */
+    private boolean scrollbarHit(double lx, double ly) {
+        return lx >= LIST_X + LIST_W - 5 && lx <= LIST_X + LIST_W + 1
+                && ly >= LIST_TOP && ly <= LIST_BOTTOM;
+    }
+
+    /** 按滑条位置（逻辑 y）定位列表偏移。 */
+    private void scrollBotTo(double lx, double ly) {
+        List<Bot> bots = coreBots();
+        if (bots.size() <= VISIBLE_BOT_SLOTS) {
+            return;
+        }
+        int trackH = LIST_BOTTOM - LIST_TOP;
+        float ratio = (float) (ly - LIST_TOP) / trackH;
+        this.botScrollOffset = clampBotScroll(
+                Math.round(ratio * (bots.size() - VISIBLE_BOT_SLOTS)),
+                bots.size(), VISIBLE_BOT_SLOTS);
+    }
+
     @Override
     public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
         double lx = this.localX(x);
         double ly = this.localY(y);
         // 滚轮在左栏列表区域 → 滚动假人列表（向上滚 = 显示更早的假人）
-        if (lx >= LIST_X && lx <= LIST_X + LIST_W && ly >= 34 && ly <= 195) {
+        if (lx >= LIST_X && lx <= LIST_X + LIST_W && ly >= LIST_TOP && ly <= LIST_BOTTOM) {
             this.scrollBotList(scrollY > 0 ? -1 : 1);
             return true;
         }
@@ -658,6 +775,7 @@ public class BotControlScreen extends Screen {
     @Override
     public void tick() {
         BotGui.recordTick();
+        this.tickCount++;
         long now = Util.getMillis();
         for (RepeatHoldButton b : this.repeatButtons) {
             b.onTick(now);
@@ -684,9 +802,6 @@ public class BotControlScreen extends Screen {
                 b.visible = false;
             }
         }
-        this.scrollUpButton.active = this.botScrollOffset > 0;
-        this.scrollDownButton.active = this.botScrollOffset
-                < Math.max(0, bots.size() - VISIBLE_BOT_SLOTS);
         boolean ready = this.requireBotSilent();
         boolean containerOpen = this.selected != null && this.selected.getContainer().isPresent();
         boolean actionsTab = this.tab == 2;
@@ -727,8 +842,8 @@ public class BotControlScreen extends Screen {
         this.respawnButton.visible = actionsTab;
         this.autoRespawnButton.active = ready && actionsTab;
         this.autoRespawnButton.visible = actionsTab;
-        this.closeContainerButton.active = ready && containerOpen && actionsTab;
-        this.closeContainerButton.visible = actionsTab;
+        this.closeContainerButton.active = ready && containerOpen && this.tab == 1;
+        this.closeContainerButton.visible = containerOpen && this.tab == 1;
         this.sendButton.active = ready && actionsTab;
         this.sendButton.visible = actionsTab;
         this.chatBox.active = ready && actionsTab;
@@ -741,14 +856,14 @@ public class BotControlScreen extends Screen {
         this.tabActions.setAlpha(this.tab == 2 ? 1.0F : BUTTON_ALPHA);
         // 开关回显（on/off 状态写进按钮文字）
         if (ready) {
-            this.sneakButton.setMessage(Component.translatable(
-                    this.selected.actions().isSneaking() ? "gui.mockplayer.action.sneak_on" : "gui.mockplayer.action.sneak"));
-            this.sprintButton.setMessage(Component.translatable(
-                    this.selected.actions().isSprinting() ? "gui.mockplayer.action.sprint_on" : "gui.mockplayer.action.sprint"));
-            this.jumpButton.setMessage(Component.translatable(
-                    this.selected.actions().isJumping() ? "gui.mockplayer.action.jump_on" : "gui.mockplayer.action.jump"));
-            this.autoRespawnButton.setMessage(Component.translatable(
-                    this.selected.isAutoRespawn() ? "gui.mockplayer.action.auto_respawn_on" : "gui.mockplayer.action.auto_respawn_off"));
+            this.sneakButton.setMessage(Component.translatable("gui.mockplayer.action.sneak")
+                    .withColor(this.selected.actions().isSneaking() ? TOGGLE_ON_COLOR : TOGGLE_OFF_COLOR));
+            this.sprintButton.setMessage(Component.translatable("gui.mockplayer.action.sprint")
+                    .withColor(this.selected.actions().isSprinting() ? TOGGLE_ON_COLOR : TOGGLE_OFF_COLOR));
+            this.jumpButton.setMessage(Component.translatable("gui.mockplayer.action.jump")
+                    .withColor(this.selected.actions().isJumping() ? TOGGLE_ON_COLOR : TOGGLE_OFF_COLOR));
+            this.autoRespawnButton.setMessage(Component.translatable("gui.mockplayer.action.auto_respawn")
+                    .withColor(this.selected.isAutoRespawn() ? TOGGLE_ON_COLOR : TOGGLE_OFF_COLOR));
         }
         // 附近实体按钮（动作 Tab）
         this.entityTargets.clear();
@@ -836,16 +951,33 @@ public class BotControlScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        double lx = this.localX(event.x());
+        double ly = this.localY(event.y());
+        // 左栏滑条：按下即定位并进入拖动
+        if (this.scrollbarHit(lx, ly)) {
+            this.scrollbarDragging = true;
+            this.scrollBotTo(lx, ly);
+            return true;
+        }
         // 控件已按屏幕坐标直排：原样交给 super 命中；网格（非控件）再按逻辑坐标换算
         if (super.mouseClicked(event, doubleClick)) {
             return true;
         }
-        return this.handleContentClick(this.localX(event.x()), this.localY(event.y()),
-                event.buttonInfo());
+        return this.handleContentClick(lx, ly, event.buttonInfo());
+    }
+
+    @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
+        if (this.scrollbarDragging) {
+            this.scrollBotTo(this.localX(event.x()), this.localY(event.y()));
+            return true;
+        }
+        return super.mouseDragged(event, dx, dy);
     }
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
+        this.scrollbarDragging = false;
         return super.mouseReleased(event);
     }
 
@@ -944,7 +1076,7 @@ public class BotControlScreen extends Screen {
     /** 容器菜单格子：容器槽（每行 9）+ 下方假人背包（菜单末尾 36 槽）。 */
     private int containerSlotAt(double mx, double my, int containerSize) {
         double bx = mx - CONTENT_X;
-        double by = my - CONTENT_Y;
+        double by = my - CONTENT_Y - CONTAINER_HEADER_H;
         int rows = (containerSize + 8) / 9;
         int gx = (int) (bx / CELL);
         int gy = (int) (by / CELL);
@@ -1010,12 +1142,29 @@ public class BotControlScreen extends Screen {
         graphics.fill(px, py + headerH - 1, px + pw, py + headerH, PANEL_ACCENT);
         int dividerX = this.sx(LIST_X + LIST_W + 6);
         graphics.fill(dividerX, py + headerH, dividerX + 1, py + ph, PANEL_DIVIDER);
+        this.drawBotScrollbar(graphics);
         // 控件全部按屏幕坐标直排（init 时 sx/sy/sw 换算好），命中与渲染同一坐标系
         super.extractRenderState(graphics, mouseX, mouseY, a);
         this.drawContent(graphics, mouseX, mouseY);
         if (this.tab == 1 && this.selected != null) {
             this.drawCarried(graphics, mouseX, mouseY);
         }
+    }
+
+    /** 左栏假人列表滑条（原版风格轨道 + 滑块；仅多假人时显示，可拖动/滚轮）。 */
+    private void drawBotScrollbar(GuiGraphicsExtractor graphics) {
+        List<Bot> bots = coreBots();
+        if (!shouldShowScrollbar(bots.size(), VISIBLE_BOT_SLOTS)) {
+            return;
+        }
+        int trackX = this.sx(LIST_X + LIST_W - 3);
+        int trackTop = this.sy(LIST_TOP);
+        int trackH = this.sh(LIST_BOTTOM - LIST_TOP);
+        int thumbH = Math.max(18, Math.round(trackH * VISIBLE_BOT_SLOTS / (float) bots.size()));
+        float ratio = (float) this.botScrollOffset / (bots.size() - VISIBLE_BOT_SLOTS);
+        int thumbY = trackTop + Math.round((trackH - thumbH) * ratio);
+        graphics.fill(trackX, trackTop, trackX + this.sw(2), trackTop + trackH, 0x8F0E1420);
+        graphics.fill(trackX, thumbY, trackX + this.sw(2), thumbY + thumbH, 0xBF7FB2FF);
     }
 
     /** 鼠标携带物品（拿起后跟随鼠标绘制，原版背包同款；数量用原版 itemDecorations）。 */
@@ -1051,7 +1200,7 @@ public class BotControlScreen extends Screen {
                 this.sy(FEEDBACK_Y), 0xFFB0C4DE);
         // 左栏标题
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.bots"),
-                this.sx(LIST_X), this.sy(26), 0xFFA8C8FF);
+                this.sx(LIST_X), this.sy(LIST_TITLE_Y), 0xFFA8C8FF);
         if (this.selected == null) {
             graphics.text(this.font, Component.translatable("gui.mockplayer.status.no_bot"),
                     this.sx(CONTENT_X), this.sy(CONTENT_Y), 0xAAAAAA);
@@ -1083,15 +1232,285 @@ public class BotControlScreen extends Screen {
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.status"),
                 this.sx(CONTENT_X), this.sy(CONTENT_Y), 0xFFA8C8FF);
         List<Component> lines = statusLines(this.selected);
+        net.minecraft.client.player.LocalPlayer player = this.selected.getLocalPlayer();
         int x = this.sx(CONTENT_X);
         int y = this.sy(CONTENT_Y + 12);
         int step = this.sh(11);
-        for (int i = 0; i < lines.size(); i++) {
-            // 首行血量/饱食度自带颜色，其余浅灰
-            graphics.text(this.font, lines.get(i), x, y, i == 0 ? 0xFFFFFF : 0xFFD7D7D7);
+        int start = 0;
+        if (player != null) {
+            // 原版血量条 + 饥饿条替代文本 ❤/🍗 行（statusLines 第 0 行跳过）
+            this.drawVanillaHealthFood(graphics, this.sx(CONTENT_X), this.sy(CONTENT_Y + 14));
+            y = this.sy(CONTENT_Y + 34);
+            start = 1;
+        }
+        for (int i = start; i < lines.size(); i++) {
+            // 状态文本按面板内容宽度截断，长行不溢出半透明背景
+            graphics.text(this.font, this.font.plainSubstrByWidth(
+                    lines.get(i).getString(), this.sw(CONTENT_W - 4)), x, y, 0xFFD7D7D7);
             y += step;
         }
         this.drawXpBar(graphics, y + 4);
+    }
+
+    /**
+     * 状态 Tab 血量/饥饿：完全复用原版 Hud 渲染逻辑（extractPlayerHealth/extractHearts/
+     * extractFood），仅替换作用对象为假人、坐标参数化到面板内。支持盔甲条、吸收、
+     * 多行、药水心色、硬核、掉血闪烁与饥饿闪烁。
+     */
+    private void drawVanillaHealthFood(GuiGraphicsExtractor graphics, int xLeft, int yLineBase) {
+        net.minecraft.world.entity.player.Player player = this.selected.getLocalPlayer();
+        if (player == null) {
+            return;
+        }
+        int currentHealth = net.minecraft.util.Mth.ceil(player.getHealth());
+        boolean blink = this.healthBlinkTime > this.tickCount
+                && (this.healthBlinkTime - this.tickCount) / 3L % 2L == 1L;
+        long timeMillis = net.minecraft.util.Util.getMillis();
+        if (currentHealth < this.lastHealth && player.invulnerableTime > 0) {
+            this.lastHealthTime = timeMillis;
+            this.healthBlinkTime = this.tickCount + 20;
+        } else if (currentHealth > this.lastHealth && player.invulnerableTime > 0) {
+            this.lastHealthTime = timeMillis;
+            this.healthBlinkTime = this.tickCount + 10;
+        }
+        if (timeMillis - this.lastHealthTime > 1000L) {
+            this.displayHealth = currentHealth;
+            this.lastHealthTime = timeMillis;
+        }
+        this.lastHealth = currentHealth;
+        int oldHealth = this.displayHealth;
+        this.heartRandom.setSeed(this.tickCount * 312871);
+        int xRight = xLeft + 182;
+        float maxHealth = Math.max((float) player.getAttributeValue(
+                        net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH),
+                Math.max(oldHealth, currentHealth));
+        int totalAbsorption = net.minecraft.util.Mth.ceil(player.getAbsorptionAmount());
+        int numHealthRows = net.minecraft.util.Mth.ceil((maxHealth + totalAbsorption) / 2.0F / 10.0F);
+        int healthRowHeight = Math.max(10 - (numHealthRows - 2), 3);
+        int heartOffsetIndex = -1;
+        if (player.hasEffect(net.minecraft.world.effect.MobEffects.REGENERATION)) {
+            heartOffsetIndex = this.tickCount % net.minecraft.util.Mth.ceil(maxHealth + 5.0F);
+        }
+        this.extractArmorLikeVanilla(graphics, player, yLineBase, numHealthRows, healthRowHeight, xLeft);
+        this.extractHeartsLikeVanilla(graphics, player, xLeft, yLineBase, healthRowHeight,
+                heartOffsetIndex, maxHealth, currentHealth, oldHealth, totalAbsorption, blink);
+        // 原版：骑乘有生命值的载具时不画食物（显示载具血条）
+        if (!(player.getVehicle() instanceof net.minecraft.world.entity.LivingEntity)) {
+            this.extractFoodLikeVanilla(graphics, player, yLineBase, xRight);
+        }
+        com.mockplayer.gui.BotGui.recordHealthFood(player.getHealth(), player.getFoodData().getFoodLevel());
+    }
+
+    /** 原版 extractArmor 等价：盔甲条 10 格。 */
+    private void extractArmorLikeVanilla(GuiGraphicsExtractor graphics,
+                                         net.minecraft.world.entity.player.Player player,
+                                         int yLineBase, int numHealthRows, int healthRowHeight, int xLeft) {
+        int armor = player.getArmorValue();
+        if (armor <= 0) {
+            return;
+        }
+        int yLineArmor = yLineBase - (numHealthRows - 1) * healthRowHeight - 10;
+        for (int i = 0; i < 10; i++) {
+            int xo = xLeft + i * 8;
+            if (i * 2 + 1 < armor) {
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, ARMOR_FULL, xo, yLineArmor, 9, 9);
+            } else if (i * 2 + 1 == armor) {
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, ARMOR_HALF, xo, yLineArmor, 9, 9);
+            } else {
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, ARMOR_EMPTY, xo, yLineArmor, 9, 9);
+            }
+        }
+    }
+
+    /** 原版 extractHearts 等价：心行 + 吸收 + 闪烁。 */
+    private void extractHeartsLikeVanilla(GuiGraphicsExtractor graphics,
+                                          net.minecraft.world.entity.player.Player player,
+                                          int xLeft, int yLineBase, int healthRowHeight,
+                                          int heartOffsetIndex, float maxHealth,
+                                          int currentHealth, int oldHealth, int absorption, boolean blink) {
+        BotHeartType type = BotHeartType.forPlayer(player);
+        boolean isHardcore = player.level().getLevelData().isHardcore();
+        int healthContainerCount = net.minecraft.util.Mth.ceil(maxHealth / 2.0F);
+        int absorptionContainerCount = net.minecraft.util.Mth.ceil(absorption / 2.0F);
+        int maxHealthHalvesCount = healthContainerCount * 2;
+        for (int containerIndex = healthContainerCount + absorptionContainerCount - 1; containerIndex >= 0; containerIndex--) {
+            int row = containerIndex / 10;
+            int column = containerIndex % 10;
+            int xo = xLeft + column * 8;
+            int yo = yLineBase - row * healthRowHeight;
+            if (currentHealth + absorption <= 4) {
+                yo += this.heartRandom.nextInt(2);
+            }
+            if (containerIndex < healthContainerCount && containerIndex == heartOffsetIndex) {
+                yo -= 2;
+            }
+            this.extractHeartLikeVanilla(graphics, BotHeartType.CONTAINER, xo, yo, isHardcore, blink, false);
+            int halves = containerIndex * 2;
+            boolean isAbsorptionHeart = containerIndex >= healthContainerCount;
+            if (isAbsorptionHeart) {
+                int absorptionHalves = halves - maxHealthHalvesCount;
+                if (absorptionHalves < absorption) {
+                    boolean halfHeart = absorptionHalves + 1 == absorption;
+                    this.extractHeartLikeVanilla(graphics,
+                            type == BotHeartType.WITHERED ? type : BotHeartType.ABSORBING,
+                            xo, yo, isHardcore, false, halfHeart);
+                }
+            }
+            if (blink && halves < oldHealth) {
+                boolean halfHeart = halves + 1 == oldHealth;
+                this.extractHeartLikeVanilla(graphics, type, xo, yo, isHardcore, true, halfHeart);
+            }
+            if (halves < currentHealth) {
+                boolean halfHeart = halves + 1 == currentHealth;
+                this.extractHeartLikeVanilla(graphics, type, xo, yo, isHardcore, false, halfHeart);
+            }
+        }
+    }
+
+    /** 原版 extractHeart 等价：单颗心 sprite。 */
+    private void extractHeartLikeVanilla(GuiGraphicsExtractor graphics, BotHeartType type,
+                                         int xo, int yo, boolean isHardcore, boolean blinks, boolean half) {
+        graphics.blitSprite(RenderPipelines.GUI_TEXTURED,
+                type.getSprite(isHardcore, half, blinks), xo, yo, 9, 9);
+    }
+
+    /** 原版 extractFood 等价：10 个鸡腿（含饥饿效果变体与闪烁）。 */
+    private void extractFoodLikeVanilla(GuiGraphicsExtractor graphics,
+                                        net.minecraft.world.entity.player.Player player,
+                                        int yLineBase, int xRight) {
+        int food = player.getFoodData().getFoodLevel();
+        for (int i = 0; i < 10; i++) {
+            int yo = yLineBase;
+            Identifier empty;
+            Identifier half;
+            Identifier full;
+            if (player.hasEffect(net.minecraft.world.effect.MobEffects.HUNGER)) {
+                empty = FOOD_EMPTY_HUNGER;
+                half = FOOD_HALF_HUNGER;
+                full = FOOD_FULL_HUNGER;
+            } else {
+                empty = FOOD_EMPTY;
+                half = FOOD_HALF;
+                full = FOOD_FULL;
+            }
+            if (player.getFoodData().getSaturationLevel() <= 0.0F && this.tickCount % (food * 3 + 1) == 0) {
+                yo = yLineBase + (this.heartRandom.nextInt(3) - 1);
+            }
+            int xo = xRight - i * 8 - 9;
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, empty, xo, yo, 9, 9);
+            if (i * 2 + 1 < food) {
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, full, xo, yo, 9, 9);
+            }
+            if (i * 2 + 1 == food) {
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, half, xo, yo, 9, 9);
+            }
+        }
+    }
+
+    /** 原版 Hud.HeartType 等价：完整 sprite 映射 + 药水/冰冻类型判定。 */
+    private enum BotHeartType {
+        CONTAINER(
+                Identifier.withDefaultNamespace("hud/heart/container"),
+                Identifier.withDefaultNamespace("hud/heart/container_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/container"),
+                Identifier.withDefaultNamespace("hud/heart/container_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/container_hardcore"),
+                Identifier.withDefaultNamespace("hud/heart/container_hardcore_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/container_hardcore"),
+                Identifier.withDefaultNamespace("hud/heart/container_hardcore_blinking")),
+        NORMAL(
+                Identifier.withDefaultNamespace("hud/heart/full"),
+                Identifier.withDefaultNamespace("hud/heart/full_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/half"),
+                Identifier.withDefaultNamespace("hud/heart/half_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/hardcore_full"),
+                Identifier.withDefaultNamespace("hud/heart/hardcore_full_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/hardcore_half"),
+                Identifier.withDefaultNamespace("hud/heart/hardcore_half_blinking")),
+        POISONED(
+                Identifier.withDefaultNamespace("hud/heart/poisoned_full"),
+                Identifier.withDefaultNamespace("hud/heart/poisoned_full_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/poisoned_half"),
+                Identifier.withDefaultNamespace("hud/heart/poisoned_half_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/poisoned_hardcore_full"),
+                Identifier.withDefaultNamespace("hud/heart/poisoned_hardcore_full_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/poisoned_hardcore_half"),
+                Identifier.withDefaultNamespace("hud/heart/poisoned_hardcore_half_blinking")),
+        WITHERED(
+                Identifier.withDefaultNamespace("hud/heart/withered_full"),
+                Identifier.withDefaultNamespace("hud/heart/withered_full_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/withered_half"),
+                Identifier.withDefaultNamespace("hud/heart/withered_half_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/withered_hardcore_full"),
+                Identifier.withDefaultNamespace("hud/heart/withered_hardcore_full_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/withered_hardcore_half"),
+                Identifier.withDefaultNamespace("hud/heart/withered_hardcore_half_blinking")),
+        FROZEN(
+                Identifier.withDefaultNamespace("hud/heart/frozen_full"),
+                Identifier.withDefaultNamespace("hud/heart/frozen_full_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/frozen_half"),
+                Identifier.withDefaultNamespace("hud/heart/frozen_half_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/frozen_hardcore_full"),
+                Identifier.withDefaultNamespace("hud/heart/frozen_hardcore_full_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/frozen_hardcore_half"),
+                Identifier.withDefaultNamespace("hud/heart/frozen_hardcore_half_blinking")),
+        ABSORBING(
+                Identifier.withDefaultNamespace("hud/heart/absorbing_full"),
+                Identifier.withDefaultNamespace("hud/heart/absorbing_full_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/absorbing_half"),
+                Identifier.withDefaultNamespace("hud/heart/absorbing_half_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/absorbing_hardcore_full"),
+                Identifier.withDefaultNamespace("hud/heart/absorbing_hardcore_full_blinking"),
+                Identifier.withDefaultNamespace("hud/heart/absorbing_hardcore_half"),
+                Identifier.withDefaultNamespace("hud/heart/absorbing_hardcore_half_blinking"));
+
+        private final Identifier full;
+        private final Identifier fullBlinking;
+        private final Identifier half;
+        private final Identifier halfBlinking;
+        private final Identifier hardcoreFull;
+        private final Identifier hardcoreFullBlinking;
+        private final Identifier hardcoreHalf;
+        private final Identifier hardcoreHalfBlinking;
+
+        BotHeartType(Identifier full, Identifier fullBlinking, Identifier half, Identifier halfBlinking,
+                     Identifier hardcoreFull, Identifier hardcoreFullBlinking,
+                     Identifier hardcoreHalf, Identifier hardcoreHalfBlinking) {
+            this.full = full;
+            this.fullBlinking = fullBlinking;
+            this.half = half;
+            this.halfBlinking = halfBlinking;
+            this.hardcoreFull = hardcoreFull;
+            this.hardcoreFullBlinking = hardcoreFullBlinking;
+            this.hardcoreHalf = hardcoreHalf;
+            this.hardcoreHalfBlinking = hardcoreHalfBlinking;
+        }
+
+        Identifier getSprite(boolean isHardcore, boolean isHalf, boolean isBlink) {
+            if (!isHardcore) {
+                if (isHalf) {
+                    return isBlink ? this.halfBlinking : this.half;
+                }
+                return isBlink ? this.fullBlinking : this.full;
+            }
+            if (isHalf) {
+                return isBlink ? this.hardcoreHalfBlinking : this.hardcoreHalf;
+            }
+            return isBlink ? this.hardcoreFullBlinking : this.hardcoreFull;
+        }
+
+        static BotHeartType forPlayer(net.minecraft.world.entity.player.Player player) {
+            if (player.hasEffect(net.minecraft.world.effect.MobEffects.POISON)) {
+                return POISONED;
+            }
+            if (player.hasEffect(net.minecraft.world.effect.MobEffects.WITHER)) {
+                return WITHERED;
+            }
+            if (player.isFullyFrozen()) {
+                return FROZEN;
+            }
+            return NORMAL;
+        }
     }
 
     /**
@@ -1104,20 +1523,22 @@ public class BotControlScreen extends Screen {
             return;
         }
         // 面板内居中放原版 182x5 经验条
-        int x = this.sx(CONTENT_X + (CONTENT_W - 182) / 2);
+        // 经验条宽度自适应面板（最大原版 182，小面板自动缩窄，不溢出背景）
+        int barW = Math.min(182, CONTENT_W - 4);
+        int x = this.sx(CONTENT_X + (CONTENT_W - barW) / 2);
         if (player.getXpNeededForNextLevel() > 0) {
-            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, XP_BAR_BACKGROUND, x, y, 182, 5);
-            int progress = (int) (player.experienceProgress * 183.0F);
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, XP_BAR_BACKGROUND, x, y, barW, 5);
+            int progress = (int) (player.experienceProgress * (barW + 1));
             if (progress > 0) {
                 // 原版裁剪：从进度 sprite 裁 0..progress 宽
                 graphics.blitSprite(RenderPipelines.GUI_TEXTURED, XP_BAR_PROGRESS,
-                        182, 5, 0, 0, x, y, progress, 5);
+                        barW, 5, 0, 0, x, y, progress, 5);
             }
         }
         // 等级文字：ContextualBar.extractExperienceLevel 同款（绿色 + 四向黑阴影）
         if (player.experienceLevel > 0) {
             Component level = Component.translatable("gui.experience.level", player.experienceLevel);
-            int tx = x + (182 - this.font.width(level)) / 2;
+            int tx = x + (barW - this.font.width(level)) / 2;
             int ty = y - 11;
             graphics.text(this.font, level, tx + 1, ty, -16777216, false);
             graphics.text(this.font, level, tx - 1, ty, -16777216, false);
@@ -1321,11 +1742,16 @@ public class BotControlScreen extends Screen {
         AbstractContainerMenu menu = c.raw();
         int containerSize = this.containerSlotCount(c);
         int rows = (containerSize + 8) / 9;
+        // 顶部标题行：X 按钮（控件）+ 容器标题
+        graphics.text(this.font, this.font.plainSubstrByWidth(
+                        c.getTitle().getString(), this.sw(CONTENT_W - 20)),
+                this.sx(CONTENT_X + 16), this.sy(CONTENT_Y + 2), 0xFFD7D7D7);
         double mx = this.localX(mouseX);
         double my = this.localY(mouseY);
         int hovered = this.containerSlotAt(mx, my, containerSize);
         for (int i = 0; i < containerSize; i++) {
-            this.drawSlot(graphics, CONTENT_X + (i % 9) * CELL, CONTENT_Y + (i / 9) * CELL,
+            this.drawSlot(graphics, CONTENT_X + (i % 9) * CELL,
+                    CONTENT_Y + CONTAINER_HEADER_H + (i / 9) * CELL,
                     c.getSlot(i), hovered == i, menu.getSlot(i).getNoItemIcon());
         }
         // 假人背包部分（菜单末尾 36 槽）
@@ -1335,7 +1761,8 @@ public class BotControlScreen extends Screen {
             int idx = containerSize + i;
             if (idx < c.getSize()) {
                 this.drawSlot(graphics, CONTENT_X + (i % 9) * CELL,
-                        CONTENT_Y + playerY + (i / 9) * CELL, c.getSlot(idx), hovered == idx,
+                        CONTENT_Y + CONTAINER_HEADER_H + playerY + (i / 9) * CELL,
+                        c.getSlot(idx), hovered == idx,
                         menu.getSlot(idx).getNoItemIcon());
             }
         }
@@ -1353,13 +1780,13 @@ public class BotControlScreen extends Screen {
     /** 动作 Tab：分区标题（按钮本身由控件渲染）。 */
     private void drawActions(GuiGraphicsExtractor graphics) {
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.look"),
-                this.sx(CONTENT_X), this.sy(CONTENT_Y + 4), 0xFFA8C8FF);
+                this.sx(CONTENT_X), this.sy(this.lookTitleY), 0xFFA8C8FF);
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.move"),
-                this.sx(CONTENT_X), this.sy(CONTENT_Y + 52), 0xFFA8C8FF);
+                this.sx(CONTENT_X), this.sy(this.moveTitleY), 0xFFA8C8FF);
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.interact"),
-                this.sx(CONTENT_X), this.sy(CONTENT_Y + 100), 0xFFA8C8FF);
+                this.sx(CONTENT_X), this.sy(this.interactTitleY), 0xFFA8C8FF);
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.system"),
-                this.sx(CONTENT_X), this.sy(CONTENT_Y + 126), 0xFFA8C8FF);
+                this.sx(CONTENT_X), this.sy(this.systemTitleY), 0xFFA8C8FF);
     }
 
     /** 画一个槽位（逻辑坐标入参，内部换算屏幕坐标；边框 + 空槽图标 + 物品图标 + 数量 + 悬停高亮）。 */

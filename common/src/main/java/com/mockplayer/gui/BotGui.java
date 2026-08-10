@@ -49,6 +49,9 @@ public final class BotGui {
     private static volatile int xpBarCount;
     private static volatile int xpBarLevel;
     private static volatile float xpBarProgress;
+    private static volatile int healthFoodCount;
+    private static volatile float lastHealth;
+    private static volatile int lastFood;
     private static volatile String lastTitle = "";
 
     private BotGui() {
@@ -209,6 +212,15 @@ public final class BotGui {
         }
     }
 
+    /** 血量/饥饿条渲染探针（原版 HUD sprite；仅测试属性开启时记录）。 */
+    public static void recordHealthFood(float health, int food) {
+        if (Boolean.getBoolean("mockplayer.guiRenderProbe")) {
+            BotGui.healthFoodCount++;
+            BotGui.lastHealth = health;
+            BotGui.lastFood = food;
+        }
+    }
+
     /** 测试读取：打开次数（0 = 从未打开）。 */
     public static int probeOpenCount() {
         return BotGui.openCount;
@@ -257,6 +269,21 @@ public final class BotGui {
     /** 测试读取：最近一次经验条进度（0-1）。 */
     public static float probeXpBarProgress() {
         return BotGui.xpBarProgress;
+    }
+
+    /** 测试读取：血量/饥饿条渲染次数（0 = 从未绘制）。 */
+    public static int probeHealthFoodCount() {
+        return BotGui.healthFoodCount;
+    }
+
+    /** 测试读取：最近一次血量。 */
+    public static float probeLastHealth() {
+        return BotGui.lastHealth;
+    }
+
+    /** 测试读取：最近一次饥饿值。 */
+    public static int probeLastFood() {
+        return BotGui.lastFood;
     }
 
     /** 测试读取：最近渲染帧的标题文本。 */
