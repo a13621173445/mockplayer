@@ -6316,6 +6316,22 @@ public final class TestRunner {
     private static volatile double bgMainClientZ = Double.NaN;
     private static volatile float bgMainHealth = 20;
     private static volatile double bgMainStartX = Double.NaN;
+    private static boolean bgModeSet;
+    private static boolean bgModeOpened;
+    private static boolean bgModeTextChecked;
+    private static boolean bgModeHoldDamaged;
+    private static boolean bgModeRapidActivated;
+    private static boolean bgModeRapidDamaged;
+    private static boolean bgModeUseDone;
+    private static boolean bgModeUseArmed;
+    private static boolean bgModeUseText;
+    private static volatile float bgModeHoldHp = 20;
+    private static volatile float bgModeHuskHp = 20;
+    private static volatile float bgModeHuskPrevHp = 20;
+    private static volatile int bgModeRapidHits;
+    private static volatile int bgModeUseMaxContainer = -1;
+    private static net.minecraft.client.gui.components.Button bgModeAtk;
+    private static net.minecraft.client.gui.components.Button bgModeUse;
 
     private static void runBotGui(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -8200,7 +8216,244 @@ public final class TestRunner {
                     bgStep(38);
                 }
             }
-            case 38 -> { // 收尾
+            case 38 -> { // 动作按钮模式：右键切 长按/连点/默认，左键激活变红，激活时右键禁用
+                if (!bgModeSet) {
+                    bgModeSet = true;
+                    mc.gui.setScreen(null);
+                    System.setProperty("mockplayer.guiRenderProbe", "true");
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            sp.getInventory().clearContent();
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    "item replace entity " + botName + " weapon.mainhand with minecraft:diamond_sword");
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    String.format("summon minecraft:husk %.2f %.2f %.2f {NoAI:1b}",
+                                            sp.getX() + 2.0, sp.getY(), sp.getZ()));
+                        }
+                    });
+                    bot.actions().look(-90.0F, 0.0F); // 面向东（husk 在 +2）
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 15) {
+                    return; // 等装备/召唤同步
+                }
+                if (!bgModeOpened) {
+                    bgModeOpened = true;
+                    com.mockplayer.gui.BotGui.open(mc);
+                    net.minecraft.client.gui.screens.Screen opened = bgScreen();
+                    if (opened instanceof com.mockplayer.gui.BotControlScreen s) {
+                        net.minecraft.client.gui.components.Button tab =
+                                bgFindButton(s, "gui.mockplayer.tab.actions");
+                        if (tab != null) {
+                            bgClick(tab);
+                        }
+                    }
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 5) {
+                    return;
+                }
+                com.mockplayer.gui.BotControlScreen s = bgScreen();
+                if (!bgModeTextChecked) {
+                    bgModeTextChecked = true;
+                    if (s == null) {
+                        fail("mode screen missing");
+                        bgStep(39);
+                        return;
+                    }
+                    bgModeAtk = bgFindButton(s, "gui.mockplayer.action.attack_look");
+                    bgModeUse = bgFindButton(s, "gui.mockplayer.action.use_look");
+                    check("mode buttons found", bgModeAtk != null && bgModeUse != null);
+                    if (bgModeAtk == null) {
+                        bgStep(39);
+                        return;
+                    }
+                    // 右键循环：默认 → 长按 → 连点 → 默认
+                    bgRightClick(bgModeAtk);
+                    check("mode attack hold text", bgModeMsg(bgModeAtk, "gui.mockplayer.action.attack_hold"),
+                            "msg=" + bgModeAtk.getMessage().getString());
+                    bgRightClick(bgModeAtk);
+                    check("mode attack rapid text", bgModeMsg(bgModeAtk, "gui.mockplayer.action.attack_rapid"),
+                            "msg=" + bgModeAtk.getMessage().getString());
+                    bgRightClick(bgModeAtk);
+                    check("mode attack back default", bgModeMsg(bgModeAtk, "gui.mockplayer.action.attack_look"),
+                            "msg=" + bgModeAtk.getMessage().getString());
+                    // 长按模式：左键激活 → 变红 + 右键禁用
+                    bgRightClick(bgModeAtk);
+                    bgClick(bgModeAtk);
+                    check("mode hold activated red", bgIsRed(bgModeAtk));
+                    bgRightClick(bgModeAtk);
+                    check("mode hold right-click blocked",
+                            bgModeMsg(bgModeAtk, "gui.mockplayer.action.attack_hold") && bgIsRed(bgModeAtk));
+                    waitTicks = 0;
+                    return;
+                }
+                if (!bgModeHoldDamaged) {
+                    server.execute(() -> {
+                        var husk = server.getLevel(net.minecraft.world.level.Level.OVERWORLD).getEntities(
+                                net.minecraft.world.level.entity.EntityTypeTest.forClass(
+                                        net.minecraft.world.entity.monster.zombie.Husk.class),
+                                new net.minecraft.world.phys.AABB(
+                                        server.getPlayerList().getPlayerByName(botName).blockPosition()).inflate(8.0),
+                                e -> e.isAlive()).stream().findFirst().orElse(null);
+                        bgModeHoldHp = husk != null ? husk.getHealth() : -1;
+                    });
+                    if (bgModeHoldHp >= 0 && bgModeHoldHp < 20) {
+                        check("mode hold sustained damages", true, "hp=" + bgModeHoldHp);
+                        bgModeHoldDamaged = true;
+                        bgModeHuskPrevHp = 20;
+                        bgModeRapidHits = 0;
+                        bgClick(bgModeAtk); // 关闭长按
+                        check("mode hold deactivated normal", !bgIsRed(bgModeAtk));
+                        server.execute(() -> {
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    "kill @e[type=minecraft:husk]");
+                            var sp = server.getPlayerList().getPlayerByName(botName);
+                            if (sp != null) {
+                                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                        String.format("summon minecraft:husk %.2f %.2f %.2f {NoAI:1b}",
+                                                sp.getX() + 2.0, sp.getY(), sp.getZ()));
+                            }
+                        });
+                        waitTicks = 0;
+                        return;
+                    }
+                    if (++waitTicks > 80) {
+                        check("mode hold sustained damages", false, "hp=" + bgModeHoldHp);
+                        bgModeHoldDamaged = true;
+                        bgClick(bgModeAtk);
+                        waitTicks = 0;
+                        return;
+                    }
+                    return;
+                }
+                if (++waitTicks < 10) {
+                    return; // 等新 husk
+                }
+                if (!bgModeRapidActivated) {
+                    bgModeRapidActivated = true;
+                    bgRightClick(bgModeAtk); // 长按 → 连点
+                    check("mode attack rapid text 2", bgModeMsg(bgModeAtk, "gui.mockplayer.action.attack_rapid"),
+                            "msg=" + bgModeAtk.getMessage().getString());
+                    bgClick(bgModeAtk); // 激活连点
+                    check("mode rapid activated red", bgIsRed(bgModeAtk));
+                    bgRightClick(bgModeAtk);
+                    check("mode rapid right-click blocked",
+                            bgModeMsg(bgModeAtk, "gui.mockplayer.action.attack_rapid") && bgIsRed(bgModeAtk));
+                    waitTicks = 0;
+                    return;
+                }
+                if (!bgModeRapidDamaged) {
+                    server.execute(() -> {
+                        var husk = server.getLevel(net.minecraft.world.level.Level.OVERWORLD).getEntities(
+                                net.minecraft.world.level.entity.EntityTypeTest.forClass(
+                                        net.minecraft.world.entity.monster.zombie.Husk.class),
+                                new net.minecraft.world.phys.AABB(
+                                        server.getPlayerList().getPlayerByName(botName).blockPosition()).inflate(8.0),
+                                e -> e.isAlive()).stream().findFirst().orElse(null);
+                        bgModeHuskHp = husk != null ? husk.getHealth() : -1;
+                    });
+                    if (bgModeHuskHp >= 0 && bgModeHuskHp < bgModeHuskPrevHp - 1.0F) {
+                        bgModeRapidHits++;
+                        bgModeHuskPrevHp = bgModeHuskHp;
+                    }
+                    if (bgModeRapidHits >= 2) {
+                        check("mode rapid attack repeats", true,
+                                "hits=" + bgModeRapidHits + " hp=" + bgModeHuskHp);
+                        bgModeRapidDamaged = true;
+                        bgClick(bgModeAtk); // 关闭连点
+                        check("mode rapid deactivated normal", !bgIsRed(bgModeAtk));
+                        bgRightClick(bgModeAtk); // 连点 → 默认
+                        check("mode rapid back default", bgModeMsg(bgModeAtk, "gui.mockplayer.action.attack_look"),
+                                "msg=" + bgModeAtk.getMessage().getString());
+                        waitTicks = 0;
+                        return;
+                    }
+                    if (++waitTicks > 160) {
+                        check("mode rapid attack repeats", false,
+                                "hits=" + bgModeRapidHits + " hp=" + bgModeHuskHp);
+                        bgModeRapidDamaged = true;
+                        bgClick(bgModeAtk);
+                        bgRightClick(bgModeAtk);
+                        waitTicks = 0;
+                        return;
+                    }
+                    return;
+                }
+                if (!bgModeUseDone) {
+                    if (!bgModeUseArmed) {
+                        bgModeUseArmed = true;
+                        bgModeUseMaxContainer = -1;
+                        server.execute(() -> {
+                            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                    "kill @e[type=minecraft:husk]");
+                            var sp = server.getPlayerList().getPlayerByName(botName);
+                            if (sp != null) {
+                                // 视线高度放箱子：连点右键每 20 tick useLook 开一次 → containerId 递增
+                                server.getLevel(net.minecraft.world.level.Level.OVERWORLD).setBlock(
+                                        new net.minecraft.core.BlockPos(
+                                                (int) Math.floor(sp.getX()) + 2,
+                                                (int) Math.floor(sp.getY()) + 1,
+                                                (int) Math.floor(sp.getZ())),
+                                        net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState(), 3);
+                            }
+                        });
+                        waitTicks = 0;
+                        return;
+                    }
+                    if (++waitTicks < 10) {
+                        return; // 等面包
+                    }
+                    if (!bgModeUseText) {
+                        bgModeUseText = true;
+                        bgRightClick(bgModeUse); // 默认 → 长按
+                        check("mode use hold text", bgModeMsg(bgModeUse, "gui.mockplayer.action.use_hold"),
+                                "msg=" + bgModeUse.getMessage().getString());
+                        bgRightClick(bgModeUse); // 长按 → 连点
+                        check("mode use rapid text", bgModeMsg(bgModeUse, "gui.mockplayer.action.use_rapid"),
+                                "msg=" + bgModeUse.getMessage().getString());
+                        bgClick(bgModeUse); // 激活连点右键
+                        check("mode use rapid red", bgIsRed(bgModeUse));
+                        bgRightClick(bgModeUse);
+                        check("mode use right-click blocked",
+                                bgModeMsg(bgModeUse, "gui.mockplayer.action.use_rapid") && bgIsRed(bgModeUse));
+                        waitTicks = 0;
+                        return;
+                    }
+                    server.execute(() -> {
+                        var sp = server.getPlayerList().getPlayerByName(botName);
+                        int cid = sp != null ? sp.containerMenu.containerId : -1;
+                        if (cid > bgModeUseMaxContainer) {
+                            bgModeUseMaxContainer = cid;
+                        }
+                    });
+                    if (bgModeUseMaxContainer >= 2) {
+                        check("mode use rapid repeats", true, "containerId=" + bgModeUseMaxContainer);
+                        bgModeUseDone = true;
+                        bgClick(bgModeUse); // 关闭连点
+                        check("mode use deactivated normal", !bgIsRed(bgModeUse));
+                        bgRightClick(bgModeUse); // 连点 → 默认
+                        check("mode use back default", bgModeMsg(bgModeUse, "gui.mockplayer.action.use_look"),
+                                "msg=" + bgModeUse.getMessage().getString());
+                        mc.gui.setScreen(null);
+                        System.clearProperty("mockplayer.guiRenderProbe");
+                        bgStep(39);
+                    } else if (++waitTicks > 100) {
+                        check("mode use rapid repeats", false, "containerId=" + bgModeUseMaxContainer);
+                        bgModeUseDone = true;
+                        bgClick(bgModeUse);
+                        bgRightClick(bgModeUse);
+                        mc.gui.setScreen(null);
+                        System.clearProperty("mockplayer.guiRenderProbe");
+                        bgStep(39);
+                    }
+                    return;
+                }
+            }
+            case 39 -> { // 收尾
                 if (++waitTicks < 20) {
                     return;
                 }
@@ -8461,6 +8714,26 @@ public final class TestRunner {
         double sy = com.mockplayer.gui.BotGui.panelY(w, h) + (44 + ly + 10) * scale;
         return screen.mouseClicked(new net.minecraft.client.input.MouseButtonEvent(
                 sx, sy, new net.minecraft.client.input.MouseButtonInfo(0, 0)), false);
+    }
+
+    /** 按钮右键点击（模式切换用；按钮中心）。 */
+    private static void bgRightClick(net.minecraft.client.gui.components.Button b) {
+        b.mouseClicked(new net.minecraft.client.input.MouseButtonEvent(
+                b.getX() + b.getWidth() / 2.0, b.getY() + b.getHeight() / 2.0,
+                new net.minecraft.client.input.MouseButtonInfo(1, 0)), false);
+    }
+
+    /** 按钮文字是否等于某翻译 key 的当前语言文本。 */
+    private static boolean bgModeMsg(net.minecraft.client.gui.components.Button b, String key) {
+        return b.getMessage().getString().equals(
+                net.minecraft.network.chat.Component.translatable(key).getString());
+    }
+
+    /** 按钮文字是否为红色（激活态）。 */
+    private static boolean bgIsRed(net.minecraft.client.gui.components.Button b) {
+        var color = b.getMessage().getStyle().getColor();
+        return color != null && color.equals(
+                net.minecraft.network.chat.TextColor.fromLegacyFormat(net.minecraft.ChatFormatting.RED));
     }
 
     /** 容器 Tab 的「容器区」格子点击（row 0 = 容器槽 0；与玩家区不同）。 */

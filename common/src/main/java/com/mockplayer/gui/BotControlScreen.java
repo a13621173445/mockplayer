@@ -208,8 +208,10 @@ public class BotControlScreen extends Screen {
     private Button sneakButton;
     private Button sprintButton;
     private Button jumpButton;
-    private TapHoldButton attackLookButton;
-    private TapHoldButton useLookButton;
+    private ModeTapHoldButton attackLookButton;
+    private ModeTapHoldButton useLookButton;
+    /** 连点右键 20 tick 计数（右键模式 tick 驱动）。 */
+    private int useRapidTicks;
     private RepeatHoldButton chunkMinusButton;
     private RepeatHoldButton chunkPlusButton;
     private Button respawnButton;
@@ -249,6 +251,13 @@ public class BotControlScreen extends Screen {
 
     @Override
     public void removed() {
+        // 关闭 GUI：停止锁存的长按/连点动作，防 bot 卡在持续状态
+        if (this.attackLookButton != null) {
+            this.attackLookButton.stopLatched();
+        }
+        if (this.useLookButton != null) {
+            this.useLookButton.stopLatched();
+        }
         // 恢复打开前的主玩家菜单模糊值（不污染设置）
         if (BotControlScreen.lastMainBlurBefore >= 0) {
             Minecraft.getInstance().options.menuBackgroundBlurriness()
@@ -362,16 +371,20 @@ public class BotControlScreen extends Screen {
 
         this.interactTitleY = actY;
         actY += TITLE_ROW_H;
-        this.attackLookButton = this.addTapHold(CONTENT_X, actY, ACT_BTN_W, ACT_BTN_H,
-                "gui.mockplayer.action.attack_look",
+        this.attackLookButton = this.addModeTapHold(CONTENT_X, actY, ACT_BTN_W, ACT_BTN_H,
+                "gui.mockplayer.action.attack_look", "gui.mockplayer.action.attack_hold",
+                "gui.mockplayer.action.attack_rapid",
                 () -> this.actQuiet(b -> b.actions().attackLook()),
                 () -> this.actQuiet(b -> b.actions().sustainedAttackLook()),
-                () -> this.actQuiet(b -> b.actions().stopSustained()));
-        this.useLookButton = this.addTapHold(CONTENT_X + ACT_GAP, actY, ACT_BTN_W, ACT_BTN_H,
-                "gui.mockplayer.action.use_look",
+                () -> this.actQuiet(b -> b.actions().stopSustained()),
+                () -> this.tickRapidAttack());
+        this.useLookButton = this.addModeTapHold(CONTENT_X + ACT_GAP, actY, ACT_BTN_W, ACT_BTN_H,
+                "gui.mockplayer.action.use_look", "gui.mockplayer.action.use_hold",
+                "gui.mockplayer.action.use_rapid",
                 () -> this.actQuiet(b -> b.actions().useLook()),
                 () -> this.actQuiet(b -> b.actions().sustainedUseLook()),
-                () -> this.actQuiet(b -> b.actions().stopSustained()));
+                () -> this.actQuiet(b -> b.actions().stopSustained()),
+                () -> this.tickRapidUse());
         actY += ACT_BTN_H + SECTION_GAP;
 
         this.systemTitleY = actY;
@@ -457,11 +470,16 @@ public class BotControlScreen extends Screen {
         return b;
     }
 
-    /** 单击/长按按钮：按下 = 单点 + 立即持续，松开 = 停止（attack/use 共用）。 */
-    private TapHoldButton addTapHold(int x, int y, int w, int h, String key,
-                                     Runnable tap, Runnable holdStart, Runnable holdEnd) {
-        TapHoldButton b = new TapHoldButton(sx(x), sy(y), sw(w), sw(h),
-                Component.translatable(key), tap, holdStart, holdEnd);
+    /**
+     * 动作模式按钮：默认 = 单击 + 按住持续（松开停止，原版行为）；
+     * 右键循环切换 长按 → 连点 → 默认；长按/连点模式左键开关锁存（激活变红，激活时禁止右键切换）。
+     */
+    private ModeTapHoldButton addModeTapHold(int x, int y, int w, int h,
+                                             String baseKey, String holdKey, String rapidKey,
+                                             Runnable tap, Runnable holdStart, Runnable holdEnd,
+                                             Runnable modeTick) {
+        ModeTapHoldButton b = new ModeTapHoldButton(sx(x), sy(y), sw(w), sw(h),
+                baseKey, holdKey, rapidKey, tap, holdStart, holdEnd, modeTick);
         b.setAlpha(this.currentButtonAlpha());
         this.addRenderableWidget(b);
         return b;
@@ -509,32 +527,119 @@ public class BotControlScreen extends Screen {
     }
 
     /**
-     * 单击/长按按钮：onClick 立即执行单点（tap）并进入持续状态（holdStart），
-     * onRelease 停止（holdEnd）——按下即动、松开即停，与原版按键一致（无时间阈值）。
+     * 动作模式按钮（attack/use 共用）：默认 = 单击 + 按住持续；
+     * 右键切 长按/连点/默认；长按/连点左键开关锁存，激活变红且禁止右键切换。
      */
-    private static final class TapHoldButton extends Button {
+    private static final class ModeTapHoldButton extends Button {
+        private enum Mode { TAP, HOLD, RAPID }
+
         private final Runnable tap;
         private final Runnable holdStart;
         private final Runnable holdEnd;
+        private final Runnable modeTick;
+        private final String baseKey;
+        private final String holdKey;
+        private final String rapidKey;
+        private Mode mode = Mode.TAP;
+        private boolean latched;
 
-        TapHoldButton(int x, int y, int w, int h, Component message,
-                      Runnable tap, Runnable holdStart, Runnable holdEnd) {
-            super(x, y, w, h, message, btn -> {
+        ModeTapHoldButton(int x, int y, int w, int h,
+                          String baseKey, String holdKey, String rapidKey,
+                          Runnable tap, Runnable holdStart, Runnable holdEnd, Runnable modeTick) {
+            super(x, y, w, h, Component.translatable(baseKey), btn -> {
             }, DEFAULT_NARRATION);
+            this.baseKey = baseKey;
+            this.holdKey = holdKey;
+            this.rapidKey = rapidKey;
             this.tap = tap;
             this.holdStart = holdStart;
             this.holdEnd = holdEnd;
+            this.modeTick = modeTick;
+        }
+
+        @Override
+        public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+            if (this.isActive() && this.isMouseOver(event.x(), event.y())
+                    && event.buttonInfo().button() == 1) {
+                // 右键切换模式；激活（长按/连点进行中）时禁止切换
+                if (!this.latched) {
+                    this.cycleMode();
+                }
+                return true;
+            }
+            return super.mouseClicked(event, doubleClick);
         }
 
         @Override
         public void onClick(MouseButtonEvent event, boolean doubleClick) {
-            this.tap.run();
-            this.holdStart.run();
+            switch (this.mode) {
+                case TAP -> {
+                    this.tap.run();
+                    this.holdStart.run();
+                }
+                case HOLD -> {
+                    if (this.latched) {
+                        this.latched = false;
+                        this.holdEnd.run();
+                    } else {
+                        this.latched = true;
+                        this.holdStart.run();
+                    }
+                    this.applyMessage();
+                }
+                case RAPID -> {
+                    this.latched = !this.latched;
+                    this.applyMessage();
+                }
+            }
         }
 
         @Override
         public void onRelease(MouseButtonEvent event) {
-            this.holdEnd.run();
+            // 默认模式保持原版「按住持续/松开停止」；长按/连点是开关锁存，不随松开结束
+            if (this.mode == Mode.TAP) {
+                this.holdEnd.run();
+            }
+        }
+
+        private void cycleMode() {
+            this.mode = switch (this.mode) {
+                case TAP -> Mode.HOLD;
+                case HOLD -> Mode.RAPID;
+                case RAPID -> Mode.TAP;
+            };
+            this.applyMessage();
+        }
+
+        /** 关闭 GUI 时停止锁存动作（防 bot 卡在持续/连点状态）。 */
+        void stopLatched() {
+            if (this.latched) {
+                this.latched = false;
+                if (this.mode == Mode.HOLD) {
+                    this.holdEnd.run();
+                }
+                this.applyMessage();
+            }
+        }
+
+        /** 连点模式激活时的 tick 驱动（左键看蓄力、右键 20 tick 一次，由外部传入）。 */
+        void onModeTick() {
+            if (this.mode == Mode.RAPID && this.latched) {
+                this.modeTick.run();
+            }
+        }
+
+        private void applyMessage() {
+            String key = switch (this.mode) {
+                case TAP -> this.baseKey;
+                case HOLD -> this.holdKey;
+                case RAPID -> this.rapidKey;
+            };
+            Component message = Component.translatable(key);
+            if (this.latched) {
+                message = message.copy().withStyle(net.minecraft.ChatFormatting.RED);
+            }
+            this.setMessage(message);
         }
 
         @Override
@@ -860,6 +965,23 @@ public class BotControlScreen extends Screen {
         }
     }
 
+    /** 连点左键：主手武器蓄力满（attack strength 1.0）时攻击一次（原版攻击节奏）。 */
+    private void tickRapidAttack() {
+        net.minecraft.client.player.LocalPlayer player =
+                this.selected != null ? this.selected.getLocalPlayer() : null;
+        if (player != null && player.getAttackStrengthScale(0.0F) >= 1.0F) {
+            this.actQuiet(b -> b.actions().attackLook());
+        }
+    }
+
+    /** 连点右键：每 20 tick（1 秒）使用一次。 */
+    private void tickRapidUse() {
+        if (++this.useRapidTicks >= 20) {
+            this.useRapidTicks = 0;
+            this.actQuiet(b -> b.actions().useLook());
+        }
+    }
+
     private void toggleSneak() {
         if (!this.requireBot()) {
             return;
@@ -955,6 +1077,13 @@ public class BotControlScreen extends Screen {
         long now = Util.getMillis();
         for (RepeatHoldButton b : this.repeatButtons) {
             b.onTick(now);
+        }
+        // 动作模式按钮：连点激活时的 tick 驱动
+        if (this.attackLookButton != null) {
+            this.attackLookButton.onModeTick();
+        }
+        if (this.useLookButton != null) {
+            this.useLookButton.onModeTick();
         }
         // 选中假人掉线/删除 → 自动切到第一个可用
         if (this.selected != null && (this.selected.getLifecycle() != BotLifecycle.PLAYING
