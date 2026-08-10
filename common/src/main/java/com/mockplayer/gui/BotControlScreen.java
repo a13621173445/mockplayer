@@ -25,6 +25,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec2;
+import net.minecraft.util.Util;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -54,6 +55,28 @@ public class BotControlScreen extends Screen {
     private static final int CELL = 20;
     private static final int SLOT = 18;
 
+    // ===== 半透明面板配色（alpha < 0xFF，透出游戏场景） =====
+    public static final int PANEL_BG_TOP = 0xB0253047;
+    public static final int PANEL_BG_BOTTOM = 0xB00A0D16;
+    public static final int PANEL_HEADER_BG = 0xB0141D2C;
+    public static final int PANEL_ACCENT = 0xB03A86FF;
+    public static final int PANEL_DIVIDER = 0xB01B2537;
+    public static final int PANEL_BORDER = 0x993A4A6A;
+    public static final int PANEL_BORDER_INNER = 0x99151C29;
+    public static final int SLOT_BG = 0x8F222B3A;
+    public static final int SLOT_BG_HOVER = 0x8F3E4C66;
+    public static final int SLOT_BORDER = 0x8F0E1420;
+    public static final int SLOT_BORDER_HOVER = 0xBF7FB2FF;
+    /** 单点/长按判定阈值（毫秒，原版 Util 时间，不受 TPS/分辨率影响）。 */
+    public static final int HOLD_START_MS = 250;
+    /** 调整型按钮长按重复间隔（毫秒）：视线 200ms、区块 300ms。 */
+    public static final int TURN_REPEAT_MS = 200;
+    public static final int CHUNK_REPEAT_MS = 300;
+    /** 交互行按钮尺寸/间距（逻辑坐标，多分辨率由 sx/sw 缩放）。 */
+    public static final int ACT_BTN_W = 74;
+    public static final int ACT_BTN_H = 16;
+    public static final int ACT_GAP = 76;
+
     /** 当前选中假人（null = 未选中）。 */
     private Bot selected;
     /** 当前 Tab：0 状态 / 1 背包 / 2 容器 / 3 动作。 */
@@ -73,10 +96,10 @@ public class BotControlScreen extends Screen {
     private Button tabStatus;
     private Button tabInventory;
     private Button tabActions;
-    private Button turnLeft;
-    private Button turnRight;
-    private Button turnUp;
-    private Button turnDown;
+    private RepeatHoldButton turnLeft;
+    private RepeatHoldButton turnRight;
+    private RepeatHoldButton turnUp;
+    private RepeatHoldButton turnDown;
     private HoldButton moveForward;
     private HoldButton moveBackward;
     private HoldButton moveLeft;
@@ -86,12 +109,10 @@ public class BotControlScreen extends Screen {
     private Button sprintButton;
     private Button jumpButton;
     private final List<Button> hotbarButtons = new ArrayList<>();
-    private Button attackLookButton;
-    private Button useLookButton;
-    private HoldButton holdAttackButton;
-    private HoldButton holdUseButton;
-    private Button chunkMinusButton;
-    private Button chunkPlusButton;
+    private TapHoldButton attackLookButton;
+    private TapHoldButton useLookButton;
+    private RepeatHoldButton chunkMinusButton;
+    private RepeatHoldButton chunkPlusButton;
     private Button respawnButton;
     private Button autoRespawnButton;
     private Button closeContainerButton;
@@ -100,6 +121,10 @@ public class BotControlScreen extends Screen {
     private final List<Button> entityButtons = new ArrayList<>();
     /** 实体按钮当前绑定的实体（防重建时取到已死实体）。 */
     private final List<Entity> entityTargets = new ArrayList<>();
+    /** 单击/长按按钮（attack/use：快速松开=单点，按住超阈值=持续）。 */
+    private final List<TapHoldButton> tapHoldButtons = new ArrayList<>();
+    /** 长按重复按钮（turn/chunk 等调整型控件，tick 驱动重复触发）。 */
+    private final List<RepeatHoldButton> repeatButtons = new ArrayList<>();
 
     public BotControlScreen() {
         super(Component.translatable("gui.mockplayer.title"));
@@ -118,6 +143,8 @@ public class BotControlScreen extends Screen {
         this.hotbarButtons.clear();
         this.entityButtons.clear();
         this.entityTargets.clear();
+        this.tapHoldButtons.clear();
+        this.repeatButtons.clear();
         this.selected = firstSelectableBot();
         if (this.tab > 2) {
             this.tab = 0;
@@ -163,14 +190,18 @@ public class BotControlScreen extends Screen {
                 "gui.mockplayer.tab.actions", () -> this.switchTab(2));
 
         // ===== 动作 Tab 控件 =====
-        this.turnLeft = this.addButton(CONTENT_X, 54, 36, 16, "gui.mockplayer.action.turn_left",
-                () -> this.act(b -> b.actions().turn(-15.0F, 0.0F), "gui.mockplayer.action.turn_left"));
-        this.turnRight = this.addButton(CONTENT_X + 38, 54, 36, 16, "gui.mockplayer.action.turn_right",
-                () -> this.act(b -> b.actions().turn(15.0F, 0.0F), "gui.mockplayer.action.turn_right"));
-        this.turnUp = this.addButton(CONTENT_X + 76, 54, 36, 16, "gui.mockplayer.action.turn_up",
-                () -> this.act(b -> b.actions().turn(0.0F, -8.0F), "gui.mockplayer.action.turn_up"));
-        this.turnDown = this.addButton(CONTENT_X + 114, 54, 36, 16, "gui.mockplayer.action.turn_down",
-                () -> this.act(b -> b.actions().turn(0.0F, 8.0F), "gui.mockplayer.action.turn_down"));
+        this.turnLeft = this.addRepeat(CONTENT_X, 54, 36, 16, "gui.mockplayer.action.turn_left",
+                () -> this.act(b -> b.actions().turn(-15.0F, 0.0F), "gui.mockplayer.action.turn_left"),
+                TURN_REPEAT_MS);
+        this.turnRight = this.addRepeat(CONTENT_X + 38, 54, 36, 16, "gui.mockplayer.action.turn_right",
+                () -> this.act(b -> b.actions().turn(15.0F, 0.0F), "gui.mockplayer.action.turn_right"),
+                TURN_REPEAT_MS);
+        this.turnUp = this.addRepeat(CONTENT_X + 76, 54, 36, 16, "gui.mockplayer.action.turn_up",
+                () -> this.act(b -> b.actions().turn(0.0F, -8.0F), "gui.mockplayer.action.turn_up"),
+                TURN_REPEAT_MS);
+        this.turnDown = this.addRepeat(CONTENT_X + 114, 54, 36, 16, "gui.mockplayer.action.turn_down",
+                () -> this.act(b -> b.actions().turn(0.0F, 8.0F), "gui.mockplayer.action.turn_down"),
+                TURN_REPEAT_MS);
 
         this.moveForward = this.addHold(CONTENT_X, 80, 36, 16, "gui.mockplayer.action.move_forward",
                 () -> this.act(b -> b.actions().setForward(1.0F), "gui.mockplayer.action.move_forward"),
@@ -202,25 +233,22 @@ public class BotControlScreen extends Screen {
             this.addRenderableWidget(b);
             this.hotbarButtons.add(b);
         }
-        this.attackLookButton = this.addButton(CONTENT_X, 148, 64, 16, "gui.mockplayer.action.attack_look",
-                () -> this.act(Bot::actions, "gui.mockplayer.action.attack_look",
-                        actions -> actions.attackLook()));
-        this.useLookButton = this.addButton(CONTENT_X + 66, 148, 64, 16, "gui.mockplayer.action.use_look",
-                () -> this.act(Bot::actions, "gui.mockplayer.action.use_look",
-                        actions -> actions.useLook()));
-        this.holdAttackButton = this.addHold(CONTENT_X + 132, 148, 74, 16,
-                "gui.mockplayer.action.hold_attack",
+        // 左键/右键：快速松开 = 单点（attackLook/useLook），按住超阈值 = 持续动作（松开停止）
+        this.attackLookButton = this.addTapHold(CONTENT_X, 148, ACT_BTN_W, ACT_BTN_H,
+                "gui.mockplayer.action.attack_look",
+                () -> this.actQuiet(b -> b.actions().attackLook()),
                 () -> this.actQuiet(b -> b.actions().sustainedAttackLook()),
                 () -> this.actQuiet(b -> b.actions().stopSustained()));
-        this.holdUseButton = this.addHold(CONTENT_X + 208, 148, 40, 16,
-                "gui.mockplayer.action.hold_use",
+        this.useLookButton = this.addTapHold(CONTENT_X + ACT_GAP, 148, ACT_BTN_W, ACT_BTN_H,
+                "gui.mockplayer.action.use_look",
+                () -> this.actQuiet(b -> b.actions().useLook()),
                 () -> this.actQuiet(b -> b.actions().sustainedUseLook()),
                 () -> this.actQuiet(b -> b.actions().stopSustained()));
 
-        this.chunkMinusButton = this.addButton(CONTENT_X, 176, 30, 14,
-                "gui.mockplayer.action.chunk_minus", () -> this.changeChunk(-1));
-        this.chunkPlusButton = this.addButton(CONTENT_X + 32, 176, 30, 14,
-                "gui.mockplayer.action.chunk_plus", () -> this.changeChunk(1));
+        this.chunkMinusButton = this.addRepeat(CONTENT_X, 176, 30, 14,
+                "gui.mockplayer.action.chunk_minus", () -> this.changeChunk(-1), CHUNK_REPEAT_MS);
+        this.chunkPlusButton = this.addRepeat(CONTENT_X + 32, 176, 30, 14,
+                "gui.mockplayer.action.chunk_plus", () -> this.changeChunk(1), CHUNK_REPEAT_MS);
         this.respawnButton = this.addButton(CONTENT_X + 66, 176, 44, 14,
                 "gui.mockplayer.action.respawn",
                 () -> this.act(Bot::actions, "gui.mockplayer.action.respawn", actions -> actions.respawn()));
@@ -270,6 +298,26 @@ public class BotControlScreen extends Screen {
         return b;
     }
 
+    /** 单击/长按按钮：快速松开=单点，按住超阈值后持续（attack/use 共用）。 */
+    private TapHoldButton addTapHold(int x, int y, int w, int h, String key,
+                                     Runnable tap, Runnable holdStart, Runnable holdEnd) {
+        TapHoldButton b = new TapHoldButton(sx(x), sy(y), sw(w), sw(h),
+                Component.translatable(key), tap, holdStart, holdEnd, HOLD_START_MS);
+        this.addRenderableWidget(b);
+        this.tapHoldButtons.add(b);
+        return b;
+    }
+
+    /** 长按重复按钮：单击立即执行，按住后按 intervalMs 重复（视线/区块调整）。 */
+    private RepeatHoldButton addRepeat(int x, int y, int w, int h, String key,
+                                       Runnable action, long intervalMs) {
+        RepeatHoldButton b = new RepeatHoldButton(sx(x), sy(y), sw(w), sw(h),
+                Component.translatable(key), action, intervalMs);
+        this.addRenderableWidget(b);
+        this.repeatButtons.add(b);
+        return b;
+    }
+
     /** 按住持续按钮（原版 Button 子类：onClick 触发 start，onRelease 触发 end）。 */
     private static final class HoldButton extends Button {
         private final Runnable holdStart;
@@ -290,6 +338,108 @@ public class BotControlScreen extends Screen {
         @Override
         public void onRelease(MouseButtonEvent event) {
             this.holdEnd.run();
+        }
+
+        @Override
+        protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
+            this.extractDefaultSprite(graphics);
+            this.extractDefaultLabel(graphics.textRendererForWidget(
+                    this, GuiGraphicsExtractor.HoveredTextEffects.NONE));
+        }
+    }
+
+    /**
+     * 单击/长按按钮：onClick 立即单点（tap），按住超过阈值才转持续动作（holdStart），
+     * 松开时若已转持续则 holdEnd。阈值用 {@link Util#getMillis()}（原版时间，不受 TPS 影响）。
+     */
+    private static final class TapHoldButton extends Button {
+        private final Runnable tap;
+        private final Runnable holdStart;
+        private final Runnable holdEnd;
+        private final long holdStartMs;
+        private boolean pressed;
+        private boolean sustained;
+        private long pressMillis;
+
+        TapHoldButton(int x, int y, int w, int h, Component message,
+                      Runnable tap, Runnable holdStart, Runnable holdEnd, long holdStartMs) {
+            super(x, y, w, h, message, btn -> {
+            }, DEFAULT_NARRATION);
+            this.tap = tap;
+            this.holdStart = holdStart;
+            this.holdEnd = holdEnd;
+            this.holdStartMs = holdStartMs;
+        }
+
+        @Override
+        public void onClick(MouseButtonEvent event, boolean doubleClick) {
+            this.pressed = true;
+            this.sustained = false;
+            this.pressMillis = Util.getMillis();
+            this.tap.run();
+        }
+
+        @Override
+        public void onRelease(MouseButtonEvent event) {
+            this.pressed = false;
+            if (this.sustained) {
+                this.holdEnd.run();
+                this.sustained = false;
+            }
+        }
+
+        /** tick 驱动：按住超过阈值 → 转入持续动作。 */
+        void onTick(long now) {
+            if (this.pressed && !this.sustained && now - this.pressMillis >= this.holdStartMs) {
+                this.sustained = true;
+                this.holdStart.run();
+            }
+        }
+
+        @Override
+        protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
+            this.extractDefaultSprite(graphics);
+            this.extractDefaultLabel(graphics.textRendererForWidget(
+                    this, GuiGraphicsExtractor.HoveredTextEffects.NONE));
+        }
+    }
+
+    /**
+     * 长按重复按钮：onClick 立即执行一次，按住后按 intervalMs 重复（调整型按钮，
+     * 时间基于 {@link Util#getMillis()}，与 TPS/分辨率无关）。
+     */
+    private static final class RepeatHoldButton extends Button {
+        private final Runnable repeat;
+        private final long intervalMs;
+        private boolean pressed;
+        private long lastMillis;
+
+        RepeatHoldButton(int x, int y, int w, int h, Component message,
+                         Runnable repeat, long intervalMs) {
+            super(x, y, w, h, message, btn -> {
+            }, DEFAULT_NARRATION);
+            this.repeat = repeat;
+            this.intervalMs = Math.max(1L, intervalMs);
+        }
+
+        @Override
+        public void onClick(MouseButtonEvent event, boolean doubleClick) {
+            this.pressed = true;
+            this.lastMillis = Util.getMillis();
+            this.repeat.run();
+        }
+
+        @Override
+        public void onRelease(MouseButtonEvent event) {
+            this.pressed = false;
+        }
+
+        /** tick 驱动：按住时按间隔重复触发。 */
+        void onTick(long now) {
+            if (this.pressed && now - this.lastMillis >= this.intervalMs) {
+                this.lastMillis = now;
+                this.repeat.run();
+            }
         }
 
         @Override
@@ -485,6 +635,13 @@ public class BotControlScreen extends Screen {
     @Override
     public void tick() {
         BotGui.recordTick();
+        long now = Util.getMillis();
+        for (TapHoldButton b : this.tapHoldButtons) {
+            b.onTick(now);
+        }
+        for (RepeatHoldButton b : this.repeatButtons) {
+            b.onTick(now);
+        }
         // 选中假人掉线/删除 → 自动切到第一个可用
         if (this.selected != null && (this.selected.getLifecycle() != BotLifecycle.PLAYING
                 || !coreBots().contains(this.selected))) {
@@ -522,8 +679,6 @@ public class BotControlScreen extends Screen {
         this.jumpButton.active = ready && actionsTab;
         this.attackLookButton.active = ready && actionsTab;
         this.useLookButton.active = ready && actionsTab;
-        this.holdAttackButton.active = ready && actionsTab;
-        this.holdUseButton.active = ready && actionsTab;
         this.chunkMinusButton.active = ready && actionsTab;
         this.chunkPlusButton.active = ready && actionsTab;
         this.respawnButton.active = ready && actionsTab;
@@ -771,15 +926,15 @@ public class BotControlScreen extends Screen {
         int py = this.panelY();
         int pw = BotGui.panelWidth(this.width, this.height);
         int ph = BotGui.panelHeight(this.width, this.height);
-        // 面板背景：渐变 + 双层边框 + 顶栏 + 左栏分隔线
-        graphics.fillGradient(px, py, px + pw, py + ph, 0xE8253047, 0xE80A0D16);
-        graphics.outline(px, py, pw, ph, 0xFF3A4A6A);
-        graphics.outline(px + 1, py + 1, pw - 2, ph - 2, 0xFF151C29);
+        // 面板背景：半透明渐变 + 双层边框 + 顶栏 + 左栏分隔线（alpha < 0xFF 透出游戏场景）
+        graphics.fillGradient(px, py, px + pw, py + ph, PANEL_BG_TOP, PANEL_BG_BOTTOM);
+        graphics.outline(px, py, pw, ph, PANEL_BORDER);
+        graphics.outline(px + 1, py + 1, pw - 2, ph - 2, PANEL_BORDER_INNER);
         int headerH = this.sh(18);
-        graphics.fill(px, py, px + pw, py + headerH, 0xFF141D2C);
-        graphics.fill(px, py + headerH - 1, px + pw, py + headerH, 0xFF3A86FF);
+        graphics.fill(px, py, px + pw, py + headerH, PANEL_HEADER_BG);
+        graphics.fill(px, py + headerH - 1, px + pw, py + headerH, PANEL_ACCENT);
         int dividerX = this.sx(LIST_X + LIST_W + 6);
-        graphics.fill(dividerX, py + headerH, dividerX + 1, py + ph, 0xFF1B2537);
+        graphics.fill(dividerX, py + headerH, dividerX + 1, py + ph, PANEL_DIVIDER);
         // 控件全部按屏幕坐标直排（init 时 sx/sy/sw 换算好），命中与渲染同一坐标系
         super.extractRenderState(graphics, mouseX, mouseY, a);
         this.drawContent(graphics, mouseX, mouseY);
@@ -954,6 +1109,15 @@ public class BotControlScreen extends Screen {
         int sel = player.getInventory().getSelectedSlot();
         graphics.outline(this.sx(CONTENT_X + 24 + sel * CELL), this.sy(CONTENT_Y + 3 * CELL),
                 this.sw(SLOT + 2), this.sw(SLOT + 2), 0xFFFFFF00);
+        // 悬停物品信息（原版 tooltip + 数量行）
+        if (hovered >= 0) {
+            List<Component> lines = slotTooltip(player, hovered);
+            if (lines != null) {
+                graphics.setTooltipForNextFrame(this.font,
+                        lines.stream().map(Component::getVisualOrderText).toList(), mouseX, mouseY);
+                com.mockplayer.gui.BotGui.recordTooltip();
+            }
+        }
     }
 
     /**
@@ -976,6 +1140,35 @@ public class BotControlScreen extends Screen {
             return null;
         }
         return player.inventoryMenu.getSlot(menuSlot).getNoItemIcon();
+    }
+
+    /**
+     * 背包槽位悬停 tooltip：原版物品信息 + 数量行（空槽返回 null）。
+     * 绘制与测试共用同一数据源。
+     */
+    public static List<Component> slotTooltip(net.minecraft.client.player.LocalPlayer player, int menuSlot) {
+        return itemTooltip(inventoryItem(player, menuSlot));
+    }
+
+    /**
+     * 容器菜单槽位悬停 tooltip：原版物品信息 + 数量行（空槽/越界返回 null）。
+     */
+    public static List<Component> containerSlotTooltip(BotContainer container, int menuSlot) {
+        if (container == null || menuSlot < 0 || menuSlot >= container.getSize()) {
+            return null;
+        }
+        return itemTooltip(container.getSlot(menuSlot));
+    }
+
+    /** 原版物品 tooltip lines + 数量行；空物品返回 null。 */
+    private static List<Component> itemTooltip(ItemStack stack) {
+        if (stack.isEmpty()) {
+            return null;
+        }
+        List<Component> lines = new ArrayList<>(
+                Screen.getTooltipFromItem(Minecraft.getInstance(), stack));
+        lines.add(Component.translatable("gui.mockplayer.tooltip.count", stack.getCount()));
+        return lines;
     }
 
     private void drawContainer(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
@@ -1007,6 +1200,15 @@ public class BotControlScreen extends Screen {
                         menu.getSlot(idx).getNoItemIcon());
             }
         }
+        // 悬停物品信息（原版 tooltip + 数量行）
+        if (hovered >= 0) {
+            List<Component> lines = containerSlotTooltip(c, hovered);
+            if (lines != null) {
+                graphics.setTooltipForNextFrame(this.font,
+                        lines.stream().map(Component::getVisualOrderText).toList(), mouseX, mouseY);
+                com.mockplayer.gui.BotGui.recordTooltip();
+            }
+        }
     }
 
     /** 动作 Tab：分区标题（按钮本身由控件渲染）。 */
@@ -1030,8 +1232,8 @@ public class BotControlScreen extends Screen {
         int y = this.sy(ly);
         int cell = this.sw(CELL);
         int slot = Math.max(1, cell - 2);
-        graphics.fill(x, y, x + cell, y + cell, hovered ? 0xFF3E4C66 : 0xFF222B3A);
-        graphics.outline(x, y, cell, cell, hovered ? 0xFF7FB2FF : 0xFF0E1420);
+        graphics.fill(x, y, x + cell, y + cell, hovered ? SLOT_BG_HOVER : SLOT_BG);
+        graphics.outline(x, y, cell, cell, hovered ? SLOT_BORDER_HOVER : SLOT_BORDER);
         // 原版语义：槽位为空时画装备/副手背景图标（物品存在则不画）
         if (stack.isEmpty() && emptyIcon != null) {
             graphics.blitSprite(RenderPipelines.GUI_TEXTURED, emptyIcon, x + 1, y + 1,

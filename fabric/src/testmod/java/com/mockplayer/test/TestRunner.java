@@ -6159,6 +6159,17 @@ public final class TestRunner {
     private static int bgSlotSyncWait;
     private static volatile boolean bgSlotClientSynced;
     private static boolean bgIconOpened;
+    private static boolean bgRepeatOpened;
+    private static boolean bgTurnHeld;
+    private static boolean bgTurnReleased;
+    private static float bgTurnBaseYaw;
+    private static float bgTurnAfterYaw;
+    private static boolean bgChunkHeld;
+    private static boolean bgChunkReleased;
+    private static int bgChunkBase;
+    private static int bgChunkAfter;
+    private static net.minecraft.client.gui.components.Button bgTurnButton;
+    private static net.minecraft.client.gui.components.Button bgChunkButton;
 
     private static void runBotGui(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -6410,6 +6421,7 @@ public final class TestRunner {
                             bgFindButton(screen, "gui.mockplayer.action.attack_look");
                     if (atk != null) {
                         bgClick(atk);
+                        bgRelease(atk); // 快速松开 = 单点（attackLook）
                     }
                     waitTicks = 0;
                 }
@@ -6430,9 +6442,9 @@ public final class TestRunner {
                 }
                 if (!bgHoldPressed) {
                     bgHoldPressed = true;
-                    bgHoldButton = bgFindButton(screen, "gui.mockplayer.action.hold_attack");
+                    bgHoldButton = bgFindButton(screen, "gui.mockplayer.action.attack_look");
                     if (bgHoldButton == null) {
-                        fail("hold attack button missing");
+                        fail("attack look button missing");
                         bgStep(8);
                         return;
                     }
@@ -6487,6 +6499,7 @@ public final class TestRunner {
                             bgFindButton(screen, "gui.mockplayer.action.use_look");
                     if (use != null) {
                         bgClick(use);
+                        bgRelease(use); // 快速松开 = 单点（useLook）
                     }
                 }
                 bgChestOpen = bot.getContainer().isPresent();
@@ -6868,6 +6881,17 @@ public final class TestRunner {
                             && com.mockplayer.gui.BotControlScreen.slotIcon(lp, 45).getPath().endsWith("shield"));
                     check("gui hotbar slot has no icon", lp == null
                             || com.mockplayer.gui.BotControlScreen.slotIcon(lp, 36) == null);
+                    // 悬停信息：物品槽返回原版 tooltip + 数量行，空槽返回 null
+                    check("slot tooltip shows item and count", lp != null
+                            && com.mockplayer.gui.BotControlScreen.slotTooltip(lp, 36) != null
+                            && com.mockplayer.gui.BotControlScreen.slotTooltip(lp, 36).stream()
+                            .anyMatch(c -> c.getString().contains("Diamond")
+                                    || c.getString().contains("钻石"))
+                            && com.mockplayer.gui.BotControlScreen.slotTooltip(lp, 36).stream()
+                            .anyMatch(c -> c.getString().contains("Count")
+                                    || c.getString().contains("数量")));
+                    check("empty slot tooltip null", lp == null
+                            || com.mockplayer.gui.BotControlScreen.slotTooltip(lp, 9) == null);
                     // 渲染路径：打开背包 Tab，空装备槽图标应真实绘制（探针计数）
                     System.setProperty("mockplayer.guiRenderProbe", "true");
                     mc.gui.setScreen(null);
@@ -6887,7 +6911,7 @@ public final class TestRunner {
                     check("empty armor slot icons rendered", true);
                     mc.gui.setScreen(null);
                     System.clearProperty("mockplayer.guiRenderProbe");
-                    finishSuite();
+                    bgStep(19);
                 } else if (++waitTicks > 100) {
                     check("empty armor slot icons rendered", false,
                             "icons=" + com.mockplayer.gui.BotGui.probeSlotIconCount()
@@ -6897,8 +6921,125 @@ public final class TestRunner {
                                     + " frames=" + com.mockplayer.gui.BotGui.probeFrameCount());
                     mc.gui.setScreen(null);
                     System.clearProperty("mockplayer.guiRenderProbe");
-                    finishSuite();
+                    bgStep(19);
                 }
+            }
+            case 19 -> { // 半透明配色断言 + 打开动作 Tab（长按调整测试准备）
+                if (!bgRepeatOpened) {
+                    bgRepeatOpened = true;
+                    int topAlpha = (com.mockplayer.gui.BotControlScreen.PANEL_BG_TOP >>> 24) & 0xFF;
+                    int headerAlpha = (com.mockplayer.gui.BotControlScreen.PANEL_HEADER_BG >>> 24) & 0xFF;
+                    int slotAlpha = (com.mockplayer.gui.BotControlScreen.SLOT_BG >>> 24) & 0xFF;
+                    // 半透明：alpha 低于不透明 0xFF 但高于全透明（透出游戏场景）
+                    check("panel bg semi-transparent", topAlpha > 0x60 && topAlpha < 0xFF,
+                            "alpha=" + topAlpha);
+                    check("panel header semi-transparent", headerAlpha > 0x60 && headerAlpha < 0xFF,
+                            "alpha=" + headerAlpha);
+                    check("slot bg semi-transparent", slotAlpha > 0x40 && slotAlpha < 0xFF,
+                            "alpha=" + slotAlpha);
+                    mc.gui.setScreen(null);
+                    com.mockplayer.gui.BotGui.open(mc);
+                    net.minecraft.client.gui.screens.Screen opened = bgScreen();
+                    if (opened instanceof com.mockplayer.gui.BotControlScreen s) {
+                        net.minecraft.client.gui.components.Button actions =
+                                bgFindButton(s, "gui.mockplayer.tab.actions");
+                        if (actions != null) {
+                            bgClick(actions);
+                        }
+                    }
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 5) {
+                    return;
+                }
+                bgStep(20);
+            }
+            case 20 -> { // 长按 turn_right：按住 → 视角连续变化（≥30°）→ 松开
+                com.mockplayer.gui.BotControlScreen screen = bgScreen();
+                if (screen == null) {
+                    fail("gui screen lost");
+                    bgStep(21);
+                    return;
+                }
+                if (!bgTurnHeld) {
+                    bgTurnHeld = true;
+                    bgTurnButton = bgFindButton(screen, "gui.mockplayer.action.turn_right");
+                    if (bgTurnButton == null) {
+                        fail("turn right button missing");
+                        bgStep(21);
+                        return;
+                    }
+                    bgTurnBaseYaw = bot.getLocalPlayer() != null ? bot.getLocalPlayer().getYRot() : 0.0F;
+                    bgClick(bgTurnButton);
+                    waitTicks = 0;
+                }
+                float yaw = bot.getLocalPlayer() != null ? bot.getLocalPlayer().getYRot() : 0.0F;
+                float delta = Math.abs(yaw - bgTurnBaseYaw);
+                if (delta > 180.0F) {
+                    delta = 360.0F - delta;
+                }
+                if (delta >= 30.0F) {
+                    check("hold turn repeats yaw change", true, "delta=" + delta);
+                    bgRelease(bgTurnButton);
+                    bgTurnAfterYaw = yaw;
+                    bgTurnReleased = true;
+                    waitTicks = 0;
+                    bgStep(21);
+                } else if (++waitTicks > 120) {
+                    fail("hold turn timeout delta=" + delta);
+                    bgRelease(bgTurnButton);
+                    bgStep(21);
+                }
+            }
+            case 21 -> { // 松开 turn 后视角稳定；长按 chunk_plus → 区块半径连续增加
+                if (bgTurnReleased && !bgChunkHeld) {
+                    if (++waitTicks < 10) {
+                        return; // 等 10 tick 确认松开后不再转动
+                    }
+                    float yaw = bot.getLocalPlayer() != null ? bot.getLocalPlayer().getYRot() : 0.0F;
+                    float drift = Math.abs(yaw - bgTurnAfterYaw);
+                    if (drift > 180.0F) {
+                        drift = 360.0F - drift;
+                    }
+                    check("hold turn stops after release", drift < 1.0F, "drift=" + drift);
+                    bgChunkHeld = true;
+                    bgChunkBase = bot.getChunkRadius();
+                    com.mockplayer.gui.BotControlScreen s = bgScreen();
+                    bgChunkButton = s != null ? bgFindButton(s, "gui.mockplayer.action.chunk_plus") : null;
+                    if (bgChunkButton == null) {
+                        fail("chunk plus button missing");
+                        bgStep(22);
+                        return;
+                    }
+                    bgClick(bgChunkButton);
+                    waitTicks = 0;
+                    return;
+                }
+                if (bgChunkHeld && !bgChunkReleased) {
+                    if (bot.getChunkRadius() >= bgChunkBase + 2) {
+                        check("hold chunk repeats radius", true,
+                                "radius=" + bot.getChunkRadius());
+                        bgRelease(bgChunkButton);
+                        bgChunkAfter = bot.getChunkRadius();
+                        bgChunkReleased = true;
+                        waitTicks = 0;
+                        bgStep(22);
+                    } else if (++waitTicks > 120) {
+                        fail("hold chunk timeout radius=" + bot.getChunkRadius());
+                        bgRelease(bgChunkButton);
+                        bgStep(22);
+                    }
+                }
+            }
+            case 22 -> { // 松开 chunk 后半径稳定
+                if (++waitTicks < 10) {
+                    return;
+                }
+                check("hold chunk stops after release", bot.getChunkRadius() == bgChunkAfter,
+                        "radius=" + bot.getChunkRadius());
+                mc.gui.setScreen(null);
+                finishSuite();
             }
         }
     }
