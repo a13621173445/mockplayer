@@ -1,0 +1,99 @@
+# 版本发布：打 v* tag 自动构建 Fabric + NeoForge 并创建 GitHub Release，产物上传到 Release 喵
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # 仓库里的 gradle.properties 带本机 JDK 路径（仅本地有效），
+      # CI 工作副本删掉这两行，让构建使用 setup-java 安装的 JDK
+      - name: Strip machine-specific JDK settings
+        run: |
+          sed -i -E '/^org\.gradle\.java\.(home|installations\.paths)=/d' gradle.properties
+          if grep -qE '^org\.gradle\.java\.(home|installations\.paths)=' gradle.properties; then
+            echo 'machine-specific JDK settings were not stripped' >&2
+            exit 1
+          fi
+
+      # 从 gradle.properties 的 java_version 动态读取 JDK 版本，
+      # 将来不同 MC 版本分支换 JDK 时只需改配置，不用改 workflow
+      - name: Detect Java version
+        id: java
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -nE 's/^java_version=([0-9]+).*/\1/p' gradle.properties | head -n1)
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Setup JDK ${{ steps.java.outputs.version }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ steps.java.outputs.version }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build project
+        run: ./gradlew build --stacktrace
+
+      # tag 事件才创建 Release；手动触发只构建，不上传 Release
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          files=()
+          for f in fabric/build/libs/*.jar neoforge/build/libs/*.jar; do
+            case "$f" in
+              *-sources.jar|*-javadoc.jar|*-dev.jar) continue ;;
+            esac
+            files+=("$f")
+          done
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists, skipping"
+          else
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi
+
+      - name: Upload Fabric jar
+        uses: actions/upload-artifact@v7
+        with:
+          archive: false
+          path: |
+            fabric/build/libs/*.jar
+            !**/**-sources.jar
+
+      - name: Upload NeoForge jar
+        uses: actions/upload-artifact@v7
+        with:
+          archive: false
+          path: |
+            neoforge/build/libs/*.jar
+            !**/**-sources.jar
