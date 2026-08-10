@@ -85,6 +85,7 @@ jobs:
       - name: Upload Fabric jar
         uses: actions/upload-artifact@v7
         with:
+          name: fabric-jars
           path: |
             fabric/build/libs/*.jar
             !**/**-sources.jar
@@ -92,6 +93,7 @@ jobs:
       - name: Upload NeoForge jar
         uses: actions/upload-artifact@v7
         with:
+          name: neoforge-jars
           path: |
             neoforge/build/libs/*.jar
             !**/**-sources.jar
