@@ -926,28 +926,41 @@ public class BotControlScreen extends Screen {
         double mx = this.localX(mouseX);
         double my = this.localY(mouseY);
         int hovered = this.inventorySlotAt(mx, my);
+        // 注意：显示与点击共用「菜单槽」语义（盔甲 5-8 / 主背包 9-35 / 快捷栏 36-44 / 副手 45），
+        // 不能直接拿菜单槽号去 Inventory.getItem（那里 0-8 才是快捷栏，36-40 是装备/副手）
         // 盔甲列（槽 5-8）
         for (int i = 0; i < 4; i++) {
             this.drawSlot(graphics, CONTENT_X, CONTENT_Y + i * CELL,
-                    player.getInventory().getItem(5 + i), hovered == 5 + i);
+                    inventoryItem(player, 5 + i), hovered == 5 + i);
         }
         // 主背包 27 格（槽 9-35）
         for (int i = 0; i < 27; i++) {
             this.drawSlot(graphics, CONTENT_X + 24 + (i % 9) * CELL, CONTENT_Y + (i / 9) * CELL,
-                    player.getInventory().getItem(9 + i), hovered == 9 + i);
+                    inventoryItem(player, 9 + i), hovered == 9 + i);
         }
         // 快捷栏 9 格（槽 36-44）
         for (int i = 0; i < 9; i++) {
             this.drawSlot(graphics, CONTENT_X + 24 + i * CELL, CONTENT_Y + 3 * CELL,
-                    player.getInventory().getItem(36 + i), hovered == 36 + i);
+                    inventoryItem(player, 36 + i), hovered == 36 + i);
         }
         // 副手（槽 45）
         this.drawSlot(graphics, CONTENT_X + 24 + 9 * CELL, CONTENT_Y + 3 * CELL,
-                player.getInventory().getItem(45), hovered == 45);
+                inventoryItem(player, 45), hovered == 45);
         // 选中槽高亮
         int sel = player.getInventory().getSelectedSlot();
         graphics.outline(this.sx(CONTENT_X + 24 + sel * CELL), this.sy(CONTENT_Y + 3 * CELL),
                 this.sw(SLOT + 2), this.sw(SLOT + 2), 0xFFFFFF00);
+    }
+
+    /**
+     * 背包 Tab 显示物品 = inventoryMenu 菜单槽（与 {@link #inventoryClick} 的
+     * handleContainerInput 用同一槽位语义；越界返回空）。
+     */
+    public static ItemStack inventoryItem(net.minecraft.client.player.LocalPlayer player, int menuSlot) {
+        if (player == null || menuSlot < 0 || menuSlot >= player.inventoryMenu.slots.size()) {
+            return ItemStack.EMPTY;
+        }
+        return player.inventoryMenu.getSlot(menuSlot).getItem();
     }
 
     private void drawContainer(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {

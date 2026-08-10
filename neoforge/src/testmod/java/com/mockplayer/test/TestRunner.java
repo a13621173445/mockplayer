@@ -6141,6 +6141,14 @@ public final class TestRunner {
     private static boolean bgChatSent;
     private static boolean bgAutoToggled;
     private static boolean bgDisabledChecked;
+    private static boolean bgPickupSummoned;
+    private static int bgPickupWait;
+    private static int bgPickupVerifyWait;
+    private static volatile boolean bgPickupClientHas;
+    private static volatile boolean bgPickupServerHas;
+    private static boolean bgSlotGiveDone;
+    private static int bgSlotSyncWait;
+    private static volatile boolean bgSlotClientSynced;
 
     private static void runBotGui(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -6736,6 +6744,106 @@ public final class TestRunner {
                 }
                 check("gui screen closed", mc.gui.screen() == null);
                 System.clearProperty("mockplayer.guiRenderProbe");
+                bgStep(15);
+            }
+            case 15 -> { // 拾取掉落物：服务端丢钻石 → 假人客户端 Inventory 同步（GUI 背包数据源）
+                if (!bgPickupSummoned) {
+                    bgPickupSummoned = true;
+                    bgPickupWait = 0;
+                    net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                    if (sp != null) {
+                        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                                String.format("summon minecraft:item %.2f %.2f %.2f {Item:{id:\"minecraft:diamond\",count:1}}",
+                                        sp.getX(), sp.getY(), sp.getZ()));
+                    }
+                }
+                bot.actions().setForward(0.1F); // 假人微动走过去拾取（掉落物可能在半格位置/浮空）
+                bgPickupClientHas = false;
+                net.minecraft.client.player.LocalPlayer lp = bot.getLocalPlayer();
+                if (lp != null) {
+                    for (int i = 0; i < 41; i++) {
+                        net.minecraft.world.item.ItemStack s = lp.getInventory().getItem(i);
+                        if (!s.isEmpty() && s.is(net.minecraft.world.item.Items.DIAMOND)) {
+                            bgPickupClientHas = true;
+                            break;
+                        }
+                    }
+                }
+                if (bgPickupClientHas) {
+                    bot.actions().setForward(0);
+                    check("picked diamond in bot client inventory", true);
+                    bgPickupVerifyWait = 0;
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp2 = server.getPlayerList().getPlayerByName(botName);
+                        boolean has = false;
+                        if (sp2 != null) {
+                            for (int i = 0; i < 41; i++) {
+                                net.minecraft.world.item.ItemStack s = sp2.getInventory().getItem(i);
+                                if (!s.isEmpty() && s.is(net.minecraft.world.item.Items.DIAMOND)) {
+                                    has = true;
+                                    break;
+                                }
+                            }
+                        }
+                        bgPickupServerHas = has;
+                    });
+                    bgStep(16);
+                } else if (++bgPickupWait > 240) {
+                    bot.actions().setForward(0);
+                    fail("pickup diamond into client inventory timeout");
+                    bgStep(16);
+                }
+            }
+            case 16 -> { // 服务端拾取证据 + GUI 背包数据源确认
+                if (bgPickupServerHas || ++bgPickupVerifyWait > 120) {
+                    check("picked diamond in server inventory", bgPickupServerHas);
+                    check("picked diamond visible in gui source", bgPickupClientHas);
+                    bgStep(17);
+                }
+            }
+            case 17 -> { // 固定槽位：快捷栏0=钻石 / 头盔=绿宝石 / 副手=红石 → 客户端同步
+                if (!bgSlotGiveDone) {
+                    bgSlotGiveDone = true;
+                    bgSlotSyncWait = 0;
+                    server.execute(() -> {
+                        net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayerByName(botName);
+                        if (sp != null) {
+                            sp.getInventory().clearContent();
+                            sp.getInventory().setItem(0, new net.minecraft.world.item.ItemStack(
+                                    net.minecraft.world.item.Items.DIAMOND, 1));
+                            sp.getInventory().setItem(39, new net.minecraft.world.item.ItemStack(
+                                    net.minecraft.world.item.Items.EMERALD, 1));
+                            sp.getInventory().setItem(40, new net.minecraft.world.item.ItemStack(
+                                    net.minecraft.world.item.Items.REDSTONE, 1));
+                            sp.inventoryMenu.broadcastChanges();
+                        }
+                    });
+                }
+                net.minecraft.client.player.LocalPlayer lp = bot.getLocalPlayer();
+                bgSlotClientSynced = lp != null
+                        && lp.getInventory().getItem(0).is(net.minecraft.world.item.Items.DIAMOND)
+                        && lp.getInventory().getItem(39).is(net.minecraft.world.item.Items.EMERALD)
+                        && lp.getInventory().getItem(40).is(net.minecraft.world.item.Items.REDSTONE);
+                if (bgSlotClientSynced) {
+                    bgStep(18);
+                } else if (++bgSlotSyncWait > 120) {
+                    fail("fixed slot sync timeout");
+                    bgStep(18);
+                }
+            }
+            case 18 -> { // GUI 槽位映射：显示与点击共用菜单槽语义（盔甲5/快捷栏36/副手45）
+                net.minecraft.client.player.LocalPlayer lp = bot.getLocalPlayer();
+                check("gui helmet slot 5 shows helmet item", lp != null
+                        && com.mockplayer.gui.BotControlScreen.inventoryItem(lp, 5)
+                        .is(net.minecraft.world.item.Items.EMERALD));
+                check("gui hotbar slot 36 shows hotbar0", lp != null
+                        && com.mockplayer.gui.BotControlScreen.inventoryItem(lp, 36)
+                        .is(net.minecraft.world.item.Items.DIAMOND));
+                check("gui offhand slot 45 shows offhand", lp != null
+                        && com.mockplayer.gui.BotControlScreen.inventoryItem(lp, 45)
+                        .is(net.minecraft.world.item.Items.REDSTONE));
+                check("gui main inventory slot 9 empty", lp == null
+                        || com.mockplayer.gui.BotControlScreen.inventoryItem(lp, 9).isEmpty());
                 finishSuite();
             }
         }
