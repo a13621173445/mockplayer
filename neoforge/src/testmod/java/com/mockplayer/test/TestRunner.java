@@ -5543,6 +5543,13 @@ public final class TestRunner {
                 check("missing file -> defaults", configEquals(defaults, ModConfigIO.load(cfgFile)));
                 ModConfigIO.save(cfgFile, defaults);
                 check("save->load round trip", configEquals(defaults, ModConfigIO.load(cfgFile)));
+                // guiBlur/guiOpacity 非默认值保存往返（回归：save 漏拷贝导致设置界面改完回默认）
+                ModConfig guiChanged = new ModConfig();
+                guiChanged.setGuiBlur(ModConfig.DEFAULT_GUI_BLUR + 3);
+                guiChanged.setGuiOpacity(0.5F);
+                ModConfigIO.save(cfgFile, guiChanged);
+                check("gui blur/opacity round trip", configEquals(guiChanged, ModConfigIO.load(cfgFile)));
+                ModConfigIO.save(cfgFile, defaults);
                 step = 1;
             }
             case 1 -> {
@@ -5618,24 +5625,37 @@ public final class TestRunner {
                 dev.isxander.yacl3.api.Option<String> queryOption = findStringOption(screen, "query");
                 dev.isxander.yacl3.api.Option<String> controlOption = findStringOption(screen, "control");
                 dev.isxander.yacl3.api.Option<Boolean> debugOption = findBooleanOption(screen);
+                dev.isxander.yacl3.api.Option<Double> opacityOption =
+                        findDoubleOption(screen, (double) ModConfig.DEFAULT_GUI_OPACITY);
+                dev.isxander.yacl3.api.Option<Integer> blurOption = findIntOption(screen, ModConfig.DEFAULT_GUI_BLUR);
                 check("integer option found", intOption != null);
                 check("query option found", queryOption != null);
                 check("control option found", controlOption != null);
                 check("debug option found", debugOption != null);
-                if (intOption != null && queryOption != null && controlOption != null && debugOption != null) {
+                check("opacity option found", opacityOption != null);
+                check("guiBlur option found", blurOption != null);
+                if (intOption != null && queryOption != null && controlOption != null && debugOption != null
+                        && opacityOption != null && blurOption != null) {
                     int before = intOption.binding().getValue();
                     intOption.requestSet(before + 1);
                     queryOption.requestSet("qry");
                     debugOption.requestSet(false);
+                    opacityOption.requestSet(0.5D);
+                    blurOption.requestSet(7);
                     check("pending change registered", screen.pendingChanges());
                     screen.finishOrSave();
                     check("int option applied to config", intOption.binding().getValue() == before + 1);
                     check("command rename applied to config", MockplayerConfig.get().getCommandName("query").equals("qry"));
                     check("debug overlay applied to config", !MockplayerConfig.get().isDebugOverlayEnabled());
+                    check("opacity applied to config", Float.compare(
+                            MockplayerConfig.get().getGuiOpacity(), 0.5F) == 0);
+                    check("guiBlur applied to config", MockplayerConfig.get().getGuiBlur() == 7);
                     ModConfig saved = ModConfigIO.load(MockplayerConfig.path());
                     check("config file written", saved.getChatHistoryLimit() == before + 1
                             && "qry".equals(saved.getCommandName("query"))
-                            && !saved.isDebugOverlayEnabled());
+                            && !saved.isDebugOverlayEnabled()
+                            && Float.compare(saved.getGuiOpacity(), 0.5F) == 0
+                            && saved.getGuiBlur() == 7);
                     // 热重载：不重进游戏，dispatcher 两层都更新
                     check("hot reload old root removed (active)", !hasActiveRoot("query"));
                     check("hot reload new root registered (active)", hasActiveRoot("qry"));
@@ -5741,6 +5761,38 @@ public final class TestRunner {
             for (dev.isxander.yacl3.api.OptionGroup group : category.groups()) {
                 for (dev.isxander.yacl3.api.Option<?> option : group.options()) {
                     if (option.binding().getValue() instanceof Boolean) {
+                        return (dev.isxander.yacl3.api.Option) option;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** 找默认值为 defaultValue 的 Double 类型选项（不透明度默认 0.25，与采样距离 0.5 区分）。 */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static dev.isxander.yacl3.api.Option<Double> findDoubleOption(ModConfigScreen screen, double defaultValue) {
+        for (dev.isxander.yacl3.api.ConfigCategory category : screen.config.categories()) {
+            for (dev.isxander.yacl3.api.OptionGroup group : category.groups()) {
+                for (dev.isxander.yacl3.api.Option<?> option : group.options()) {
+                    if (option.binding().getValue() instanceof Double
+                            && Double.compare((Double) option.binding().defaultValue(), defaultValue) == 0) {
+                        return (dev.isxander.yacl3.api.Option) option;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** 找默认值为 defaultValue 的 Integer 选项（当前唯一是 guiBlur）。 */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static dev.isxander.yacl3.api.Option<Integer> findIntOption(ModConfigScreen screen, int defaultValue) {
+        for (dev.isxander.yacl3.api.ConfigCategory category : screen.config.categories()) {
+            for (dev.isxander.yacl3.api.OptionGroup group : category.groups()) {
+                for (dev.isxander.yacl3.api.Option<?> option : group.options()) {
+                    if (option.binding().getValue() instanceof Integer
+                            && ((Integer) option.binding().defaultValue()) == defaultValue) {
                         return (dev.isxander.yacl3.api.Option) option;
                     }
                 }
@@ -6113,7 +6165,9 @@ public final class TestRunner {
                 && a.getEventSummaryMaxLength() == b.getEventSummaryMaxLength()
                 && a.getEventTickSampleInterval() == b.getEventTickSampleInterval()
                 && Double.compare(a.getEventMoveSampleDistance(), b.getEventMoveSampleDistance()) == 0
-                && a.isDebugOverlayEnabled() == b.isDebugOverlayEnabled();
+                && a.isDebugOverlayEnabled() == b.isDebugOverlayEnabled()
+                && a.getGuiBlur() == b.getGuiBlur()
+                && Float.compare(a.getGuiOpacity(), b.getGuiOpacity()) == 0;
     }
 
     /** 删除测试专用临时目录（只删自己创建的 mocktest-config-*，不碰用户数据）。 */
@@ -6323,6 +6377,15 @@ public final class TestRunner {
     private static volatile int bgModeUseMaxContainer = -1;
     private static net.minecraft.client.gui.components.Button bgModeAtk;
     private static net.minecraft.client.gui.components.Button bgModeUse;
+    private static boolean bgModePersistOpened;
+    private static boolean bgModePersistClosed;
+    private static boolean bgModePersistReopened;
+    private static boolean bgModePersistStopped;
+    private static boolean bgSlideGiven;
+    private static boolean bgSlideWalking;
+    private static boolean bgSlideWalked;
+    private static volatile double bgSlideStartX = Double.NaN;
+    private static volatile double bgSlideStartZ = Double.NaN;
 
     private static void runBotGui(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -8426,9 +8489,14 @@ public final class TestRunner {
                         bgRightClick(bgModeUse); // 连点 → 默认
                         check("mode use back default", bgModeMsg(bgModeUse, "gui.mockplayer.action.use_look"),
                                 "msg=" + bgModeUse.getMessage().getString());
-                        mc.gui.setScreen(null);
-                        System.clearProperty("mockplayer.guiRenderProbe");
-                        bgStep(39);
+                        // 持久性：连点是类似疾跑的开关——关闭 GUI 不停、重开还原、停止按钮全停
+                        bgRightClick(bgModeAtk); // 默认 → 长按
+                        bgRightClick(bgModeAtk); // 长按 → 连点
+                        bgClick(bgModeAtk);      // 激活连点左键
+                        check("mode persist rapid activated red", bgIsRed(bgModeAtk));
+                        bgModePersistOpened = true;
+                        waitTicks = 0;
+                        return;
                     } else if (++waitTicks > 100) {
                         check("mode use rapid repeats", false, "containerId=" + bgModeUseMaxContainer);
                         bgModeUseDone = true;
@@ -8440,8 +8508,109 @@ public final class TestRunner {
                     }
                     return;
                 }
+                if (bgModePersistOpened && !bgModePersistClosed) {
+                    bgModePersistClosed = true;
+                    mc.gui.setScreen(null); // 关闭 GUI：连点必须继续（类似疾跑）
+                    waitTicks = 0;
+                    return;
+                }
+                if (bgModePersistClosed && !bgModePersistReopened) {
+                    if (++waitTicks < 10) {
+                        return;
+                    }
+                    check("mode rapid persists after gui close", bot.actions().isRapidAttacking());
+                    bgModePersistReopened = true;
+                    com.mockplayer.gui.BotGui.open(mc);
+                    net.minecraft.client.gui.screens.Screen opened = bgScreen();
+                    if (opened instanceof com.mockplayer.gui.BotControlScreen sc) {
+                        net.minecraft.client.gui.components.Button tab =
+                                bgFindButton(sc, "gui.mockplayer.tab.actions");
+                        if (tab != null) {
+                            bgClick(tab);
+                        }
+                    }
+                    waitTicks = 0;
+                    return;
+                }
+                if (bgModePersistReopened && !bgModePersistStopped) {
+                    if (++waitTicks < 5) {
+                        return;
+                    }
+                    com.mockplayer.gui.BotControlScreen sc = bgScreen();
+                    net.minecraft.client.gui.components.Button atk = sc != null
+                            ? bgFindButton(sc, "gui.mockplayer.action.attack_rapid") : null;
+                    check("mode rapid restored red on reopen", atk != null && bgIsRed(atk));
+                    net.minecraft.client.gui.components.Button stopBtn = sc != null
+                            ? bgFindButton(sc, "gui.mockplayer.action.stop") : null;
+                    check("stop button found", stopBtn != null);
+                    if (stopBtn != null) {
+                        bgClick(stopBtn);
+                    }
+                    bgModePersistStopped = true;
+                    waitTicks = 0;
+                    return;
+                }
+                if (bgModePersistStopped) {
+                    if (++waitTicks < 5) {
+                        return;
+                    }
+                    check("stop button clears rapid", !bot.actions().isRapidAttacking());
+                    com.mockplayer.gui.BotControlScreen sc = bgScreen();
+                    net.minecraft.client.gui.components.Button atk = sc != null
+                            ? bgFindButton(sc, "gui.mockplayer.action.attack_rapid") : null;
+                    check("stop button clears red", atk != null && !bgIsRed(atk));
+                    mc.gui.setScreen(null);
+                    System.clearProperty("mockplayer.guiRenderProbe");
+                    bgStep(39);
+                }
             }
-            case 39 -> { // 收尾
+            case 39 -> { // 主玩家物理回归：bot 叠在主玩家位置，松键后必须正常刹停（不「像抹了冰」）
+                if (!bgSlideGiven) {
+                    bgSlideGiven = true;
+                    mc.gui.setScreen(null);
+                    bgSlideStartX = mc.player.getX();
+                    bgSlideStartZ = mc.player.getZ();
+                    server.execute(() -> {
+                        var spM = server.getPlayerList().getPlayerByName(mc.player.getName().getString());
+                        var spB = server.getPlayerList().getPlayerByName(botName);
+                        if (spM != null && spB != null) {
+                            spB.teleportTo(spM.getX(), spM.getY(), spM.getZ());
+                        }
+                    });
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 20) {
+                    return; // 等 bot 重叠到位
+                }
+                if (!bgSlideWalking) {
+                    bgSlideWalking = true;
+                    mc.options.keyUp.setDown(true); // 主玩家前进 10 tick 产生动量
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 10) {
+                    return;
+                }
+                if (!bgSlideWalked) {
+                    bgSlideWalked = true;
+                    mc.options.keyUp.setDown(false);
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 6) {
+                    return; // 松键后 6 tick（原版地面摩擦应已刹停）
+                }
+                double dx = mc.player.getX() - bgSlideStartX;
+                double dz = mc.player.getZ() - bgSlideStartZ;
+                double speed = mc.player.getDeltaMovement().horizontalDistance();
+                check("main player actually moved",
+                        Math.sqrt(dx * dx + dz * dz) > 0.5,
+                        "dist=" + Math.sqrt(dx * dx + dz * dz));
+                check("main player stops after release", speed < 0.05, "speed=" + speed);
+                bgStep(40);
+            }
+            case 40 -> { // 收尾
                 if (++waitTicks < 20) {
                     return;
                 }

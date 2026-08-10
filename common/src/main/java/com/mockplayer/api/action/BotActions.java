@@ -153,6 +153,24 @@ public interface BotActions {
      */
     BotActions stop();
 
+    /**
+     * 连点左键开关：开启后主手蓄力满（attack strength 1.0）才攻击一次（原版攻击节奏）。
+     * 类似疾跑的开关状态：不随 GUI 关闭停止，由 {@link #stop()} 停止。
+     *
+     * @param enabled true 开启连点
+     * @return this
+     */
+    BotActions setRapidAttack(boolean enabled);
+
+    /**
+     * 连点右键开关：开启后每 20 tick（1 秒）使用一次。
+     * 类似疾跑的开关状态：不随 GUI 关闭停止，由 {@link #stop()} 停止。
+     *
+     * @param enabled true 开启连点
+     * @return this
+     */
+    BotActions setRapidUse(boolean enabled);
+
     // ===== 持续状态查询（GUI 状态面板/测试只读） =====
 
     /** 当前是否潜行。 */
@@ -172,6 +190,12 @@ public interface BotActions {
 
     /** 当前是否正在持续使用（sustainedUse / sustainedUseLook）。 */
     boolean isSustainedUsing();
+
+    /** 当前是否开启连点左键。 */
+    boolean isRapidAttacking();
+
+    /** 当前是否开启连点右键。 */
+    boolean isRapidUsing();
 
     // ===== 一次性动作（立即执行一次） =====
 

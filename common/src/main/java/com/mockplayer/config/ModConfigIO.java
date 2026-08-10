@@ -120,6 +120,8 @@ public final class ModConfigIO {
         normalized.setDebugOverlayEnabled(config.isDebugOverlayEnabled());
         normalized.setGuiEnabled(config.isGuiEnabled());
         normalized.setGuiKeyName(config.getGuiKeyName());
+        normalized.setGuiOpacity(config.getGuiOpacity());
+        normalized.setGuiBlur(config.getGuiBlur());
         normalized.setFakePlayerChunkRadius(config.getFakePlayerChunkRadius());
         normalized.setBatchMaxCount(config.getBatchMaxCount());
         normalized.normalize();

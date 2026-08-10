@@ -49,6 +49,11 @@ public class BotActionsImpl implements BotActions {
     /** 长按左键/右键的射线持续状态（沿视线，stopSustained 停止）。 */
     private boolean sustainedAttackLook;
     private boolean sustainedUseLook;
+    /** 连点左键/右键开关（类似疾跑的开关状态：不随 GUI 关闭停止，stop() 停止）。 */
+    private boolean rapidAttackLook;
+    private boolean rapidUseLook;
+    /** 连点右键 20 tick 计数（1 秒一次）。 */
+    private int rapidUseTicks;
     /** 长按右键已交互过的方块（同一方块只 useItemOn 一次，之后持续 useItem）。 */
     private BlockPos sustainedUseLookBlock;
     private BlockPos miningPos;
@@ -184,8 +189,26 @@ public class BotActionsImpl implements BotActions {
         this.sustainedUseTarget = null;
         this.sustainedAttackLook = false;
         this.sustainedUseLook = false;
+        this.rapidAttackLook = false;
+        this.rapidUseLook = false;
+        this.rapidUseTicks = 0;
         this.sustainedUseLookBlock = null;
         this.stopMining();
+        return this;
+    }
+
+    @Override
+    public BotActions setRapidAttack(boolean enabled) {
+        this.rapidAttackLook = enabled;
+        return this;
+    }
+
+    @Override
+    public BotActions setRapidUse(boolean enabled) {
+        this.rapidUseLook = enabled;
+        if (!enabled) {
+            this.rapidUseTicks = 0;
+        }
         return this;
     }
 
@@ -217,6 +240,16 @@ public class BotActionsImpl implements BotActions {
     @Override
     public boolean isSustainedUsing() {
         return this.sustainedUseTarget != null || this.sustainedUseLook;
+    }
+
+    @Override
+    public boolean isRapidAttacking() {
+        return this.rapidAttackLook;
+    }
+
+    @Override
+    public boolean isRapidUsing() {
+        return this.rapidUseLook;
     }
 
     /** 取消持续挖掘：清目标 + 发 ABORT_DESTROY_BLOCK（原版松开左键等价）。 */
@@ -315,6 +348,17 @@ public class BotActionsImpl implements BotActions {
                 if (!player.isUsingItem()) {
                     this.useItemLikeVanilla();
                 }
+            }
+        }
+        // 连点左键：主手蓄力满（attack strength 1.0）才攻击一次（原版攻击节奏）
+        if (this.rapidAttackLook && player.getAttackStrengthScale(0.0F) >= 1.0F) {
+            this.attackLook();
+        }
+        // 连点右键：每 20 tick（1 秒）使用一次
+        if (this.rapidUseLook) {
+            if (++this.rapidUseTicks >= 20) {
+                this.rapidUseTicks = 0;
+                this.useLook();
             }
         }
     }

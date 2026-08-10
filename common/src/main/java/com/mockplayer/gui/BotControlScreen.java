@@ -210,8 +210,9 @@ public class BotControlScreen extends Screen {
     private Button jumpButton;
     private ModeTapHoldButton attackLookButton;
     private ModeTapHoldButton useLookButton;
-    /** 连点右键 20 tick 计数（右键模式 tick 驱动）。 */
-    private int useRapidTicks;
+    /** 动作按钮跨 GUI 开关的状态（类似疾跑：关闭 GUI 不停止，停止按钮全停）。 */
+    private static final ModeTapHoldButton.State ATTACK_BUTTON_STATE = new ModeTapHoldButton.State();
+    private static final ModeTapHoldButton.State USE_BUTTON_STATE = new ModeTapHoldButton.State();
     private RepeatHoldButton chunkMinusButton;
     private RepeatHoldButton chunkPlusButton;
     private Button respawnButton;
@@ -251,13 +252,7 @@ public class BotControlScreen extends Screen {
 
     @Override
     public void removed() {
-        // 关闭 GUI：停止锁存的长按/连点动作，防 bot 卡在持续状态
-        if (this.attackLookButton != null) {
-            this.attackLookButton.stopLatched();
-        }
-        if (this.useLookButton != null) {
-            this.useLookButton.stopLatched();
-        }
+        // 关闭 GUI 不停锁存的长按/连点动作（类似疾跑的开关状态，由停止按钮 stop() 全停）
         // 恢复打开前的主玩家菜单模糊值（不污染设置）
         if (BotControlScreen.lastMainBlurBefore >= 0) {
             Minecraft.getInstance().options.menuBackgroundBlurriness()
@@ -360,7 +355,12 @@ public class BotControlScreen extends Screen {
                 () -> this.act(b -> b.actions().setForward(-1.0F), "gui.mockplayer.action.move_backward"),
                 () -> this.actQuiet(b -> b.actions().setForward(0.0F)));
         this.stopButton = this.addButton(CONTENT_X + SIDE_COL_1_OFF, actY, SIDE_BTN_W, BTN_H, "gui.mockplayer.action.stop",
-                () -> this.act(b -> b.actions().stop(), "gui.mockplayer.action.stop"));
+                () -> {
+                    this.act(b -> b.actions().stop(), "gui.mockplayer.action.stop");
+                    // 停止按钮：连点/长按的锁存也全部清掉（动作在 BotActions，已由 stop() 停止）
+                    this.attackLookButton.stopLatched();
+                    this.useLookButton.stopLatched();
+                });
         this.sneakButton = this.addButton(CONTENT_X + SIDE_COL_2_OFF, actY, SIDE_BTN_W, BTN_H, "gui.mockplayer.action.sneak",
                 () -> this.toggleSneak());
         this.sprintButton = this.addButton(CONTENT_X + SIDE_COL_1_OFF, actY + rowH, SIDE_BTN_W, BTN_H, "gui.mockplayer.action.sprint",
@@ -377,14 +377,16 @@ public class BotControlScreen extends Screen {
                 () -> this.actQuiet(b -> b.actions().attackLook()),
                 () -> this.actQuiet(b -> b.actions().sustainedAttackLook()),
                 () -> this.actQuiet(b -> b.actions().stopSustained()),
-                () -> this.tickRapidAttack());
+                ATTACK_BUTTON_STATE,
+                value -> this.actQuiet(b -> b.actions().setRapidAttack(value)));
         this.useLookButton = this.addModeTapHold(CONTENT_X + ACT_GAP, actY, ACT_BTN_W, ACT_BTN_H,
                 "gui.mockplayer.action.use_look", "gui.mockplayer.action.use_hold",
                 "gui.mockplayer.action.use_rapid",
                 () -> this.actQuiet(b -> b.actions().useLook()),
                 () -> this.actQuiet(b -> b.actions().sustainedUseLook()),
                 () -> this.actQuiet(b -> b.actions().stopSustained()),
-                () -> this.tickRapidUse());
+                USE_BUTTON_STATE,
+                value -> this.actQuiet(b -> b.actions().setRapidUse(value)));
         actY += ACT_BTN_H + SECTION_GAP;
 
         this.systemTitleY = actY;
@@ -473,13 +475,15 @@ public class BotControlScreen extends Screen {
     /**
      * 动作模式按钮：默认 = 单击 + 按住持续（松开停止，原版行为）；
      * 右键循环切换 长按 → 连点 → 默认；长按/连点模式左键开关锁存（激活变红，激活时禁止右键切换）。
+     * 锁存状态跨 GUI 开关持久（类似疾跑的开关状态，关闭 GUI 不停止，停止按钮全停）。
      */
     private ModeTapHoldButton addModeTapHold(int x, int y, int w, int h,
                                              String baseKey, String holdKey, String rapidKey,
                                              Runnable tap, Runnable holdStart, Runnable holdEnd,
-                                             Runnable modeTick) {
+                                             ModeTapHoldButton.State state,
+                                             java.util.function.Consumer<Boolean> rapidSetter) {
         ModeTapHoldButton b = new ModeTapHoldButton(sx(x), sy(y), sw(w), sw(h),
-                baseKey, holdKey, rapidKey, tap, holdStart, holdEnd, modeTick);
+                baseKey, holdKey, rapidKey, state, tap, holdStart, holdEnd, rapidSetter);
         b.setAlpha(this.currentButtonAlpha());
         this.addRenderableWidget(b);
         return b;
@@ -529,32 +533,46 @@ public class BotControlScreen extends Screen {
     /**
      * 动作模式按钮（attack/use 共用）：默认 = 单击 + 按住持续；
      * 右键切 长按/连点/默认；长按/连点左键开关锁存，激活变红且禁止右键切换。
+     * 状态存 State（跨 GUI 开关持久）：HOLD 调 holdStart/holdEnd，RAPID 调 rapidSetter，
+     * 实际动作在 BotActions（类似疾跑），关闭 GUI 不停、停止按钮 stop() 全停。
      */
     private static final class ModeTapHoldButton extends Button {
         private enum Mode { TAP, HOLD, RAPID }
 
+        /** 跨 GUI 开关持久的状态（每类按钮一份静态实例）。 */
+        static final class State {
+            Mode mode = Mode.TAP;
+            boolean latched;
+        }
+
         private final Runnable tap;
         private final Runnable holdStart;
         private final Runnable holdEnd;
-        private final Runnable modeTick;
+        private final java.util.function.Consumer<Boolean> rapidSetter;
         private final String baseKey;
         private final String holdKey;
         private final String rapidKey;
-        private Mode mode = Mode.TAP;
+        private final State state;
+        private Mode mode;
         private boolean latched;
 
         ModeTapHoldButton(int x, int y, int w, int h,
                           String baseKey, String holdKey, String rapidKey,
-                          Runnable tap, Runnable holdStart, Runnable holdEnd, Runnable modeTick) {
+                          State state, Runnable tap, Runnable holdStart, Runnable holdEnd,
+                          java.util.function.Consumer<Boolean> rapidSetter) {
             super(x, y, w, h, Component.translatable(baseKey), btn -> {
             }, DEFAULT_NARRATION);
             this.baseKey = baseKey;
             this.holdKey = holdKey;
             this.rapidKey = rapidKey;
+            this.state = state;
+            this.mode = state.mode;
+            this.latched = state.latched;
             this.tap = tap;
             this.holdStart = holdStart;
             this.holdEnd = holdEnd;
-            this.modeTick = modeTick;
+            this.rapidSetter = rapidSetter;
+            this.applyMessage();
         }
 
         @Override
@@ -589,6 +607,7 @@ public class BotControlScreen extends Screen {
                 }
                 case RAPID -> {
                     this.latched = !this.latched;
+                    this.rapidSetter.accept(this.latched);
                     this.applyMessage();
                 }
             }
@@ -611,21 +630,24 @@ public class BotControlScreen extends Screen {
             this.applyMessage();
         }
 
-        /** 关闭 GUI 时停止锁存动作（防 bot 卡在持续/连点状态）。 */
+        /** 停止按钮用：清锁存 + 停掉对应动作（不随 GUI 关闭调用——关闭 GUI 时状态保持）。 */
         void stopLatched() {
             if (this.latched) {
                 this.latched = false;
                 if (this.mode == Mode.HOLD) {
                     this.holdEnd.run();
+                } else if (this.mode == Mode.RAPID) {
+                    this.rapidSetter.accept(false);
                 }
                 this.applyMessage();
             }
         }
 
-        /** 连点模式激活时的 tick 驱动（左键看蓄力、右键 20 tick 一次，由外部传入）。 */
-        void onModeTick() {
-            if (this.mode == Mode.RAPID && this.latched) {
-                this.modeTick.run();
+        /** 选中假人变化时按 bot 真实动作状态校准锁存（避免 UI 与 BotActions 脱节）。 */
+        void syncLatched(boolean active) {
+            if (this.latched != active) {
+                this.latched = active;
+                this.applyMessage();
             }
         }
 
@@ -639,6 +661,8 @@ public class BotControlScreen extends Screen {
             if (this.latched) {
                 message = message.copy().withStyle(net.minecraft.ChatFormatting.RED);
             }
+            this.state.mode = this.mode;
+            this.state.latched = this.latched;
             this.setMessage(message);
         }
 
@@ -711,6 +735,13 @@ public class BotControlScreen extends Screen {
 
     private void select(Bot bot) {
         this.selected = bot;
+        // 锁存状态按新选中假人的真实动作状态校准（关闭 GUI 后状态仍持续，重开时正确显示）
+        if (bot != null && this.attackLookButton != null && this.useLookButton != null) {
+            this.attackLookButton.syncLatched(
+                    bot.actions().isSustainedAttacking() || bot.actions().isRapidAttacking());
+            this.useLookButton.syncLatched(
+                    bot.actions().isSustainedUsing() || bot.actions().isRapidUsing());
+        }
         this.setFeedback(Component.translatable("gui.mockplayer.feedback.selected", bot.getName()));
     }
 
@@ -965,23 +996,6 @@ public class BotControlScreen extends Screen {
         }
     }
 
-    /** 连点左键：主手武器蓄力满（attack strength 1.0）时攻击一次（原版攻击节奏）。 */
-    private void tickRapidAttack() {
-        net.minecraft.client.player.LocalPlayer player =
-                this.selected != null ? this.selected.getLocalPlayer() : null;
-        if (player != null && player.getAttackStrengthScale(0.0F) >= 1.0F) {
-            this.actQuiet(b -> b.actions().attackLook());
-        }
-    }
-
-    /** 连点右键：每 20 tick（1 秒）使用一次。 */
-    private void tickRapidUse() {
-        if (++this.useRapidTicks >= 20) {
-            this.useRapidTicks = 0;
-            this.actQuiet(b -> b.actions().useLook());
-        }
-    }
-
     private void toggleSneak() {
         if (!this.requireBot()) {
             return;
@@ -1077,13 +1091,6 @@ public class BotControlScreen extends Screen {
         long now = Util.getMillis();
         for (RepeatHoldButton b : this.repeatButtons) {
             b.onTick(now);
-        }
-        // 动作模式按钮：连点激活时的 tick 驱动
-        if (this.attackLookButton != null) {
-            this.attackLookButton.onModeTick();
-        }
-        if (this.useLookButton != null) {
-            this.useLookButton.onModeTick();
         }
         // 选中假人掉线/删除 → 自动切到第一个可用
         if (this.selected != null && (this.selected.getLifecycle() != BotLifecycle.PLAYING

@@ -937,11 +937,29 @@ public class FakePlayListener extends ClientPacketListener {
         net.minecraft.world.entity.EntityType<?> type = packet.getType();
         if (type == net.minecraft.world.entity.EntityTypes.PLAYER) {
             String name = this.session.getState().getOnlinePlayers().get(packet.getUUID());
-            return new net.minecraft.client.player.RemotePlayer(
+            return new FakeRemotePlayer(
                     self.mockplayer$getLevel(),
                     new com.mojang.authlib.GameProfile(packet.getUUID(), name != null ? name : ""));
         }
         return type.create(self.mockplayer$getLevel(), net.minecraft.world.entity.EntitySpawnReason.LOAD);
+    }
+
+    /**
+     * 假人 level 的玩家拷贝（幽灵）：复用 RemotePlayer 的插值/状态同步（假人 level 整层 tick 后
+     * 插值会推进），但跳过 pushEntities——否则拷贝与假人本体重叠时互相推挤，假人物理被扰动 → 发包抖动
+     * → 服务端 bot 抖动 → 主玩家被推着滑（「脚下抹了冰」的直接根因）。
+     */
+    private static final class FakeRemotePlayer extends net.minecraft.client.player.RemotePlayer {
+
+        FakeRemotePlayer(net.minecraft.client.multiplayer.ClientLevel level,
+                         com.mojang.authlib.GameProfile profile) {
+            super(level, profile);
+        }
+
+        @Override
+        protected void pushEntities() {
+            // 幽灵拷贝只做插值/状态，不参与实体推挤
+        }
     }
 
     // ===== 实体传送/同步（假人 level 操作，minecraft.player 部分换假人） =====
