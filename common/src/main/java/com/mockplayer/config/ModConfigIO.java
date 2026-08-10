@@ -77,6 +77,14 @@ public final class ModConfigIO {
                     && root.get("guiKeyName").getAsJsonPrimitive().isString()) {
                 config.setGuiKeyName(ModConfig.normalizeGuiKeyName(root.get("guiKeyName").getAsString()));
             }
+            if (root.has("guiOpacity") && root.get("guiOpacity").isJsonPrimitive()) {
+                try {
+                    config.setGuiOpacity(ModConfig.normalizeGuiOpacity(
+                            root.get("guiOpacity").getAsFloat()));
+                } catch (RuntimeException e) {
+                    config.setGuiOpacity(ModConfig.DEFAULT_GUI_OPACITY);
+                }
+            }
             config.setFakePlayerChunkRadius(readInt(root, "fakePlayerChunkRadius",
                     ModConfig.DEFAULT_FAKE_PLAYER_CHUNK_RADIUS,
                     ModConfig.MIN_FAKE_PLAYER_CHUNK_RADIUS, ModConfig.MAX_FAKE_PLAYER_CHUNK_RADIUS));

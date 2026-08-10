@@ -6240,6 +6240,25 @@ public final class TestRunner {
                         }
                     }
                     check("all widgets inside panel", inside, "outside=" + outsideCount);
+                    // 关闭按钮不压顶栏蓝色分隔线（线在 header 底 17 逻辑像素）
+                    boolean closeNotOnLine = true;
+                    float bgScale = com.mockplayer.gui.BotGui.layoutScale(pw, ph);
+                    for (Object child : bgScreen().children()) {
+                        if (child instanceof net.minecraft.client.gui.components.Button b
+                                && b.getMessage().getString().contains(
+                                net.minecraft.network.chat.Component.translatable(
+                                        "gui.mockplayer.close").getString())) {
+                            if (b.getY() + b.getHeight() > py + Math.round(17 * bgScale)) {
+                                closeNotOnLine = false;
+                            }
+                        }
+                    }
+                    check("close button not on header line", closeNotOnLine);
+                    check("selected text adaptive",
+                            com.mockplayer.gui.BotControlScreen.selectedTextDisplay(
+                                    bot, mc.font, 150).contains(botName)
+                                    && com.mockplayer.gui.BotControlScreen.selectedTextDisplay(
+                                    bot, mc.font, 20).length() <= 20);
                     check("screen is BotControlScreen",
                             mc.gui.screen() instanceof com.mockplayer.gui.BotControlScreen);
                     com.mockplayer.gui.BotControlScreen screen =
@@ -7253,9 +7272,11 @@ public final class TestRunner {
                             "level=" + lp.experienceLevel);
                     check("xp progress synced to client", lp.experienceProgress > 0.0F,
                             "progress=" + lp.experienceProgress);
-                    check("buttons semi-transparent",
-                            com.mockplayer.gui.BotControlScreen.BUTTON_ALPHA > 0.0F
-                                    && com.mockplayer.gui.BotControlScreen.BUTTON_ALPHA < 1.0F);
+                    check("gui opacity default low",
+                            com.mockplayer.config.ModConfig.DEFAULT_GUI_OPACITY == 0.25F
+                                    && com.mockplayer.gui.BotControlScreen.buttonAlpha(0.25F) == 0.35F
+                                    && (com.mockplayer.gui.BotControlScreen.withAlpha(
+                                    0xB0253047, 0.25F) >>> 24) == 44);
                     check("xp bar uses vanilla sprites",
                             com.mockplayer.gui.BotControlScreen.XP_BAR_BACKGROUND.equals(
                                     net.minecraft.resources.Identifier.withDefaultNamespace(

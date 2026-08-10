@@ -5,6 +5,7 @@ import com.mockplayer.api.BotLifecycle;
 import com.mockplayer.api.BotSource;
 import com.mockplayer.api.MockplayerApi;
 import com.mockplayer.api.container.BotContainer;
+import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.session.FakePlayerCommands;
 
 import net.minecraft.ChatFormatting;
@@ -148,11 +149,20 @@ public class BotControlScreen extends Screen {
     public static final int CHAT_W = 180;
     public static final int SEND_X_OFF = 182;
     public static final int SEND_W = 66;
-    /** 按钮贴图透明度（0-1：半透明保留原版悬停/高亮/禁用贴图，文字保持不透明）。 */
-    public static final float BUTTON_ALPHA = 0.65F;
     /** 开关按钮状态色：开启绿 / 关闭红（文字颜色表示状态，不再拼 开/关 后缀）。 */
     public static final int TOGGLE_ON_COLOR = 0xFF55FF55;
     public static final int TOGGLE_OFF_COLOR = 0xFFFF5555;
+
+    /** 按配置不透明度合成颜色：alpha = 基础 alpha × opacity（0-1）。 */
+    public static int withAlpha(int color, float opacity) {
+        int alpha = Math.round(((color >>> 24) & 0xFF) * opacity);
+        return (color & 0xFFFFFF) | (alpha << 24);
+    }
+
+    /** 按钮 alpha：保证至少 35% 可读（面板越透明按钮也不至于看不清）。 */
+    public static float buttonAlpha(float opacity) {
+        return Math.max(0.35F, opacity);
+    }
 
     /** 当前选中假人（null = 未选中）。 */
     private Bot selected;
@@ -227,6 +237,12 @@ public class BotControlScreen extends Screen {
     }
 
     @Override
+    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
+        // 不需要高斯模糊 / 原版菜单背景 / 全屏半透明覆盖：
+        // 背景由 extractRenderState 自绘半透明面板，面板外直接透出游戏画面
+    }
+
+    @Override
     protected void init() {
         this.clearWidgets();
         this.botButtons.clear();
@@ -239,8 +255,8 @@ public class BotControlScreen extends Screen {
         }
         this.feedback = Component.literal("");
 
-        // ===== 顶栏：标题 + 关闭 =====
-        this.closeButton = this.addButton(BotGui.PANEL_W - 48, 4, 40, 14,
+        // ===== 顶栏：标题 + 关闭（按钮底边让出蓝色分隔线 y=17，不压线） =====
+        this.closeButton = this.addButton(BotGui.PANEL_W - 48, 2, 40, 14,
                 "gui.mockplayer.close", () -> this.onClose());
 
         // ===== 左栏：假人列表（10 个可见槽位，多假人滚轮/▲▼ 滚动） =====
@@ -253,7 +269,7 @@ public class BotControlScreen extends Screen {
                     this.select(bots.get(target));
                 }
             }).bounds(sx(LIST_X), sy(LIST_TOP + i * BOT_ROW_H), sw(LIST_W), sh(BOT_ROW_H - 1)).build();
-            b.setAlpha(BUTTON_ALPHA);
+            b.setAlpha(this.currentButtonAlpha());
             this.addRenderableWidget(b);
             this.botButtons.add(b);
         }
@@ -371,10 +387,12 @@ public class BotControlScreen extends Screen {
                 }
             }).bounds(sx(CONTENT_X + ENTITY_X_OFF + index * ENTITY_GAP), sy(lookTop),
                     sw(ENTITY_W), sh(BTN_H)).build();
-            b.setAlpha(BUTTON_ALPHA);
+            b.setAlpha(this.currentButtonAlpha());
             this.addRenderableWidget(b);
             this.entityButtons.add(b);
         }
+        // 初始可见性立即生效（防止打开 GUI 第一帧闪出全部按钮）
+        this.refreshActionTabVisibility();
     }
 
     // ===== 控件工厂 =====
@@ -382,7 +400,7 @@ public class BotControlScreen extends Screen {
     private Button addButton(int x, int y, int w, int h, String key, Runnable action) {
         Button b = Button.builder(Component.translatable(key), btn -> action.run())
                 .bounds(sx(x), sy(y), sw(w), sw(h)).build();
-        b.setAlpha(BUTTON_ALPHA);
+        b.setAlpha(this.currentButtonAlpha());
         this.addRenderableWidget(b);
         return b;
     }
@@ -391,9 +409,14 @@ public class BotControlScreen extends Screen {
     private Button addLiteralButton(int x, int y, int w, int h, String text, Runnable action) {
         Button b = Button.builder(Component.literal(text), btn -> action.run())
                 .bounds(sx(x), sy(y), sw(w), sw(h)).build();
-        b.setAlpha(BUTTON_ALPHA);
+        b.setAlpha(this.currentButtonAlpha());
         this.addRenderableWidget(b);
         return b;
+    }
+
+    /** 当前按钮 alpha（由 guiOpacity 配置推导，热重载后重开 GUI 生效）。 */
+    private float currentButtonAlpha() {
+        return buttonAlpha(MockplayerConfig.get().getGuiOpacity());
     }
 
     /** 按住持续按钮：按下执行 start，松开执行 end（移动/长按交互）。 */
@@ -401,7 +424,7 @@ public class BotControlScreen extends Screen {
                                Runnable start, Runnable end) {
         HoldButton b = new HoldButton(sx(x), sy(y), sw(w), sw(h),
                 Component.translatable(key), start, end);
-        b.setAlpha(BUTTON_ALPHA);
+        b.setAlpha(this.currentButtonAlpha());
         this.addRenderableWidget(b);
         return b;
     }
@@ -411,7 +434,7 @@ public class BotControlScreen extends Screen {
                                      Runnable tap, Runnable holdStart, Runnable holdEnd) {
         TapHoldButton b = new TapHoldButton(sx(x), sy(y), sw(w), sw(h),
                 Component.translatable(key), tap, holdStart, holdEnd);
-        b.setAlpha(BUTTON_ALPHA);
+        b.setAlpha(this.currentButtonAlpha());
         this.addRenderableWidget(b);
         return b;
     }
@@ -421,7 +444,7 @@ public class BotControlScreen extends Screen {
                                        Runnable action, long intervalMs) {
         RepeatHoldButton b = new RepeatHoldButton(sx(x), sy(y), sw(w), sw(h),
                 Component.translatable(key), action, intervalMs);
-        b.setAlpha(BUTTON_ALPHA);
+        b.setAlpha(this.currentButtonAlpha());
         this.addRenderableWidget(b);
         this.repeatButtons.add(b);
         return b;
@@ -610,6 +633,35 @@ public class BotControlScreen extends Screen {
 
     private void switchTab(int tab) {
         this.tab = tab;
+        // 立即刷新动作控件可见性：不等 tick，切 Tab 不闪一帧
+        this.refreshActionTabVisibility();
+    }
+
+    /** 按当前 Tab/容器状态立即设置动作控件 visible（切 Tab 与 tick 共用）。 */
+    private void refreshActionTabVisibility() {
+        boolean actionsTab = this.tab == 2;
+        boolean containerOpen = this.selected != null && this.selected.getContainer().isPresent();
+        this.turnLeft.visible = actionsTab;
+        this.turnRight.visible = actionsTab;
+        this.turnUp.visible = actionsTab;
+        this.turnDown.visible = actionsTab;
+        this.moveForward.visible = actionsTab;
+        this.moveBackward.visible = actionsTab;
+        this.moveLeft.visible = actionsTab;
+        this.moveRight.visible = actionsTab;
+        this.stopButton.visible = actionsTab;
+        this.sneakButton.visible = actionsTab;
+        this.sprintButton.visible = actionsTab;
+        this.jumpButton.visible = actionsTab;
+        this.attackLookButton.visible = actionsTab;
+        this.useLookButton.visible = actionsTab;
+        this.chunkMinusButton.visible = actionsTab;
+        this.chunkPlusButton.visible = actionsTab;
+        this.respawnButton.visible = actionsTab;
+        this.autoRespawnButton.visible = actionsTab;
+        this.closeContainerButton.visible = containerOpen && this.tab == 1;
+        this.sendButton.visible = actionsTab;
+        this.chatBox.visible = actionsTab;
     }
 
     private void setFeedback(Component message) {
@@ -851,9 +903,10 @@ public class BotControlScreen extends Screen {
         this.newButton.active = true;
         this.delButton.active = true;
         // Tab 高亮：当前 Tab 全亮，其余半透明（视觉上明显区分选中状态）
-        this.tabStatus.setAlpha(this.tab == 0 ? 1.0F : BUTTON_ALPHA);
-        this.tabInventory.setAlpha(this.tab == 1 ? 1.0F : BUTTON_ALPHA);
-        this.tabActions.setAlpha(this.tab == 2 ? 1.0F : BUTTON_ALPHA);
+        float opacity = MockplayerConfig.get().getGuiOpacity();
+        this.tabStatus.setAlpha(this.tab == 0 ? 1.0F : buttonAlpha(opacity));
+        this.tabInventory.setAlpha(this.tab == 1 ? 1.0F : buttonAlpha(opacity));
+        this.tabActions.setAlpha(this.tab == 2 ? 1.0F : buttonAlpha(opacity));
         // 开关回显（on/off 状态写进按钮文字）
         if (ready) {
             this.sneakButton.setMessage(Component.translatable("gui.mockplayer.action.sneak")
@@ -1129,19 +1182,21 @@ public class BotControlScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
         BotGui.recordFrame(this.getTitle());
+        float opacity = MockplayerConfig.get().getGuiOpacity();
         int px = this.panelX();
         int py = this.panelY();
         int pw = BotGui.panelWidth(this.width, this.height);
         int ph = BotGui.panelHeight(this.width, this.height);
         // 面板背景：半透明渐变 + 双层边框 + 顶栏 + 左栏分隔线（alpha < 0xFF 透出游戏场景）
-        graphics.fillGradient(px, py, px + pw, py + ph, PANEL_BG_TOP, PANEL_BG_BOTTOM);
-        graphics.outline(px, py, pw, ph, PANEL_BORDER);
-        graphics.outline(px + 1, py + 1, pw - 2, ph - 2, PANEL_BORDER_INNER);
+        graphics.fillGradient(px, py, px + pw, py + ph,
+                withAlpha(PANEL_BG_TOP, opacity), withAlpha(PANEL_BG_BOTTOM, opacity));
+        graphics.outline(px, py, pw, ph, withAlpha(PANEL_BORDER, opacity));
+        graphics.outline(px + 1, py + 1, pw - 2, ph - 2, withAlpha(PANEL_BORDER_INNER, opacity));
         int headerH = this.sh(18);
-        graphics.fill(px, py, px + pw, py + headerH, PANEL_HEADER_BG);
-        graphics.fill(px, py + headerH - 1, px + pw, py + headerH, PANEL_ACCENT);
+        graphics.fill(px, py, px + pw, py + headerH, withAlpha(PANEL_HEADER_BG, opacity));
+        graphics.fill(px, py + headerH - 1, px + pw, py + headerH, withAlpha(PANEL_ACCENT, opacity));
         int dividerX = this.sx(LIST_X + LIST_W + 6);
-        graphics.fill(dividerX, py + headerH, dividerX + 1, py + ph, PANEL_DIVIDER);
+        graphics.fill(dividerX, py + headerH, dividerX + 1, py + ph, withAlpha(PANEL_DIVIDER, opacity));
         this.drawBotScrollbar(graphics);
         // 控件全部按屏幕坐标直排（init 时 sx/sy/sw 换算好），命中与渲染同一坐标系
         super.extractRenderState(graphics, mouseX, mouseY, a);
@@ -1163,8 +1218,11 @@ public class BotControlScreen extends Screen {
         int thumbH = Math.max(18, Math.round(trackH * VISIBLE_BOT_SLOTS / (float) bots.size()));
         float ratio = (float) this.botScrollOffset / (bots.size() - VISIBLE_BOT_SLOTS);
         int thumbY = trackTop + Math.round((trackH - thumbH) * ratio);
-        graphics.fill(trackX, trackTop, trackX + this.sw(2), trackTop + trackH, 0x8F0E1420);
-        graphics.fill(trackX, thumbY, trackX + this.sw(2), thumbY + thumbH, 0xBF7FB2FF);
+        float opacity = MockplayerConfig.get().getGuiOpacity();
+        graphics.fill(trackX, trackTop, trackX + this.sw(2), trackTop + trackH,
+                withAlpha(0x8F0E1420, opacity));
+        graphics.fill(trackX, thumbY, trackX + this.sw(2), thumbY + thumbH,
+                withAlpha(0xBF7FB2FF, opacity));
     }
 
     /** 鼠标携带物品（拿起后跟随鼠标绘制，原版背包同款；数量用原版 itemDecorations）。 */
@@ -1185,18 +1243,24 @@ public class BotControlScreen extends Screen {
     /** 面板内手动绘制内容（状态文本/网格/反馈，全部换算为屏幕坐标）。 */
     private void drawContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         // 顶栏标题（居中）
-        graphics.centeredText(this.font, this.getTitle(),
+        Component title = Component.literal(this.font.plainSubstrByWidth(
+                this.getTitle().getString(), this.sw(BotGui.PANEL_W - 96)));
+        graphics.centeredText(this.font, title,
                 this.panelX() + BotGui.panelWidth(this.width, this.height) / 2,
                 this.sy(5), 0xFFFFFF);
-        // 反馈行
+        // 反馈行（居中，限宽避免与右侧选中文字重叠）
         int feedbackColor = this.feedbackError ? 0xFFFF5555
                 : this.feedback.getString().isEmpty() ? 0xFFAAAAAA : 0xFF55FF55;
-        graphics.centeredText(this.font, this.feedback,
+        graphics.centeredText(this.font,
+                Component.literal(this.font.plainSubstrByWidth(
+                        this.feedback.getString(), this.sw(BotGui.PANEL_W - 16 - 150))),
                 this.sx(BotGui.PANEL_W / 2), this.sy(FEEDBACK_Y), feedbackColor);
-        // 底部常驻：当前选中假人（所有 Tab 都显示，不只在快捷栏）
-        Component selectedText = selectedText(this.selected);
+        // 底部常驻：当前选中假人（右对齐 + 最小左边界，左右都有边距，不贴边）
+        String selectedText = selectedTextDisplay(this.selected, this.font, 150);
+        int selectedLeft = Math.max(BotGui.PANEL_W / 2 + 8,
+                BotGui.PANEL_W - 8 - this.font.width(selectedText));
         graphics.text(this.font, selectedText,
-                this.sx(BotGui.PANEL_W - 8 - this.font.width(selectedText)),
+                this.sx(selectedLeft),
                 this.sy(FEEDBACK_Y), 0xFFB0C4DE);
         // 左栏标题
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.bots"),
@@ -1226,6 +1290,11 @@ public class BotControlScreen extends Screen {
                 selected == null
                         ? Component.translatable("gui.mockplayer.value.none")
                         : Component.literal(selected.getName()));
+    }
+
+    /** 右下角选中假人显示文本（按右侧固定宽度截断，名字长短自适应不溢出）。 */
+    public static String selectedTextDisplay(Bot selected, net.minecraft.client.gui.Font font, int maxWidth) {
+        return font.plainSubstrByWidth(selectedText(selected).getString(), Math.max(4, maxWidth));
     }
 
     private void drawStatus(GuiGraphicsExtractor graphics) {
@@ -1796,8 +1865,11 @@ public class BotControlScreen extends Screen {
         int y = this.sy(ly);
         int cell = this.sw(CELL);
         int slot = Math.max(1, cell - 2);
-        graphics.fill(x, y, x + cell, y + cell, hovered ? SLOT_BG_HOVER : SLOT_BG);
-        graphics.outline(x, y, cell, cell, hovered ? SLOT_BORDER_HOVER : SLOT_BORDER);
+        float opacity = MockplayerConfig.get().getGuiOpacity();
+        graphics.fill(x, y, x + cell, y + cell,
+                hovered ? withAlpha(SLOT_BG_HOVER, opacity) : withAlpha(SLOT_BG, opacity));
+        graphics.outline(x, y, cell, cell,
+                hovered ? withAlpha(SLOT_BORDER_HOVER, opacity) : withAlpha(SLOT_BORDER, opacity));
         // 原版语义：槽位为空时画装备/副手背景图标（物品存在则不画）
         if (stack.isEmpty() && emptyIcon != null) {
             graphics.blitSprite(RenderPipelines.GUI_TEXTURED, emptyIcon, x + 1, y + 1,

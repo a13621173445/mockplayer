@@ -66,9 +66,14 @@ public class ModConfig {
     /** GUI 打开按键（GLFW key name，如 key.keyboard.g；空串 = 禁用）。 */
     public static final String DEFAULT_GUI_KEY_NAME = "key.keyboard.g";
     public static final int MAX_GUI_KEY_NAME_LENGTH = 64;
+    /** GUI 背景不透明度（0.05-1.0，默认 0.25 = 低透明，透出游戏场景）。 */
+    public static final float DEFAULT_GUI_OPACITY = 0.25F;
+    public static final float MIN_GUI_OPACITY = 0.05F;
+    public static final float MAX_GUI_OPACITY = 1.0F;
 
     private boolean guiEnabled = DEFAULT_GUI_ENABLED;
     private String guiKeyName = DEFAULT_GUI_KEY_NAME;
+    private float guiOpacity = DEFAULT_GUI_OPACITY;
 
     /** 假人默认区块加载半径（节约性能：默认最低 2，范围 1-32）。 */
     public static final int DEFAULT_FAKE_PLAYER_CHUNK_RADIUS = 2;
@@ -187,6 +192,22 @@ public class ModConfig {
         this.guiKeyName = guiKeyName;
     }
 
+    public float getGuiOpacity() {
+        return this.guiOpacity;
+    }
+
+    public void setGuiOpacity(float guiOpacity) {
+        this.guiOpacity = guiOpacity;
+    }
+
+    /** 不透明度规范化：NaN/非法 → 默认；范围钳制到 MIN..MAX。 */
+    static float normalizeGuiOpacity(float value) {
+        if (!Float.isFinite(value)) {
+            return DEFAULT_GUI_OPACITY;
+        }
+        return Math.max(MIN_GUI_OPACITY, Math.min(MAX_GUI_OPACITY, value));
+    }
+
     /** GUI 按键名规范化：null → 默认；trim 空 → 禁用；非法字符/超长 → 默认。 */
     static String normalizeGuiKeyName(String value) {
         if (value == null) {
@@ -248,6 +269,7 @@ public class ModConfig {
                 MIN_BATCH_MAX_COUNT, MAX_BATCH_MAX_COUNT, DEFAULT_BATCH_MAX_COUNT);
         this.commands = ModCommands.normalize(this.commands);
         this.guiKeyName = normalizeGuiKeyName(this.guiKeyName);
+        this.guiOpacity = normalizeGuiOpacity(this.guiOpacity);
     }
 
     private static int clampInt(int value, int min, int max, int fallback) {

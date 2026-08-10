@@ -98,6 +98,9 @@ public final class ModConfigScreen extends YACLScreen {
                                 .option(booleanOption("guiEnabled", true,
                                         cfg::isGuiEnabled, cfg::setGuiEnabled))
                                 .option(guiKeyOption(cfg::getGuiKeyName, cfg::setGuiKeyName))
+                                .option(opacityOption(
+                                        () -> (double) cfg.getGuiOpacity(),
+                                        value -> cfg.setGuiOpacity(value.floatValue())))
                                 .build())
                         .build())
                 .category(ConfigCategory.createBuilder()
@@ -201,6 +204,20 @@ public final class ModConfigScreen extends YACLScreen {
                         Component.translatable("config.mockplayer.option.guiKeyName.description")))
                 .binding(ModConfig.DEFAULT_GUI_KEY_NAME, getter, setter)
                 .controller(option -> StringControllerBuilder.create(option))
+                .build();
+    }
+
+    /** 不透明度选项：0.05-1.0，百分比显示，保存即热重载。 */
+    private static Option<Double> opacityOption(Supplier<Double> getter, Consumer<Double> setter) {
+        return Option.<Double>createBuilder()
+                .name(Component.translatable("config.mockplayer.option.guiOpacity"))
+                .description(OptionDescription.of(
+                        Component.translatable("config.mockplayer.option.guiOpacity.description")))
+                .binding((double) ModConfig.DEFAULT_GUI_OPACITY, getter, setter)
+                .controller(option -> DoubleFieldControllerBuilder.create(option)
+                        .range((double) ModConfig.MIN_GUI_OPACITY, (double) ModConfig.MAX_GUI_OPACITY)
+                        .formatValue(value -> Component.literal(
+                                String.format(java.util.Locale.ROOT, "%.0f%%", value * 100))))
                 .build();
     }
 }
