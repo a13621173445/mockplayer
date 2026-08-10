@@ -6175,6 +6175,9 @@ public final class TestRunner {
     private static boolean bgCmdShieldUsed;
     private static boolean bgManySummoned;
     private static boolean bgManyChecked;
+    private static boolean bgListChecked;
+    private static boolean bgListSecondShown;
+    private static boolean bgListSecondChecked;
 
     private static void runBotGui(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -7419,6 +7422,62 @@ public final class TestRunner {
                         "overflow=" + overflowCount);
                 check("entity buttons capped at 2", entityShown <= 2,
                         "shown=" + entityShown);
+                mc.gui.setScreen(null);
+                bgStep(32);
+            }
+            case 32 -> { // 左栏滚动列表：钳制纯函数 + 多假人列表显示 + ▲▼ 按钮
+                if (!bgListChecked) {
+                    bgListChecked = true;
+                    check("bot list scroll clamp",
+                            com.mockplayer.gui.BotControlScreen.clampBotScroll(0, 5, 10) == 0
+                                    && com.mockplayer.gui.BotControlScreen.clampBotScroll(8, 15, 10) == 5
+                                    && com.mockplayer.gui.BotControlScreen.clampBotScroll(-3, 12, 10) == 0
+                                    && com.mockplayer.gui.BotControlScreen.clampBotScroll(2, 10, 10) == 0);
+                    com.mockplayer.session.FakePlayerCommands.newPlayer("tbot-gui2");
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 10) {
+                    return; // 等第二个假人注册进列表
+                }
+                if (!bgListSecondShown) {
+                    bgListSecondShown = true;
+                    mc.gui.setScreen(null);
+                    com.mockplayer.gui.BotGui.open(mc);
+                    waitTicks = 0;
+                    return; // 等列表按钮 tick 刷新
+                }
+                if (++waitTicks < 10) {
+                    return;
+                }
+                if (!bgListSecondChecked) {
+                    bgListSecondChecked = true;
+                    net.minecraft.client.gui.screens.Screen opened = bgScreen();
+                    boolean secondShown = false;
+                    int arrowCount = 0;
+                    if (opened instanceof com.mockplayer.gui.BotControlScreen s) {
+                        for (Object child : s.children()) {
+                            if (child instanceof net.minecraft.client.gui.components.Button b) {
+                                String msg = b.getMessage().getString();
+                                if (msg.contains("tbot-gui2")) {
+                                    secondShown = true;
+                                }
+                                if (msg.equals("▲") || msg.equals("▼")) {
+                                    arrowCount++;
+                                }
+                            }
+                        }
+                    }
+                    check("bot list shows second bot", secondShown);
+                    check("bot list scroll buttons present", arrowCount == 2,
+                            "arrows=" + arrowCount);
+                    com.mockplayer.session.FakePlayerCommands.delPlayer("tbot-gui2");
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 10) {
+                    return; // 等删除清理
+                }
                 mc.gui.setScreen(null);
                 finishSuite();
             }

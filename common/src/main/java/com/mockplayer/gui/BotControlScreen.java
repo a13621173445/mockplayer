@@ -47,6 +47,8 @@ public class BotControlScreen extends Screen {
 
     private static final int LIST_X = 8;
     private static final int LIST_W = 88;
+    /** 左栏假人列表可见槽位数（多假人时滚轮/▲▼ 滚动选择）。 */
+    public static final int VISIBLE_BOT_SLOTS = 10;
     private static final int CONTENT_X = 104;
     private static final int CONTENT_W = BotGui.PANEL_W - CONTENT_X - 8;
     private static final int TAB_Y = 24;
@@ -98,6 +100,10 @@ public class BotControlScreen extends Screen {
     private EditBox nameBox;
     private Button newButton;
     private Button delButton;
+    private Button scrollUpButton;
+    private Button scrollDownButton;
+    /** 左栏假人列表滚动偏移（0 = 显示第一个）。 */
+    private int botScrollOffset;
     private Button tabStatus;
     private Button tabInventory;
     private Button tabActions;
@@ -155,27 +161,32 @@ public class BotControlScreen extends Screen {
         this.closeButton = this.addButton(BotGui.PANEL_W - 48, 4, 40, 14,
                 "gui.mockplayer.close", () -> this.onClose());
 
-        // ===== 左栏：假人列表（8 个固定槽位，tick 更新） =====
-        for (int i = 0; i < 8; i++) {
+        // ===== 左栏：假人列表（10 个可见槽位，多假人滚轮/▲▼ 滚动） =====
+        for (int i = 0; i < VISIBLE_BOT_SLOTS; i++) {
             int index = i;
             Button b = Button.builder(Component.literal(""), btn -> {
                 List<Bot> bots = coreBots();
-                if (index < bots.size()) {
-                    this.select(bots.get(index));
+                int target = index + this.botScrollOffset;
+                if (target < bots.size()) {
+                    this.select(bots.get(target));
                 }
             }).bounds(sx(LIST_X), sy(34 + i * 16), sw(LIST_W), sh(15)).build();
             b.setAlpha(BUTTON_ALPHA);
             this.addRenderableWidget(b);
             this.botButtons.add(b);
         }
-        // 新建/删除共用一个输入框（并排两个按钮，点哪个就用哪个操作）
-        this.nameBox = new EditBox(this.font, sx(LIST_X), sy(164), sw(LIST_W), sh(12),
+        this.scrollUpButton = this.addLiteralButton(LIST_X, 196, 43, 10, "▲",
+                () -> this.scrollBotList(-1));
+        this.scrollDownButton = this.addLiteralButton(LIST_X + 45, 196, 43, 10, "▼",
+                () -> this.scrollBotList(1));
+        // 新建/删除共用一个输入框（并排两个按钮，点哪个就用哪个操作；位于面板底部）
+        this.nameBox = new EditBox(this.font, sx(LIST_X), sy(210), sw(150), sh(14),
                 Component.translatable("gui.mockplayer.name_hint"));
         this.nameBox.setMaxLength(16);
         this.addRenderableWidget(this.nameBox);
-        this.newButton = this.addButton(LIST_X, 178, 43, 12, "gui.mockplayer.new_bot",
+        this.newButton = this.addButton(LIST_X + 152, 210, 44, 14, "gui.mockplayer.new_bot",
                 () -> this.tryCreate());
-        this.delButton = this.addButton(LIST_X + 45, 178, 43, 12, "gui.mockplayer.delete_bot",
+        this.delButton = this.addButton(LIST_X + 198, 210, 44, 14, "gui.mockplayer.delete_bot",
                 () -> this.tryDelete());
 
         // ===== 顶部 Tab =====
@@ -187,74 +198,77 @@ public class BotControlScreen extends Screen {
         this.tabActions = this.addButton(CONTENT_X + (tabW + 2) * 2, TAB_Y, tabW, 14,
                 "gui.mockplayer.tab.actions", () -> this.switchTab(2));
 
-        // ===== 动作 Tab 控件 =====
-        this.turnLeft = this.addRepeat(CONTENT_X, 54, 36, 16, "gui.mockplayer.action.turn_left",
-                () -> this.act(b -> b.actions().turn(-15.0F, 0.0F), "gui.mockplayer.action.turn_left"),
-                TURN_REPEAT_MS);
-        this.turnRight = this.addRepeat(CONTENT_X + 38, 54, 36, 16, "gui.mockplayer.action.turn_right",
-                () -> this.act(b -> b.actions().turn(15.0F, 0.0F), "gui.mockplayer.action.turn_right"),
-                TURN_REPEAT_MS);
-        this.turnUp = this.addRepeat(CONTENT_X + 76, 54, 36, 16, "gui.mockplayer.action.turn_up",
+        // ===== 动作 Tab 控件（视线/移动十字 + 右侧开关，交互/系统/聊天分组） =====
+        // 视线十字：↑ 上 / ← → 左右 / ↓ 下
+        this.turnUp = this.addRepeat(CONTENT_X + 40, 52, 30, 14, "gui.mockplayer.action.turn_up",
                 () -> this.act(b -> b.actions().turn(0.0F, -8.0F), "gui.mockplayer.action.turn_up"),
                 TURN_REPEAT_MS);
-        this.turnDown = this.addRepeat(CONTENT_X + 114, 54, 36, 16, "gui.mockplayer.action.turn_down",
+        this.turnLeft = this.addRepeat(CONTENT_X + 4, 68, 30, 14, "gui.mockplayer.action.turn_left",
+                () -> this.act(b -> b.actions().turn(-15.0F, 0.0F), "gui.mockplayer.action.turn_left"),
+                TURN_REPEAT_MS);
+        this.turnRight = this.addRepeat(CONTENT_X + 76, 68, 30, 14, "gui.mockplayer.action.turn_right",
+                () -> this.act(b -> b.actions().turn(15.0F, 0.0F), "gui.mockplayer.action.turn_right"),
+                TURN_REPEAT_MS);
+        this.turnDown = this.addRepeat(CONTENT_X + 40, 84, 30, 14, "gui.mockplayer.action.turn_down",
                 () -> this.act(b -> b.actions().turn(0.0F, 8.0F), "gui.mockplayer.action.turn_down"),
                 TURN_REPEAT_MS);
 
-        this.moveForward = this.addHold(CONTENT_X, 80, 36, 16, "gui.mockplayer.action.move_forward",
+        // 移动十字（WASD 手感）+ 右侧 2x2 开关
+        this.moveForward = this.addHold(CONTENT_X + 40, 100, 30, 14, "gui.mockplayer.action.move_forward",
                 () -> this.act(b -> b.actions().setForward(1.0F), "gui.mockplayer.action.move_forward"),
                 () -> this.actQuiet(b -> b.actions().setForward(0.0F)));
-        this.moveBackward = this.addHold(CONTENT_X + 38, 80, 36, 16, "gui.mockplayer.action.move_backward",
-                () -> this.act(b -> b.actions().setForward(-1.0F), "gui.mockplayer.action.move_backward"),
-                () -> this.actQuiet(b -> b.actions().setForward(0.0F)));
-        this.moveLeft = this.addHold(CONTENT_X + 76, 80, 36, 16, "gui.mockplayer.action.move_left",
+        this.moveLeft = this.addHold(CONTENT_X + 4, 116, 30, 14, "gui.mockplayer.action.move_left",
                 () -> this.act(b -> b.actions().setStrafe(-1.0F), "gui.mockplayer.action.move_left"),
                 () -> this.actQuiet(b -> b.actions().setStrafe(0.0F)));
-        this.moveRight = this.addHold(CONTENT_X + 114, 80, 36, 16, "gui.mockplayer.action.move_right",
+        this.moveRight = this.addHold(CONTENT_X + 76, 116, 30, 14, "gui.mockplayer.action.move_right",
                 () -> this.act(b -> b.actions().setStrafe(1.0F), "gui.mockplayer.action.move_right"),
                 () -> this.actQuiet(b -> b.actions().setStrafe(0.0F)));
-        this.stopButton = this.addButton(CONTENT_X + 152, 80, 42, 16, "gui.mockplayer.action.stop",
+        this.moveBackward = this.addHold(CONTENT_X + 40, 132, 30, 14, "gui.mockplayer.action.move_backward",
+                () -> this.act(b -> b.actions().setForward(-1.0F), "gui.mockplayer.action.move_backward"),
+                () -> this.actQuiet(b -> b.actions().setForward(0.0F)));
+        this.stopButton = this.addButton(CONTENT_X + 130, 100, 52, 14, "gui.mockplayer.action.stop",
                 () -> this.act(b -> b.actions().stop(), "gui.mockplayer.action.stop"));
-        this.sneakButton = this.addButton(CONTENT_X + 196, 80, 52, 16, "gui.mockplayer.action.sneak",
+        this.sneakButton = this.addButton(CONTENT_X + 184, 100, 52, 14, "gui.mockplayer.action.sneak",
                 () -> this.toggleSneak());
-        this.sprintButton = this.addButton(CONTENT_X, 96, 52, 16, "gui.mockplayer.action.sprint",
+        this.sprintButton = this.addButton(CONTENT_X + 130, 116, 52, 14, "gui.mockplayer.action.sprint",
                 () -> this.toggleSprint());
-        this.jumpButton = this.addButton(CONTENT_X + 54, 96, 52, 16, "gui.mockplayer.action.jump",
+        this.jumpButton = this.addButton(CONTENT_X + 184, 116, 52, 14, "gui.mockplayer.action.jump",
                 () -> this.toggleJump());
 
-        // 左键/右键：按下 = 单点 + 立即进入持续，松开 = 停止释放（原版按住键语义，无时间阈值）
-        this.attackLookButton = this.addTapHold(CONTENT_X, 122, ACT_BTN_W, ACT_BTN_H,
+        // 交互：左键/右键（按下 = 单点 + 立即持续，松开 = 停止释放，原版按住键语义）
+        this.attackLookButton = this.addTapHold(CONTENT_X, 150, ACT_BTN_W, ACT_BTN_H,
                 "gui.mockplayer.action.attack_look",
                 () -> this.actQuiet(b -> b.actions().attackLook()),
                 () -> this.actQuiet(b -> b.actions().sustainedAttackLook()),
                 () -> this.actQuiet(b -> b.actions().stopSustained()));
-        this.useLookButton = this.addTapHold(CONTENT_X + ACT_GAP, 122, ACT_BTN_W, ACT_BTN_H,
+        this.useLookButton = this.addTapHold(CONTENT_X + ACT_GAP, 150, ACT_BTN_W, ACT_BTN_H,
                 "gui.mockplayer.action.use_look",
                 () -> this.actQuiet(b -> b.actions().useLook()),
                 () -> this.actQuiet(b -> b.actions().sustainedUseLook()),
                 () -> this.actQuiet(b -> b.actions().stopSustained()));
 
-        this.chunkMinusButton = this.addRepeat(CONTENT_X, 148, 30, 14,
+        // 系统：区块加载半径步进 + 重生/自动重生/关容器
+        this.chunkMinusButton = this.addRepeat(CONTENT_X, 176, 30, 14,
                 "gui.mockplayer.action.chunk_minus", () -> this.changeChunk(-1), CHUNK_REPEAT_MS);
-        this.chunkPlusButton = this.addRepeat(CONTENT_X + 32, 148, 30, 14,
+        this.chunkPlusButton = this.addRepeat(CONTENT_X + 32, 176, 30, 14,
                 "gui.mockplayer.action.chunk_plus", () -> this.changeChunk(1), CHUNK_REPEAT_MS);
-        this.respawnButton = this.addButton(CONTENT_X + 66, 148, 44, 14,
+        this.respawnButton = this.addButton(CONTENT_X + 66, 176, 44, 14,
                 "gui.mockplayer.action.respawn",
                 () -> this.act(Bot::actions, "gui.mockplayer.action.respawn", actions -> actions.respawn()));
-        this.autoRespawnButton = this.addButton(CONTENT_X + 112, 148, 66, 14,
+        this.autoRespawnButton = this.addButton(CONTENT_X + 112, 176, 66, 14,
                 "gui.mockplayer.action.auto_respawn", () -> this.toggleAutoRespawn());
-        this.closeContainerButton = this.addButton(CONTENT_X + 180, 148, 68, 14,
+        this.closeContainerButton = this.addButton(CONTENT_X + 180, 176, 68, 14,
                 "gui.mockplayer.action.close_container",
                 () -> this.actQuiet(b -> b.getContainer().ifPresent(BotContainer::close)));
 
-        this.chatBox = new EditBox(this.font, sx(CONTENT_X), sy(172), sw(180), sh(14),
+        this.chatBox = new EditBox(this.font, sx(CONTENT_X), sy(198), sw(180), sh(14),
                 Component.translatable("gui.mockplayer.action.chat_hint"));
         this.chatBox.setMaxLength(256);
         this.addRenderableWidget(this.chatBox);
-        this.sendButton = this.addButton(CONTENT_X + 182, 172, 66, 14, "gui.mockplayer.action.send",
+        this.sendButton = this.addButton(CONTENT_X + 182, 198, 66, 14, "gui.mockplayer.action.send",
                 () -> this.sendChat());
 
-        // ===== 附近实体（动作 Tab 顶部单行 2 个，点击 = bot 转头；实体再多也只显示最近 2 个，防拥挤重叠） =====
+        // ===== 附近实体（视线区右侧单行 2 个，点击 = bot 转头；实体再多也只显示最近 2 个） =====
         for (int i = 0; i < 2; i++) {
             int index = i;
             Button b = Button.builder(Component.literal(""), btn -> {
@@ -262,8 +276,8 @@ public class BotControlScreen extends Screen {
                     Entity target = this.entityTargets.get(index);
                     this.act(bot -> bot.actions().lookAt(target), "gui.mockplayer.action.look_at");
                 }
-            }).bounds(sx(CONTENT_X + 156 + index * 46), sy(54),
-                    sw(44), sh(16)).build();
+            }).bounds(sx(CONTENT_X + 200 + index * 46), sy(52),
+                    sw(44), sh(14)).build();
             b.setAlpha(BUTTON_ALPHA);
             this.addRenderableWidget(b);
             this.entityButtons.add(b);
@@ -274,6 +288,15 @@ public class BotControlScreen extends Screen {
 
     private Button addButton(int x, int y, int w, int h, String key, Runnable action) {
         Button b = Button.builder(Component.translatable(key), btn -> action.run())
+                .bounds(sx(x), sy(y), sw(w), sw(h)).build();
+        b.setAlpha(BUTTON_ALPHA);
+        this.addRenderableWidget(b);
+        return b;
+    }
+
+    /** 字面文本按钮（▲▼ 等符号，无需 i18n）。 */
+    private Button addLiteralButton(int x, int y, int w, int h, String text, Runnable action) {
+        Button b = Button.builder(Component.literal(text), btn -> action.run())
                 .bounds(sx(x), sy(y), sw(w), sw(h)).build();
         b.setAlpha(BUTTON_ALPHA);
         this.addRenderableWidget(b);
@@ -440,6 +463,32 @@ public class BotControlScreen extends Screen {
     private void select(Bot bot) {
         this.selected = bot;
         this.setFeedback(Component.translatable("gui.mockplayer.feedback.selected", bot.getName()));
+    }
+
+    /** 左栏列表滚动（delta = ±1），偏移量钳制在可见范围内。 */
+    private void scrollBotList(int delta) {
+        this.botScrollOffset = clampBotScroll(this.botScrollOffset + delta,
+                coreBots().size(), VISIBLE_BOT_SLOTS);
+    }
+
+    /** 列表滚动偏移钳制（纯函数，滚轮/▲▼/测试共用）。 */
+    public static int clampBotScroll(int offset, int total, int visible) {
+        if (total <= visible) {
+            return 0;
+        }
+        return Math.max(0, Math.min(offset, total - visible));
+    }
+
+    @Override
+    public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
+        double lx = this.localX(x);
+        double ly = this.localY(y);
+        // 滚轮在左栏列表区域 → 滚动假人列表（向上滚 = 显示更早的假人）
+        if (lx >= LIST_X && lx <= LIST_X + LIST_W && ly >= 34 && ly <= 195) {
+            this.scrollBotList(scrollY > 0 ? -1 : 1);
+            return true;
+        }
+        return super.mouseScrolled(x, y, scrollX, scrollY);
     }
 
     private void switchTab(int tab) {
@@ -619,10 +668,12 @@ public class BotControlScreen extends Screen {
             this.selected = firstSelectableBot();
         }
         List<Bot> bots = coreBots();
+        this.botScrollOffset = clampBotScroll(this.botScrollOffset, bots.size(), VISIBLE_BOT_SLOTS);
         for (int i = 0; i < this.botButtons.size(); i++) {
             Button b = this.botButtons.get(i);
-            if (i < bots.size()) {
-                Bot bot = bots.get(i);
+            int index = i + this.botScrollOffset;
+            if (index < bots.size()) {
+                Bot bot = bots.get(index);
                 float hp = bot.getLocalPlayer() != null ? bot.getLocalPlayer().getHealth() : 0.0F;
                 b.visible = true;
                 b.active = true;
@@ -633,33 +684,61 @@ public class BotControlScreen extends Screen {
                 b.visible = false;
             }
         }
+        this.scrollUpButton.active = this.botScrollOffset > 0;
+        this.scrollDownButton.active = this.botScrollOffset
+                < Math.max(0, bots.size() - VISIBLE_BOT_SLOTS);
         boolean ready = this.requireBotSilent();
         boolean containerOpen = this.selected != null && this.selected.getContainer().isPresent();
         boolean actionsTab = this.tab == 2;
+        // 动作 Tab 控件：切到其他 Tab 时必须隐藏（visible=false），防止与内容重叠
         this.turnLeft.active = ready && actionsTab;
+        this.turnLeft.visible = actionsTab;
         this.turnRight.active = ready && actionsTab;
+        this.turnRight.visible = actionsTab;
         this.turnUp.active = ready && actionsTab;
+        this.turnUp.visible = actionsTab;
         this.turnDown.active = ready && actionsTab;
+        this.turnDown.visible = actionsTab;
         this.moveForward.active = ready && actionsTab;
+        this.moveForward.visible = actionsTab;
         this.moveBackward.active = ready && actionsTab;
+        this.moveBackward.visible = actionsTab;
         this.moveLeft.active = ready && actionsTab;
+        this.moveLeft.visible = actionsTab;
         this.moveRight.active = ready && actionsTab;
+        this.moveRight.visible = actionsTab;
         this.stopButton.active = ready && actionsTab;
+        this.stopButton.visible = actionsTab;
         this.sneakButton.active = ready && actionsTab;
+        this.sneakButton.visible = actionsTab;
         this.sprintButton.active = ready && actionsTab;
+        this.sprintButton.visible = actionsTab;
         this.jumpButton.active = ready && actionsTab;
+        this.jumpButton.visible = actionsTab;
         this.attackLookButton.active = ready && actionsTab;
+        this.attackLookButton.visible = actionsTab;
         this.useLookButton.active = ready && actionsTab;
+        this.useLookButton.visible = actionsTab;
         this.chunkMinusButton.active = ready && actionsTab;
+        this.chunkMinusButton.visible = actionsTab;
         this.chunkPlusButton.active = ready && actionsTab;
+        this.chunkPlusButton.visible = actionsTab;
         this.respawnButton.active = ready && actionsTab;
+        this.respawnButton.visible = actionsTab;
         this.autoRespawnButton.active = ready && actionsTab;
+        this.autoRespawnButton.visible = actionsTab;
         this.closeContainerButton.active = ready && containerOpen && actionsTab;
+        this.closeContainerButton.visible = actionsTab;
         this.sendButton.active = ready && actionsTab;
+        this.sendButton.visible = actionsTab;
         this.chatBox.active = ready && actionsTab;
+        this.chatBox.visible = actionsTab;
         this.newButton.active = true;
         this.delButton.active = true;
-        this.closeContainerButton.visible = actionsTab;
+        // Tab 高亮：当前 Tab 全亮，其余半透明（视觉上明显区分选中状态）
+        this.tabStatus.setAlpha(this.tab == 0 ? 1.0F : BUTTON_ALPHA);
+        this.tabInventory.setAlpha(this.tab == 1 ? 1.0F : BUTTON_ALPHA);
+        this.tabActions.setAlpha(this.tab == 2 ? 1.0F : BUTTON_ALPHA);
         // 开关回显（on/off 状态写进按钮文字）
         if (ready) {
             this.sneakButton.setMessage(Component.translatable(
@@ -972,7 +1051,7 @@ public class BotControlScreen extends Screen {
                 this.sy(FEEDBACK_Y), 0xFFB0C4DE);
         // 左栏标题
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.bots"),
-                this.sx(LIST_X), this.sy(26), 0xFF7FB2FF);
+                this.sx(LIST_X), this.sy(26), 0xFFA8C8FF);
         if (this.selected == null) {
             graphics.text(this.font, Component.translatable("gui.mockplayer.status.no_bot"),
                     this.sx(CONTENT_X), this.sy(CONTENT_Y), 0xAAAAAA);
@@ -1002,7 +1081,7 @@ public class BotControlScreen extends Screen {
 
     private void drawStatus(GuiGraphicsExtractor graphics) {
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.status"),
-                this.sx(CONTENT_X), this.sy(CONTENT_Y), 0xFF7FB2FF);
+                this.sx(CONTENT_X), this.sy(CONTENT_Y), 0xFFA8C8FF);
         List<Component> lines = statusLines(this.selected);
         int x = this.sx(CONTENT_X);
         int y = this.sy(CONTENT_Y + 12);
@@ -1274,13 +1353,13 @@ public class BotControlScreen extends Screen {
     /** 动作 Tab：分区标题（按钮本身由控件渲染）。 */
     private void drawActions(GuiGraphicsExtractor graphics) {
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.look"),
-                this.sx(CONTENT_X), this.sy(CONTENT_Y), 0xFF7FB2FF);
+                this.sx(CONTENT_X), this.sy(CONTENT_Y + 4), 0xFFA8C8FF);
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.move"),
-                this.sx(CONTENT_X), this.sy(CONTENT_Y + 26), 0xFF7FB2FF);
+                this.sx(CONTENT_X), this.sy(CONTENT_Y + 52), 0xFFA8C8FF);
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.interact"),
-                this.sx(CONTENT_X), this.sy(CONTENT_Y + 68), 0xFF7FB2FF);
+                this.sx(CONTENT_X), this.sy(CONTENT_Y + 100), 0xFFA8C8FF);
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.system"),
-                this.sx(CONTENT_X), this.sy(CONTENT_Y + 94), 0xFF7FB2FF);
+                this.sx(CONTENT_X), this.sy(CONTENT_Y + 126), 0xFFA8C8FF);
     }
 
     /** 画一个槽位（逻辑坐标入参，内部换算屏幕坐标；边框 + 空槽图标 + 物品图标 + 数量 + 悬停高亮）。 */
