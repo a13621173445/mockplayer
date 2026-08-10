@@ -6149,6 +6149,7 @@ public final class TestRunner {
     private static boolean bgSlotGiveDone;
     private static int bgSlotSyncWait;
     private static volatile boolean bgSlotClientSynced;
+    private static boolean bgIconOpened;
 
     private static void runBotGui(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -6488,7 +6489,7 @@ public final class TestRunner {
                     bgStep(9);
                 }
             }
-            case 9 -> { // 容器 Tab：切页 → 点快捷栏槽（拿起石头）→ 点箱子槽 0（放入）→ 服务端箱子证据 → 关容器
+            case 9 -> { // 背包 Tab 容器模式：切到背包 Tab → 点快捷栏槽（拿起石头）→ 点箱子槽 0（放入）→ 服务端箱子证据 → 关容器
                 com.mockplayer.gui.BotControlScreen screen = bgScreen();
                 if (screen == null) {
                     fail("gui screen lost");
@@ -6499,7 +6500,7 @@ public final class TestRunner {
                     bgChestTabClicked = true;
                     waitTicks = 0;
                     net.minecraft.client.gui.components.Button tab =
-                            bgFindButton(screen, "gui.mockplayer.tab.container");
+                            bgFindButton(screen, "gui.mockplayer.tab.inventory");
                     if (tab != null) {
                         bgClick(tab);
                     }
@@ -6510,7 +6511,7 @@ public final class TestRunner {
                 }
                 if (!bgTabChecked) {
                     bgTabChecked = true;
-                    check("container tab active", screen.currentTab() == 2,
+                    check("inventory tab active for container", screen.currentTab() == 1,
                             "tab=" + screen.currentTab());
                 }
                 if (!bgChestHotbarClicked) {
@@ -6832,19 +6833,63 @@ public final class TestRunner {
                 }
             }
             case 18 -> { // GUI 槽位映射：显示与点击共用菜单槽语义（盔甲5/快捷栏36/副手45）
-                net.minecraft.client.player.LocalPlayer lp = bot.getLocalPlayer();
-                check("gui helmet slot 5 shows helmet item", lp != null
-                        && com.mockplayer.gui.BotControlScreen.inventoryItem(lp, 5)
-                        .is(net.minecraft.world.item.Items.EMERALD));
-                check("gui hotbar slot 36 shows hotbar0", lp != null
-                        && com.mockplayer.gui.BotControlScreen.inventoryItem(lp, 36)
-                        .is(net.minecraft.world.item.Items.DIAMOND));
-                check("gui offhand slot 45 shows offhand", lp != null
-                        && com.mockplayer.gui.BotControlScreen.inventoryItem(lp, 45)
-                        .is(net.minecraft.world.item.Items.REDSTONE));
-                check("gui main inventory slot 9 empty", lp == null
-                        || com.mockplayer.gui.BotControlScreen.inventoryItem(lp, 9).isEmpty());
-                finishSuite();
+                if (!bgIconOpened) {
+                    bgIconOpened = true;
+                    net.minecraft.client.player.LocalPlayer lp = bot.getLocalPlayer();
+                    check("gui helmet slot 5 shows helmet item", lp != null
+                            && com.mockplayer.gui.BotControlScreen.inventoryItem(lp, 5)
+                            .is(net.minecraft.world.item.Items.EMERALD));
+                    check("gui hotbar slot 36 shows hotbar0", lp != null
+                            && com.mockplayer.gui.BotControlScreen.inventoryItem(lp, 36)
+                            .is(net.minecraft.world.item.Items.DIAMOND));
+                    check("gui offhand slot 45 shows offhand", lp != null
+                            && com.mockplayer.gui.BotControlScreen.inventoryItem(lp, 45)
+                            .is(net.minecraft.world.item.Items.REDSTONE));
+                    check("gui main inventory slot 9 empty", lp == null
+                            || com.mockplayer.gui.BotControlScreen.inventoryItem(lp, 9).isEmpty());
+                    // 原版空槽图标（Slot.getNoItemIcon）：盔甲/副手都有，快捷栏没有
+                    check("gui helmet slot has vanilla icon", lp != null
+                            && com.mockplayer.gui.BotControlScreen.slotIcon(lp, 5) != null
+                            && com.mockplayer.gui.BotControlScreen.slotIcon(lp, 5).getPath().endsWith("helmet"));
+                    check("gui boots slot has vanilla icon", lp != null
+                            && com.mockplayer.gui.BotControlScreen.slotIcon(lp, 8) != null
+                            && com.mockplayer.gui.BotControlScreen.slotIcon(lp, 8).getPath().endsWith("boots"));
+                    check("gui offhand slot has shield icon", lp != null
+                            && com.mockplayer.gui.BotControlScreen.slotIcon(lp, 45) != null
+                            && com.mockplayer.gui.BotControlScreen.slotIcon(lp, 45).getPath().endsWith("shield"));
+                    check("gui hotbar slot has no icon", lp == null
+                            || com.mockplayer.gui.BotControlScreen.slotIcon(lp, 36) == null);
+                    // 渲染路径：打开背包 Tab，空装备槽图标应真实绘制（探针计数）
+                    System.setProperty("mockplayer.guiRenderProbe", "true");
+                    mc.gui.setScreen(null);
+                    com.mockplayer.gui.BotGui.open(mc);
+                    net.minecraft.client.gui.screens.Screen opened = bgScreen();
+                    if (opened instanceof com.mockplayer.gui.BotControlScreen s) {
+                        net.minecraft.client.gui.components.Button invTab =
+                                bgFindButton(s, "gui.mockplayer.tab.inventory");
+                        if (invTab != null) {
+                            bgClick(invTab);
+                        }
+                    }
+                    waitTicks = 0;
+                    return;
+                }
+                if (com.mockplayer.gui.BotGui.probeSlotIconCount() > 0) {
+                    check("empty armor slot icons rendered", true);
+                    mc.gui.setScreen(null);
+                    System.clearProperty("mockplayer.guiRenderProbe");
+                    finishSuite();
+                } else if (++waitTicks > 100) {
+                    check("empty armor slot icons rendered", false,
+                            "icons=" + com.mockplayer.gui.BotGui.probeSlotIconCount()
+                                    + " tab=" + (bgScreen() instanceof com.mockplayer.gui.BotControlScreen s
+                                    ? s.currentTab() : -1)
+                                    + " container=" + bot.getContainer().isPresent()
+                                    + " frames=" + com.mockplayer.gui.BotGui.probeFrameCount());
+                    mc.gui.setScreen(null);
+                    System.clearProperty("mockplayer.guiRenderProbe");
+                    finishSuite();
+                }
             }
         }
     }

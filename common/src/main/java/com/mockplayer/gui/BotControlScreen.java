@@ -15,10 +15,13 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec2;
@@ -69,7 +72,6 @@ public class BotControlScreen extends Screen {
     private Button delButton;
     private Button tabStatus;
     private Button tabInventory;
-    private Button tabContainer;
     private Button tabActions;
     private Button turnLeft;
     private Button turnRight;
@@ -117,7 +119,7 @@ public class BotControlScreen extends Screen {
         this.entityButtons.clear();
         this.entityTargets.clear();
         this.selected = firstSelectableBot();
-        if (this.tab > 3) {
+        if (this.tab > 2) {
             this.tab = 0;
         }
         this.feedback = Component.literal("");
@@ -152,15 +154,13 @@ public class BotControlScreen extends Screen {
                 () -> this.tryDelete());
 
         // ===== 顶部 Tab =====
-        int tabW = (CONTENT_W - 3 * 2) / 4;
+        int tabW = (CONTENT_W - 2 * 2) / 3;
         this.tabStatus = this.addButton(CONTENT_X, TAB_Y, tabW, 14,
                 "gui.mockplayer.tab.status", () -> this.switchTab(0));
         this.tabInventory = this.addButton(CONTENT_X + (tabW + 2), TAB_Y, tabW, 14,
                 "gui.mockplayer.tab.inventory", () -> this.switchTab(1));
-        this.tabContainer = this.addButton(CONTENT_X + (tabW + 2) * 2, TAB_Y, tabW, 14,
-                "gui.mockplayer.tab.container", () -> this.switchTab(2));
-        this.tabActions = this.addButton(CONTENT_X + (tabW + 2) * 3, TAB_Y, tabW, 14,
-                "gui.mockplayer.tab.actions", () -> this.switchTab(3));
+        this.tabActions = this.addButton(CONTENT_X + (tabW + 2) * 2, TAB_Y, tabW, 14,
+                "gui.mockplayer.tab.actions", () -> this.switchTab(2));
 
         // ===== 动作 Tab 控件 =====
         this.turnLeft = this.addButton(CONTENT_X, 54, 36, 16, "gui.mockplayer.action.turn_left",
@@ -507,7 +507,7 @@ public class BotControlScreen extends Screen {
         }
         boolean ready = this.requireBotSilent();
         boolean containerOpen = this.selected != null && this.selected.getContainer().isPresent();
-        boolean actionsTab = this.tab == 3;
+        boolean actionsTab = this.tab == 2;
         this.turnLeft.active = ready && actionsTab;
         this.turnRight.active = ready && actionsTab;
         this.turnUp.active = ready && actionsTab;
@@ -571,12 +571,10 @@ public class BotControlScreen extends Screen {
         // Tab 文字（当前 Tab 用 highlighted 贴图高亮，不再用文字前缀）
         this.tabStatus.setMessage(Component.translatable("gui.mockplayer.tab.status"));
         this.tabInventory.setMessage(Component.translatable("gui.mockplayer.tab.inventory"));
-        this.tabContainer.setMessage(Component.translatable("gui.mockplayer.tab.container"));
         this.tabActions.setMessage(Component.translatable("gui.mockplayer.tab.actions"));
         this.tabStatus.setOverrideRenderHighlightedSprite(() -> this.tab == 0);
         this.tabInventory.setOverrideRenderHighlightedSprite(() -> this.tab == 1);
-        this.tabContainer.setOverrideRenderHighlightedSprite(() -> this.tab == 2);
-        this.tabActions.setOverrideRenderHighlightedSprite(() -> this.tab == 3);
+        this.tabActions.setOverrideRenderHighlightedSprite(() -> this.tab == 2);
     }
 
     /** 静默就绪检查（tick 里不刷反馈）。 */
@@ -584,7 +582,7 @@ public class BotControlScreen extends Screen {
         return this.selected != null && this.selected.getLifecycle() == BotLifecycle.PLAYING;
     }
 
-    /** 当前 Tab（测试/查询用）：0 状态 / 1 背包 / 2 容器 / 3 动作。 */
+    /** 当前 Tab（测试/查询用）：0 状态 / 1 背包（含容器模式）/ 2 动作。 */
     public int currentTab() {
         return this.tab;
     }
@@ -653,17 +651,17 @@ public class BotControlScreen extends Screen {
             return false;
         }
         if (this.tab == 1) {
-            int slot = this.inventorySlotAt(mx, my);
-            if (slot >= 0) {
-                this.inventoryClick(slot, info);
-                return true;
-            }
-        } else if (this.tab == 2) {
             Optional<BotContainer> container = this.selected.getContainer();
             if (container.isPresent()) {
                 int slot = this.containerSlotAt(mx, my, this.containerSlotCount(container.get()));
                 if (slot >= 0) {
                     this.containerClick(container.get(), slot, info);
+                    return true;
+                }
+            } else {
+                int slot = this.inventorySlotAt(mx, my);
+                if (slot >= 0) {
+                    this.inventoryClick(slot, info);
                     return true;
                 }
             }
@@ -808,8 +806,14 @@ public class BotControlScreen extends Screen {
         }
         switch (this.tab) {
             case 0 -> this.drawStatus(graphics);
-            case 1 -> this.drawInventory(graphics, mouseX, mouseY);
-            case 2 -> this.drawContainer(graphics, mouseX, mouseY);
+            case 1 -> {
+                // 背包 Tab 合并容器：开容器自动切容器布局，关容器回 46 槽背包
+                if (this.selected.getContainer().isPresent()) {
+                    this.drawContainer(graphics, mouseX, mouseY);
+                } else {
+                    this.drawInventory(graphics, mouseX, mouseY);
+                }
+            }
             default -> this.drawActions(graphics);
         }
     }
@@ -931,21 +935,21 @@ public class BotControlScreen extends Screen {
         // 盔甲列（槽 5-8）
         for (int i = 0; i < 4; i++) {
             this.drawSlot(graphics, CONTENT_X, CONTENT_Y + i * CELL,
-                    inventoryItem(player, 5 + i), hovered == 5 + i);
+                    inventoryItem(player, 5 + i), hovered == 5 + i, slotIcon(player, 5 + i));
         }
         // 主背包 27 格（槽 9-35）
         for (int i = 0; i < 27; i++) {
             this.drawSlot(graphics, CONTENT_X + 24 + (i % 9) * CELL, CONTENT_Y + (i / 9) * CELL,
-                    inventoryItem(player, 9 + i), hovered == 9 + i);
+                    inventoryItem(player, 9 + i), hovered == 9 + i, slotIcon(player, 9 + i));
         }
         // 快捷栏 9 格（槽 36-44）
         for (int i = 0; i < 9; i++) {
             this.drawSlot(graphics, CONTENT_X + 24 + i * CELL, CONTENT_Y + 3 * CELL,
-                    inventoryItem(player, 36 + i), hovered == 36 + i);
+                    inventoryItem(player, 36 + i), hovered == 36 + i, slotIcon(player, 36 + i));
         }
         // 副手（槽 45）
         this.drawSlot(graphics, CONTENT_X + 24 + 9 * CELL, CONTENT_Y + 3 * CELL,
-                inventoryItem(player, 45), hovered == 45);
+                inventoryItem(player, 45), hovered == 45, slotIcon(player, 45));
         // 选中槽高亮
         int sel = player.getInventory().getSelectedSlot();
         graphics.outline(this.sx(CONTENT_X + 24 + sel * CELL), this.sy(CONTENT_Y + 3 * CELL),
@@ -963,6 +967,17 @@ public class BotControlScreen extends Screen {
         return player.inventoryMenu.getSlot(menuSlot).getItem();
     }
 
+    /**
+     * 背包槽位空图标（原版装备/副手槽背景，如 container/slot/helmet、shield；
+     * 普通槽无图标返回 null）。绘制与测试共用同一数据源。
+     */
+    public static Identifier slotIcon(net.minecraft.client.player.LocalPlayer player, int menuSlot) {
+        if (player == null || menuSlot < 0 || menuSlot >= player.inventoryMenu.slots.size()) {
+            return null;
+        }
+        return player.inventoryMenu.getSlot(menuSlot).getNoItemIcon();
+    }
+
     private void drawContainer(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         Optional<BotContainer> container = this.selected.getContainer();
         if (container.isEmpty()) {
@@ -971,6 +986,7 @@ public class BotControlScreen extends Screen {
             return;
         }
         BotContainer c = container.get();
+        AbstractContainerMenu menu = c.raw();
         int containerSize = this.containerSlotCount(c);
         int rows = (containerSize + 8) / 9;
         double mx = this.localX(mouseX);
@@ -978,7 +994,7 @@ public class BotControlScreen extends Screen {
         int hovered = this.containerSlotAt(mx, my, containerSize);
         for (int i = 0; i < containerSize; i++) {
             this.drawSlot(graphics, CONTENT_X + (i % 9) * CELL, CONTENT_Y + (i / 9) * CELL,
-                    c.getSlot(i), hovered == i);
+                    c.getSlot(i), hovered == i, menu.getSlot(i).getNoItemIcon());
         }
         // 假人背包部分（菜单末尾 36 槽）
         int playerY = rows * CELL + 8;
@@ -987,7 +1003,8 @@ public class BotControlScreen extends Screen {
             int idx = containerSize + i;
             if (idx < c.getSize()) {
                 this.drawSlot(graphics, CONTENT_X + (i % 9) * CELL,
-                        CONTENT_Y + playerY + (i / 9) * CELL, c.getSlot(idx), hovered == idx);
+                        CONTENT_Y + playerY + (i / 9) * CELL, c.getSlot(idx), hovered == idx,
+                        menu.getSlot(idx).getNoItemIcon());
             }
         }
     }
@@ -1006,14 +1023,21 @@ public class BotControlScreen extends Screen {
                 this.sx(CONTENT_X), this.sy(CONTENT_Y + 122), 0xFF7FB2FF);
     }
 
-    /** 画一个槽位（逻辑坐标入参，内部换算屏幕坐标；边框 + 物品图标 + 数量 + 悬停高亮）。 */
-    private void drawSlot(GuiGraphicsExtractor graphics, int lx, int ly, ItemStack stack, boolean hovered) {
+    /** 画一个槽位（逻辑坐标入参，内部换算屏幕坐标；边框 + 空槽图标 + 物品图标 + 数量 + 悬停高亮）。 */
+    private void drawSlot(GuiGraphicsExtractor graphics, int lx, int ly, ItemStack stack,
+                          boolean hovered, Identifier emptyIcon) {
         int x = this.sx(lx);
         int y = this.sy(ly);
         int cell = this.sw(CELL);
         int slot = Math.max(1, cell - 2);
         graphics.fill(x, y, x + cell, y + cell, hovered ? 0xFF3E4C66 : 0xFF222B3A);
         graphics.outline(x, y, cell, cell, hovered ? 0xFF7FB2FF : 0xFF0E1420);
+        // 原版语义：槽位为空时画装备/副手背景图标（物品存在则不画）
+        if (stack.isEmpty() && emptyIcon != null) {
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, emptyIcon, x + 1, y + 1,
+                    this.sw(16), this.sw(16));
+            com.mockplayer.gui.BotGui.recordSlotIcon();
+        }
         if (!stack.isEmpty()) {
             graphics.item(stack, x + 1, y + 1);
             if (stack.getCount() > 1) {

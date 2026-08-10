@@ -235,7 +235,6 @@
     "gui.mockplayer.delete_bot": "- Delete",
     "gui.mockplayer.tab.status": "Status",
     "gui.mockplayer.tab.inventory": "Inventory",
-    "gui.mockplayer.tab.container": "Container",
     "gui.mockplayer.tab.actions": "Actions",
     "gui.mockplayer.section.bots": "Bots",
     "gui.mockplayer.section.status": "Status",

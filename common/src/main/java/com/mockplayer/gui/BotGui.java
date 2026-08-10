@@ -42,6 +42,7 @@ public final class BotGui {
     private static volatile int openCount;
     private static volatile int frameCount;
     private static volatile int tickCount;
+    private static volatile int slotIconCount;
     private static volatile String lastTitle = "";
 
     private BotGui() {
@@ -165,6 +166,13 @@ public final class BotGui {
         }
     }
 
+    /** 空槽图标渲染探针（装备/副手槽背景；仅测试属性开启时记录）。 */
+    public static void recordSlotIcon() {
+        if (Boolean.getBoolean("mockplayer.guiRenderProbe")) {
+            BotGui.slotIconCount++;
+        }
+    }
+
     /** 测试读取：打开次数（0 = 从未打开）。 */
     public static int probeOpenCount() {
         return BotGui.openCount;
@@ -178,6 +186,11 @@ public final class BotGui {
     /** 测试读取：界面 tick 次数（0 = tick 路径从未执行）。 */
     public static int probeTickCount() {
         return BotGui.tickCount;
+    }
+
+    /** 测试读取：空槽图标渲染次数（0 = 从未绘制图标）。 */
+    public static int probeSlotIconCount() {
+        return BotGui.slotIconCount;
     }
 
     /** 测试读取：最近渲染帧的标题文本。 */

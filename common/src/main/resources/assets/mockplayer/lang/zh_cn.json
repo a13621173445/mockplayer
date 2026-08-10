@@ -235,7 +235,6 @@
     "gui.mockplayer.delete_bot": "- 删除",
     "gui.mockplayer.tab.status": "状态",
     "gui.mockplayer.tab.inventory": "背包",
-    "gui.mockplayer.tab.container": "容器",
     "gui.mockplayer.tab.actions": "动作",
     "gui.mockplayer.section.bots": "假人",
     "gui.mockplayer.section.status": "状态",
