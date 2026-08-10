@@ -353,12 +353,13 @@ public class FakeSession {
             }
         }
 
-        // 驱动假人物理（独立 LocalPlayer，完整物理）
-        if (this.fakePlayer != null) {
+        // 驱动假人 level 实体 tick（复用原版 ClientLevel.tickEntities）：
+        // 假人 LocalPlayer 物理 + RemotePlayer/生物插值全部按原版推进，不手写位置同步
+        if (this.getFakeLevel() != null) {
             try {
-                this.fakePlayer.tick();
+                this.getFakeLevel().tickEntities();
             } catch (Exception e) {
-                LOG.error("[{}] 假人物理 tick 出错", name, e);
+                LOG.error("[{}] 假人 level 实体 tick 出错", name, e);
             }
         }
 

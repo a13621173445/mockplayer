@@ -6284,6 +6284,7 @@ public final class TestRunner {
     private static volatile double bgPvpServerX;
     private static volatile double bgPvpServerZ;
     private static volatile boolean bgPvpServerReady;
+    private static volatile boolean bgPvpServerSettled;
     private static boolean bgDigSet;
     private static boolean bgDigStarted;
     private static volatile int bgDigMaxEntries = -1;
@@ -6299,6 +6300,22 @@ public final class TestRunner {
     private static boolean bgDiscardClicked;
     private static volatile boolean bgDiscardServerHas;
     private static volatile int bgDiscardServerItemCount;
+    private static boolean bgMainPvpGiven;
+    private static boolean bgMainPvpWalking;
+    private static boolean bgMainPvpPosRead;
+    private static boolean bgMainPvpBotPlaced;
+    private static boolean bgMainPvpEntityChecked;
+    private static boolean bgMainPvpAttacked;
+    private static volatile double bgMainServerX = Double.NaN;
+    private static volatile double bgMainServerZ = Double.NaN;
+    private static volatile double bgBotServerX = Double.NaN;
+    private static volatile double bgBotServerZ = Double.NaN;
+    private static volatile double bgMainBaseX = Double.NaN;
+    private static volatile int bgMainLastMoveTick = -1;
+    private static volatile double bgMainClientX = Double.NaN;
+    private static volatile double bgMainClientZ = Double.NaN;
+    private static volatile float bgMainHealth = 20;
+    private static volatile double bgMainStartX = Double.NaN;
 
     private static void runBotGui(Minecraft mc) {
         MinecraftServer server = mc.getSingleplayerServer();
@@ -7744,6 +7761,27 @@ public final class TestRunner {
                 if (++waitTicks < 20) {
                     return; // 等 tp 同步
                 }
+                if (!bgPvpServerSettled) {
+                    // 攻击前门控：假人服务端位置必须已落位（传送确认完成；
+                    // 否则客户端旧位置包可能把服务端 bot 拽离，攻击被服务端距离校验拒绝）
+                    server.execute(() -> {
+                        var spA = server.getPlayerList().getPlayerByName(botName);
+                        var spB = server.getPlayerList().getPlayerByName("tbot-gui3");
+                        if (spA != null && spB != null) {
+                            bgPvpServerSettled = Math.abs(spA.getX() - (spB.getX() - 1.5)) < 0.75
+                                    && Math.abs(spA.getZ() - spB.getZ()) < 0.75;
+                        }
+                    });
+                    if (!bgPvpServerSettled) {
+                        if (++waitTicks > 120) {
+                            fail("pvp attacker server position never settled");
+                            bgStep(34);
+                        }
+                        return;
+                    }
+                    waitTicks = 0;
+                    return;
+                }
                 if (!bgPvpLooked) {
                     bgPvpLooked = true;
                     net.minecraft.world.entity.Entity target = bot.getEntitiesNear(20).stream()
@@ -8025,7 +8063,144 @@ public final class TestRunner {
                 System.clearProperty("mockplayer.guiRenderProbe");
                 bgStep(37);
             }
-            case 37 -> { // 收尾
+            case 37 -> { // 主玩家走路后假人打不到主玩家（MoveEntity 插值陈旧 → 射线 miss）
+                if (!bgMainPvpGiven) {
+                    bgMainPvpGiven = true;
+                    waitTicks = 0;
+                    server.execute(() -> {
+                        var spM = server.getPlayerList().getPlayerByName(mc.player.getName().getString());
+                        var spB = server.getPlayerList().getPlayerByName(botName);
+                        if (spM != null && spB != null) {
+                            bgMainStartX = spM.getX();
+                            // 主玩家先传送远 60 格（snap 路径），假人先放更远处避免干扰；
+                            // 主玩家小步走回（MoveEntity 路径）→ 修复前假人 level 实体停在 +60
+                            spM.teleportTo(spM.getX() + 60.0, spM.getY(), spM.getZ());
+                            bgMainBaseX = spM.getX();
+                            spB.teleportTo(spM.getX() + 30.0, spM.getY(), spM.getZ());
+                            spM.setYRot(90.0F);
+                        }
+                    });
+                    bgMainPvpWalking = true;
+                    return;
+                }
+                if (bgMainPvpWalking) {
+                    // 服务端按 tick 门控小步移动：每服务器 tick 最多 0.3 格 → ServerEntity 发 MoveEntity.Pos
+                    // （插值路径）；一次性大位移会触发 EntityPositionSync（snap）掩盖 bug，必须逐 tick 小步
+                    server.execute(() -> {
+                        int tick = server.getTickCount();
+                        if (tick != bgMainLastMoveTick) {
+                            bgMainLastMoveTick = tick;
+                            var spM = server.getPlayerList().getPlayerByName(mc.player.getName().getString());
+                            var spB = server.getPlayerList().getPlayerByName(botName);
+                            if (spM != null) {
+                                spM.setPos(spM.getX() - 0.3, spM.getY(), spM.getZ());
+                                bgMainServerX = spM.getX();
+                                bgMainServerZ = spM.getZ();
+                            }
+                            if (spB != null) {
+                                bgBotServerX = spB.getX();
+                                bgBotServerZ = spB.getZ();
+                            }
+                        }
+                    });
+                    if (++waitTicks > 70) { // 70 tick × 0.3 ≈ 18-21 格
+                        bgMainPvpWalking = false;
+                        waitTicks = 0;
+                    }
+                    return;
+                }
+                if (++waitTicks < 8) {
+                    return; // 等服务端执行完队列 + 插值收敛
+                }
+                if (!bgMainPvpPosRead) {
+                    bgMainPvpPosRead = true;
+                    // server.execute 异步：重新读取一次最终位置，避免读到滞后值
+                    server.execute(() -> {
+                        var spM = server.getPlayerList().getPlayerByName(mc.player.getName().getString());
+                        var spB = server.getPlayerList().getPlayerByName(botName);
+                        if (spM != null) {
+                            bgMainServerX = spM.getX();
+                            bgMainServerZ = spM.getZ();
+                        }
+                        if (spB != null) {
+                            bgBotServerX = spB.getX();
+                            bgBotServerZ = spB.getZ();
+                        }
+                    });
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 3) {
+                    return; // 等最终位置读取落地
+                }
+                if (!bgMainPvpBotPlaced) {
+                    bgMainPvpBotPlaced = true;
+                    // 主玩家最终位置已确定：假人传送到其西侧 1.2 格（固定几何，攻击距离稳定）
+                    server.execute(() -> {
+                        var spB = server.getPlayerList().getPlayerByName(botName);
+                        if (spB != null) {
+                            spB.teleportTo(bgMainServerX - 1.2, spB.getY(), bgMainServerZ);
+                        }
+                    });
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 10) {
+                    return; // 等假人自己传送确认
+                }
+                if (!bgMainPvpEntityChecked) {
+                    bgMainPvpEntityChecked = true;
+                    check("main pvp player moved", bgMainBaseX - bgMainServerX >= 3.0,
+                            "base=" + bgMainBaseX + " end=" + bgMainServerX);
+                    net.minecraft.world.entity.Entity main = bot.getEntitiesNear(8).stream()
+                            .filter(e -> e instanceof net.minecraft.world.entity.player.Player
+                                    && mc.player.getName().getString().equals(e.getName().getString()))
+                            .findFirst().orElse(null);
+                    check("main pvp entity exists in bot level", main != null);
+                    if (main != null) {
+                        bgMainClientX = main.getX();
+                        bgMainClientZ = main.getZ();
+                    }
+                    check("main pvp client position synced",
+                            main != null && Math.abs(bgMainClientX - bgMainServerX) < 1.0,
+                            "client=(" + bgMainClientX + "," + bgMainClientZ + ")"
+                                    + " server=(" + bgMainServerX + "," + bgMainServerZ + ")");
+                    bot.actions().look(-90.0F, 0.0F); // 假人在主玩家西侧 → 正东攻击
+                    waitTicks = 0;
+                    return;
+                }
+                if (++waitTicks < 5) {
+                    return; // 等 look 生效
+                }
+                if (!bgMainPvpAttacked) {
+                    bgMainPvpAttacked = true;
+                    net.minecraft.world.phys.HitResult hit = bot.getLocalPlayer().raycastHitResult(
+                            1.0F, bot.getLocalPlayer());
+                    check("main pvp ray hits main player", hit instanceof net.minecraft.world.phys.EntityHitResult,
+                            "hit=" + hit + " serverMain=(" + bgMainServerX + "," + bgMainServerZ + ")"
+                                    + " clientMain=(" + bgMainClientX + "," + bgMainClientZ + ")"
+                                    + " bot=(" + bgBotServerX + "," + bgBotServerZ + ")");
+                    bot.actions().attackLook();
+                    waitTicks = 0;
+                    return;
+                }
+                server.execute(() -> {
+                    var spM = server.getPlayerList().getPlayerByName(mc.player.getName().getString());
+                    bgMainHealth = spM != null ? spM.getHealth() : -1;
+                });
+                if (bgMainHealth < 20) {
+                    check("main pvp attack damages main player", true, "hp=" + bgMainHealth);
+                    mc.gui.setScreen(null);
+                    bgStep(38);
+                } else if (++waitTicks > 120) {
+                    check("main pvp attack damages main player", false,
+                            "hp=" + bgMainHealth + " clientMain=(" + bgMainClientX + "," + bgMainClientZ + ")"
+                                    + " serverMain=(" + bgMainServerX + "," + bgMainServerZ + ")");
+                    mc.gui.setScreen(null);
+                    bgStep(38);
+                }
+            }
+            case 38 -> { // 收尾
                 if (++waitTicks < 20) {
                     return;
                 }

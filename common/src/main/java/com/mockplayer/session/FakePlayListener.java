@@ -964,9 +964,11 @@ public class FakePlayListener extends ClientPacketListener {
             boolean hasRelative = packet.relatives().contains(net.minecraft.world.entity.Relative.X)
                     || packet.relatives().contains(net.minecraft.world.entity.Relative.Y)
                     || packet.relatives().contains(net.minecraft.world.entity.Relative.Z);
-            // 原版对非本地实体用插值（lerp）更新位置；假人 level 不推进实体插值，
-            // 位置会永远停在旧值 → 假人无渲染，直接 snap 保证位置准确（等价替代，不丢数据）
-            boolean interpolate = false;
+            // 原版规则：实体在本 level 被 tick 或非本地权威或相对移动 → 插值；
+            // 假人 level 复用原版 tickEntities 后插值会推进，直接走原版路径（不手写 snap）
+            boolean interpolate = self.mockplayer$getLevel().isTickingEntity(entity)
+                    || !entity.isLocalInstanceAuthoritative()
+                    || hasRelative;
             boolean wasInterpolated = MockplayerClientPacketListenerAccessor.mockplayer$setValuesFromPositionPacket(
                     packet.change(), packet.relatives(), entity, interpolate);
             entity.setOnGround(packet.onGround());
