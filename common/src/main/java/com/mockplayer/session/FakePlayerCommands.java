@@ -1,6 +1,5 @@
 package com.mockplayer.session;
 
-import com.mockplayer.Constants;
 
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 
@@ -9,7 +8,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.network.chat.Component;
 
-import java.util.List;
 
 /**
  * 假人命令的执行逻辑（与平台无关）。

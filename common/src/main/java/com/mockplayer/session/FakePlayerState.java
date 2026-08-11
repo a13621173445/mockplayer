@@ -2,7 +2,6 @@ package com.mockplayer.session;
 
 import com.mockplayer.config.MockplayerConfig;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 

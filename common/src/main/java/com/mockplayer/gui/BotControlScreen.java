@@ -9,7 +9,6 @@ import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.session.FakePlayerCommands;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
@@ -17,14 +16,11 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
-import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.phys.Vec2;
 import net.minecraft.util.Util;
 
 import java.util.ArrayList;
@@ -801,26 +797,6 @@ public class BotControlScreen extends Screen {
         this.tabActions.setAlpha(this.tab == 2 ? 1.0F : BotControlHud.buttonAlpha(opacity));
         this.refreshToggleLabels();
         this.refreshEntityButtons();
-    }
-
-    /** 假人列表刷新（tick / init 共用：offset 钳制 + 按钮文字/可见性）。 */
-    private void refreshBotList() {
-        List<Bot> bots = coreBots();
-        this.botScrollOffset = clampBotScroll(this.botScrollOffset, bots.size(), VISIBLE_BOT_SLOTS);
-        for (int i = 0; i < this.botButtons.size(); i++) {
-            Button b = this.botButtons.get(i);
-            int index = i + this.botScrollOffset;
-            if (index < bots.size()) {
-                Bot bot = bots.get(index);
-                float hp = bot.getLocalPlayer() != null ? bot.getLocalPlayer().getHealth() : 0.0F;
-                b.visible = true;
-                b.active = true;
-                b.setMessage(Component.literal(bot.getName() + " ❤" + Math.round(hp)));
-                b.setOverrideRenderHighlightedSprite(() -> this.selected == bot);
-            } else {
-                b.visible = false;
-            }
-        }
     }
 
     /** 开关按钮文字颜色刷新（开启绿 / 关闭红；tick / 切 Tab 共用）。 */

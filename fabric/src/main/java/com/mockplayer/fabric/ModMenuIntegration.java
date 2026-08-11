@@ -6,7 +6,6 @@ import com.mockplayer.config.ModConfigScreenFactory;
 import com.terraformersmc.modmenu.api.ConfigScreenFactory;
 import com.terraformersmc.modmenu.api.ModMenuApi;
 
-import net.fabricmc.loader.api.FabricLoader;
 
 /**
  * ModMenu 模组列表入口（ModMenu 为可选依赖，本类只在 ModMenu 存在时被加载）。

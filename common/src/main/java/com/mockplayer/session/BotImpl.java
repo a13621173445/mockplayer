@@ -6,7 +6,6 @@ import com.mockplayer.api.action.BotActions;
 import com.mockplayer.api.container.BotContainer;
 
 import com.mojang.authlib.GameProfile;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
@@ -14,7 +13,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.MerchantMenu;
 import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.client.multiplayer.ClientLevel;
