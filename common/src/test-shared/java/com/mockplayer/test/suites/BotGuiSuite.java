@@ -35,7 +35,6 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class BotGuiSuite extends TestSuite {
 
-    private int botSeq;
     private String lastBotName;
 
     public BotGuiSuite() {
@@ -64,18 +63,9 @@ public class BotGuiSuite extends TestSuite {
     }
 
     private void createBot(TestContext ctx) {
-        // GUI 全局单例会选中 BotManager 第一个假人：先清空全部残留，保证选中当前用例的唯一假人
-        for (com.mockplayer.api.Bot b : MockplayerApi.bots().getBots()) {
-            MockplayerApi.bots().removeBot(b.getName(), "command");
-        }
-        // 每个用例强制独立 bot：唯一名（不同 UUID，不继承玩家数据），绝不复用
-        botSeq++;
-        String name = "tbot-gui" + botSeq;
-        MockplayerApi.bots().removeBot(name, "command");
-        com.mockplayer.session.FakePlayerCommands.newPlayer(name);
-        ctx.setBot(MockplayerApi.bots().getBot(name).orElse(null));
-        ctx.setBotName(name);
-        lastBotName = name;
+        // GUI 全局单例会选中 BotManager 第一个假人：createUniqueBot 先清空全部残留，
+        // 保证选中当前用例的唯一假人；每个用例强制独立，绝不复用
+        lastBotName = SuitesSupport.createUniqueBot(ctx, "gui");
     }
 
     @Override
@@ -106,7 +96,7 @@ public class BotGuiSuite extends TestSuite {
         createBot(ctx);
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> {
             Minecraft mc = Minecraft.getInstance();
             ctx.checkNow("bot gui opened", BotGui.open(mc));
@@ -173,7 +163,7 @@ public class BotGuiSuite extends TestSuite {
         createBot(ctx);
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         AtomicReference<double[]> base = new AtomicReference<>();
         AtomicReference<double[]> cur = new AtomicReference<>();
@@ -225,7 +215,7 @@ public class BotGuiSuite extends TestSuite {
         createBot(ctx);
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> ctx.server().execute(() -> {
             var cmds = ctx.server().getCommands();
             var src = ctx.server().createCommandSourceStack();
@@ -268,7 +258,7 @@ public class BotGuiSuite extends TestSuite {
         createBot(ctx);
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         AtomicReference<BlockPos> huskPos = new AtomicReference<>();
         AtomicReference<Float> huskHp = new AtomicReference<>(-1.0F);
         AtomicBoolean summoned = new AtomicBoolean();
@@ -328,7 +318,7 @@ public class BotGuiSuite extends TestSuite {
         createBot(ctx);
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         AtomicReference<BlockPos> chestPos = new AtomicReference<>();
         ctx.run(() -> {
@@ -358,7 +348,7 @@ public class BotGuiSuite extends TestSuite {
         createBot(ctx);
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> {
             BotControlScreen screen = bgScreen();
             Button plus = bgFindButton(screen, "gui.mockplayer.action.chunk_plus");
@@ -383,7 +373,7 @@ public class BotGuiSuite extends TestSuite {
         createBot(ctx);
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         AtomicReference<String> msg = new AtomicReference<>("");
         ctx.run(() -> {
@@ -415,7 +405,7 @@ public class BotGuiSuite extends TestSuite {
         createBot(ctx);
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         AtomicBoolean before = new AtomicBoolean();
         ctx.run(() -> {
@@ -461,7 +451,7 @@ public class BotGuiSuite extends TestSuite {
         createBot(ctx);
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         float[] startYaw = {0.0F};
         ctx.run(() -> {
@@ -493,7 +483,7 @@ public class BotGuiSuite extends TestSuite {
         createBot(ctx);
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         ctx.run(() -> ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
                 ctx.server().createCommandSourceStack(),
@@ -508,7 +498,7 @@ public class BotGuiSuite extends TestSuite {
         createBot(ctx);
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         AtomicBoolean using = new AtomicBoolean();
         ctx.run(() -> ctx.server().execute(() -> {
@@ -551,7 +541,7 @@ public class BotGuiSuite extends TestSuite {
         createBot(ctx);
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> Minecraft.getInstance().gui.setScreen(null));
         ctx.run(() -> ctx.server().execute(() -> {
             ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName());

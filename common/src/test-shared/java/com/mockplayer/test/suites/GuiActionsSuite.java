@@ -43,13 +43,6 @@ public class GuiActionsSuite extends TestSuite {
         test("respawn 复活", this::respawn);
     }
 
-    private static void createBot(TestContext ctx) {
-        MockplayerApi.bots().removeBot(BOT, "command");
-        com.mockplayer.session.FakePlayerCommands.newPlayer(BOT);
-        ctx.setBot(MockplayerApi.bots().getBot(BOT).orElse(null));
-        ctx.setBotName(BOT);
-    }
-
     private void chat(TestContext ctx) {
         AtomicReference<String> msg = new AtomicReference<>("");
         AtomicBoolean done = new AtomicBoolean();
@@ -59,7 +52,7 @@ public class GuiActionsSuite extends TestSuite {
                 msg.set(message.getString());
             }
         });
-        ctx.run(() -> createBot(ctx));
+        ctx.run(() -> SuitesSupport.createBot(ctx, BOT));
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> {
@@ -85,7 +78,7 @@ public class GuiActionsSuite extends TestSuite {
                 msg.set(message.getString());
             }
         });
-        ctx.run(() -> createBot(ctx));
+        ctx.run(() -> SuitesSupport.createBot(ctx, BOT));
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> {
@@ -104,7 +97,7 @@ public class GuiActionsSuite extends TestSuite {
 
     private void editBook(TestContext ctx) {
         AtomicBoolean verified = new AtomicBoolean();
-        ctx.run(() -> createBot(ctx));
+        ctx.run(() -> SuitesSupport.createBot(ctx, BOT));
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
@@ -132,7 +125,7 @@ public class GuiActionsSuite extends TestSuite {
         AtomicBoolean rightClicked = new AtomicBoolean();
         AtomicBoolean done = new AtomicBoolean();
         AtomicBoolean verified = new AtomicBoolean();
-        ctx.run(() -> createBot(ctx));
+        ctx.run(() -> SuitesSupport.createBot(ctx, BOT));
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> ctx.server().execute(() -> {
@@ -184,7 +177,7 @@ public class GuiActionsSuite extends TestSuite {
         AtomicBoolean paid = new AtomicBoolean();
         AtomicBoolean applied = new AtomicBoolean();
         AtomicBoolean verified = new AtomicBoolean();
-        ctx.run(() -> createBot(ctx));
+        ctx.run(() -> SuitesSupport.createBot(ctx, BOT));
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> ctx.server().execute(() -> {
@@ -242,7 +235,7 @@ public class GuiActionsSuite extends TestSuite {
 
     private void pickItem(TestContext ctx) {
         AtomicBoolean verified = new AtomicBoolean();
-        ctx.run(() -> createBot(ctx));
+        ctx.run(() -> SuitesSupport.createBot(ctx, BOT));
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
@@ -271,7 +264,7 @@ public class GuiActionsSuite extends TestSuite {
         AtomicBoolean dead = new AtomicBoolean();
         AtomicBoolean revived = new AtomicBoolean();
         AtomicBoolean killed = new AtomicBoolean();
-        ctx.run(() -> createBot(ctx));
+        ctx.run(() -> SuitesSupport.createBot(ctx, BOT));
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> {

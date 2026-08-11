@@ -18,6 +18,9 @@ import java.util.function.Supplier;
 /** 套件公共原语：建 bot / 放方块 / 打开方块容器 / 服务端给物品。 */
 public final class SuitesSupport {
 
+    /** 唯一 bot 名自增序号（createUniqueBot 用，套件间共享但前缀不同）。 */
+    private static int botSeq;
+
     private SuitesSupport() {
     }
 
@@ -35,6 +38,23 @@ public final class SuitesSupport {
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
     }
 
+    /**
+     * 清空全部残留假人 + 用唯一名创建假人（每用例强制独立，绝不复用）。
+     *
+     * @param ctx    用例上下文
+     * @param prefix 名字前缀（如 "ctl"/"gui"），生成 "tbot-<prefix><seq>"
+     * @return 创建的假人名字
+     */
+    public static String createUniqueBot(TestContext ctx, String prefix) {
+        for (com.mockplayer.api.Bot b : MockplayerApi.bots().getBots()) {
+            MockplayerApi.bots().removeBot(b.getName(), "command");
+        }
+        botSeq++;
+        String name = "tbot-" + prefix + botSeq;
+        createBot(ctx, name);
+        return name;
+    }
+
     /** 服务端放方块（异步执行；pos 延迟求值，之后用 blockVisible await 确认）。 */
     public static void placeBlockServer(TestContext ctx, Supplier<BlockPos> pos, Block block) {
         ctx.server(() -> {
@@ -50,6 +70,11 @@ public final class SuitesSupport {
         ctx.await("bot chunk loaded", () -> ctx.bot() != null
                 && ctx.bot().getLocalPlayer() != null
                 && ctx.bot().isBlockLoaded(ctx.bot().getLocalPlayer().blockPosition()), timeoutTicks);
+    }
+
+    /** 等假人客户端区块就绪（默认 200 tick）。 */
+    public static void awaitChunkLoaded(TestContext ctx) {
+        awaitChunkLoaded(ctx, 200);
     }
 
     /** 等假人客户端能看到指定方块（pos 延迟求值：可能由前面的 run 步骤赋值）。 */

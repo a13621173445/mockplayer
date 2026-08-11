@@ -51,7 +51,6 @@ import java.util.stream.Collectors;
  */
 public class ControlCommandsSuite extends TestSuite {
 
-    private int botSeq;
     private String lastBotName;
 
     public ControlCommandsSuite() {
@@ -68,18 +67,8 @@ public class ControlCommandsSuite extends TestSuite {
     }
 
     private void createBot(TestContext ctx) {
-        // 与 BotGuiSuite 一致：先清残留，保证假人连接/区块加载不受旧会话影响
-        for (Bot b : MockplayerApi.bots().getBots()) {
-            MockplayerApi.bots().removeBot(b.getName(), "command");
-        }
         // 每个用例强制独立 bot：唯一名（不同 UUID，不继承玩家数据），绝不复用
-        botSeq++;
-        String name = "tbot-ctl" + botSeq;
-        MockplayerApi.bots().removeBot(name, "command");
-        com.mockplayer.session.FakePlayerCommands.newPlayer(name);
-        ctx.setBot(MockplayerApi.bots().getBot(name).orElse(null));
-        ctx.setBotName(name);
-        lastBotName = name;
+        lastBotName = SuitesSupport.createUniqueBot(ctx, "ctl");
     }
 
     @Override
@@ -92,7 +81,7 @@ public class ControlCommandsSuite extends TestSuite {
 
     private void treeCompletions(TestContext ctx) {
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> {
             var dispatcher = new com.mojang.brigadier.CommandDispatcher<CommandSourceStack>();
             registerAll(dispatcher);
@@ -200,7 +189,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicReference<double[]> base = new AtomicReference<>();
         AtomicReference<double[]> cur = new AtomicReference<>();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName());
@@ -237,7 +226,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicReference<Float> serverYRot = new AtomicReference<>(-999.0F);
         AtomicInteger stage = new AtomicInteger();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> {
             ControlCommands.look(ctx.botName(), 30.0F, 20.0F);
             ctx.checkNow("look local yRot", Math.abs(ctx.bot().getLocalPlayer().getYRot() - 30.0F) < 1.0F);
@@ -295,8 +284,8 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean sustainedHit = new AtomicBoolean();
         AtomicReference<Vec3> huskEye = new AtomicReference<>();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> ctx.server().execute(() -> {
             ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName());
             if (sp != null) {
@@ -375,7 +364,7 @@ public class ControlCommandsSuite extends TestSuite {
     private void interactVillager(TestContext ctx) {
         AtomicBoolean open = new AtomicBoolean();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> ctx.server().execute(() -> {
             ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName());
             if (sp != null) {
@@ -407,7 +396,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean swapped = new AtomicBoolean();
         AtomicReference<String> mainBefore = new AtomicReference<>("");
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> {
             mainBefore.set(Minecraft.getInstance().player.getMainHandItem().getHoverName().getString());
             ctx.server().execute(() -> {
@@ -465,7 +454,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean released = new AtomicBoolean();
         AtomicBoolean useChecked = new AtomicBoolean();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> {
             MockplayerApi.listen(new com.mockplayer.api.event.BotListener() {
                 @Override
@@ -531,7 +520,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean woke = new AtomicBoolean();
         AtomicBoolean clicked = new AtomicBoolean();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> ctx.server().execute(() -> {
             ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
                     "time set 13000");
@@ -583,8 +572,8 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicReference<Double> startX = new AtomicReference<>(0.0);
         int[] stable = {0};
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> ctx.server().execute(() -> {
             var p = ctx.bot().getLocalPlayer();
             var cartPos = p.blockPosition().offset(2, 0, 0);
@@ -670,7 +659,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean placedAt = new AtomicBoolean();
         AtomicBoolean creativeOk = new AtomicBoolean();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> {
             if (!dirtGiven.get()) {
                 dirtGiven.set(true);
@@ -797,7 +786,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean closed = new AtomicBoolean();
         AtomicBoolean chestHasStone = new AtomicBoolean();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> ctx.server().execute(() -> {
             ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
                     "give " + ctx.botName() + " minecraft:stone 3");
@@ -888,7 +877,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean hasDamage = new AtomicBoolean();
         AtomicBoolean off = new AtomicBoolean();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.check("memory event cache zero before listen",
                 () -> ctx.bot().memoryInfo().eventCacheBytes() == 0);
         ctx.run(() -> {
@@ -934,7 +923,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean respawned = new AtomicBoolean();
         AtomicBoolean alive = new AtomicBoolean();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> {
             if (!killed.get()) {
                 killed.set(true);
@@ -981,7 +970,7 @@ public class ControlCommandsSuite extends TestSuite {
 
     private void errorsAndI18n(TestContext ctx) {
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> {
             String notFound = ControlCommands.attack("nobody-cc", null).getString();
             String invalidHand = ControlCommands.useItem(ctx.botName(), "bad").getString();
@@ -1079,7 +1068,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicInteger stable = new AtomicInteger();
         int[] wait = {0};
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> {
             ctx.bot().getLocalPlayer().getInventory().setSelectedSlot(0);
             ctx.server().execute(() -> {
@@ -1211,7 +1200,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean mainChunkSource = new AtomicBoolean();
         int[] wait = {0};
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> {
             if (!teleported.get()) {
                 teleported.set(true);
@@ -1335,7 +1324,7 @@ public class ControlCommandsSuite extends TestSuite {
         int[] stage = {0};
         int[] wait = {0};
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> {
             base.set(ctx.bot().getLocalPlayer().blockPosition());
             ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(

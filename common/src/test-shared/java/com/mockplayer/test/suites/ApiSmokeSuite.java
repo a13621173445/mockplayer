@@ -29,13 +29,6 @@ public class ApiSmokeSuite extends TestSuite {
         test("世界信息/管理边界/新原语", this::worldAndBoundary);
     }
 
-    private static void createBot(TestContext ctx) {
-        MockplayerApi.bots().removeBot(BOT, "command");
-        FakePlayerCommands.newPlayer(BOT);
-        ctx.setBot(MockplayerApi.bots().getBot(BOT).orElse(null));
-        ctx.setBotName(BOT);
-    }
-
     private static void readServerPos(TestContext ctx, AtomicReference<double[]> out) {
         MinecraftServer srv = ctx.server();
         srv.execute(() -> {
@@ -47,7 +40,7 @@ public class ApiSmokeSuite extends TestSuite {
     }
 
     private void createAndLifecycle(TestContext ctx) {
-        ctx.run(() -> createBot(ctx));
+        ctx.run(() -> SuitesSupport.createBot(ctx, BOT));
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.check("createBot non-null", () -> ctx.bot() != null);
@@ -64,7 +57,7 @@ public class ApiSmokeSuite extends TestSuite {
         AtomicReference<double[]> start = new AtomicReference<>();
         AtomicReference<double[]> cur = new AtomicReference<>();
         double[] jumpStartY = {0.0};
-        ctx.run(() -> createBot(ctx));
+        ctx.run(() -> SuitesSupport.createBot(ctx, BOT));
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> ctx.bot().actions().look(0.0F, 0.0F));
@@ -111,7 +104,7 @@ public class ApiSmokeSuite extends TestSuite {
     }
 
     private void worldAndBoundary(TestContext ctx) {
-        ctx.run(() -> createBot(ctx));
+        ctx.run(() -> SuitesSupport.createBot(ctx, BOT));
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.await("区块与实体同步", () -> ctx.bot() != null

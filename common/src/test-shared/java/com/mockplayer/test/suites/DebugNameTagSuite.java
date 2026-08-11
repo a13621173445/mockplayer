@@ -5,7 +5,6 @@ import com.mockplayer.api.MockplayerApi;
 import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.session.DebugNameTagInfo;
-import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.test.framework.TestContext;
 import com.mockplayer.test.framework.TestSuite;
 import net.minecraft.client.Minecraft;
@@ -37,15 +36,8 @@ public class DebugNameTagSuite extends TestSuite {
         test("渲染路径与容器行", this::renderAndContainer);
     }
 
-    private static void createBot(TestContext ctx) {
-        MockplayerApi.bots().removeBot(BOT, "command");
-        FakePlayerCommands.newPlayer(BOT);
-        ctx.setBot(MockplayerApi.bots().getBot(BOT).orElse(null));
-        ctx.setBotName(BOT);
-    }
-
     private void formatAndToggle(TestContext ctx) {
-        ctx.run(() -> createBot(ctx));
+        ctx.run(() -> SuitesSupport.createBot(ctx, BOT));
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> {
@@ -90,7 +82,7 @@ public class DebugNameTagSuite extends TestSuite {
     }
 
     private void renderAndContainer(TestContext ctx) {
-        ctx.run(() -> createBot(ctx));
+        ctx.run(() -> SuitesSupport.createBot(ctx, BOT));
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> resetRender());
