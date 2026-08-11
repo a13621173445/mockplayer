@@ -423,6 +423,17 @@ public class FakeSession {
             connection = null;
         }
         connected = false;
+        // 删除路径主动释放引用：断开后不再需要 listener/player/transfer 状态，
+        // 置空并清空 state，避免 session 被任何残留引用持有时把整个假人世界带活。
+        // 注意：不能置空 bot（BotManagerImpl.removeBot 断开后还要 fire onDisconnected），
+        // 也不能置空 onConnectFail（连接失败路径先 disconnect 后 notifyConnectFail 派发）。
+        if (!this.reconnecting) {
+            this.playListener = null;
+            this.fakePlayer = null;
+            this.profile = null;
+            this.pendingTransfer = null;
+            this.state.clear();
+        }
         LOG.info("[{}] 假人已移除", name);
     }
 

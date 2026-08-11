@@ -7,8 +7,14 @@ import com.mockplayer.api.MockplayerApi;
 import com.mockplayer.api.RemoveResult;
 import com.mockplayer.api.event.BotListener;
 import com.mockplayer.session.BotImpl;
+import com.mockplayer.session.EventRecorder;
+import com.mockplayer.session.EventRecorderRegistry;
+import com.mockplayer.session.FakeLevelRegistry;
+import com.mockplayer.session.FakeSession;
+import com.mockplayer.session.SessionManager;
 import com.mockplayer.test.framework.TestContext;
 import com.mockplayer.test.framework.TestSuite;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
@@ -39,6 +45,7 @@ public class ApiFullSuite extends TestSuite {
         test("容器接口", this::containerApi);
         test("BotManager API", this::managerApi);
         test("连接失败派发 onDisconnected", this::connectFailEvent);
+        test("删除后引用释放", this::releaseRefsOnDelete);
     }
 
     private void connectFailEvent(TestContext ctx) {
@@ -319,5 +326,37 @@ public class ApiFullSuite extends TestSuite {
                 .removeBot(BOT, "command") == RemoveResult.REMOVED);
         ctx.check("removeBot not found", () -> MockplayerApi.bots()
                 .removeBot(BOT, "command") == RemoveResult.NOT_FOUND);
+    }
+
+    /** 删除假人后 session 引用/level 注册表/事件缓存必须主动清空（内存优化回归断言）。 */
+    private void releaseRefsOnDelete(TestContext ctx) {
+        AtomicReference<FakeSession> sessionRef = new AtomicReference<>();
+        AtomicReference<ClientLevel> levelRef = new AtomicReference<>();
+        SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
+        ctx.run(() -> {
+            sessionRef.set(SessionManager.getInstance().getSession(BOT));
+            levelRef.set(ctx.bot().getLevel());
+            EventRecorderRegistry.computeIfAbsent(BOT, EventRecorder::new);
+        });
+        ctx.check("recorder present before delete", () -> EventRecorderRegistry.get(BOT) != null);
+        ctx.check("level registered before delete",
+                () -> levelRef.get() != null && FakeLevelRegistry.isFakeLevel(levelRef.get()));
+        ctx.check("playListener held before delete",
+                () -> sessionRef.get() != null && sessionRef.get().getPlayListener() != null);
+        ctx.run(() -> MockplayerApi.bots().removeBot(BOT, "command"));
+        ctx.check("session removed from manager",
+                () -> SessionManager.getInstance().getSession(BOT) == null);
+        ctx.check("recorder removed on delete", () -> EventRecorderRegistry.get(BOT) == null);
+        ctx.check("level unregistered on delete",
+                () -> levelRef.get() == null || !FakeLevelRegistry.isFakeLevel(levelRef.get()));
+        ctx.check("session playListener released",
+                () -> sessionRef.get().getPlayListener() == null);
+        ctx.check("session fakePlayer released",
+                () -> sessionRef.get().getFakePlayer() == null);
+        ctx.check("session state cleared",
+                () -> sessionRef.get().getState().getChatHistory().isEmpty()
+                        && sessionRef.get().getState().getAllLastPackets().isEmpty());
     }
 }

@@ -277,4 +277,32 @@ public class FakePlayerState {
     public long getParticleBytes() {
         return this.particleBytes;
     }
+
+    /**
+     * 会话终结时清空全部记录（聊天/音效/粒子/在线玩家/最近包/各类快照），
+     * 主动释放持有的引用便于 GC 回收；仅由 FakeSession.disconnect 删除路径调用。
+     */
+    public void clear() {
+        this.chatHistory.clear();
+        this.chatBytes = 0;
+        this.soundLog.clear();
+        this.soundBytes = 0;
+        this.particleLog.clear();
+        this.particleBytes = 0;
+        this.onlinePlayers.clear();
+        this.lastPackets.clear();
+        this.lastAdvancementPacket = null;
+        this.lastStopSound = null;
+        this.lastBossEvent = null;
+        this.lastOpenScreen = null;
+        this.wonGame = false;
+        this.lastDemoEvent = 0.0F;
+        this.health = 20.0F;
+        this.foodLevel = 20;
+        this.experienceLevel = 0;
+        this.x = 0.0;
+        this.y = 0.0;
+        this.z = 0.0;
+        this.onGround = true;
+    }
 }
