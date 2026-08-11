@@ -3,8 +3,10 @@ package com.mockplayer.test.suites;
 import com.mockplayer.api.Bot;
 import com.mockplayer.api.BotLifecycle;
 import com.mockplayer.api.MockplayerApi;
+import com.mockplayer.api.event.BotListener;
 import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.MockplayerConfig;
+import com.mockplayer.session.BotImpl;
 import com.mockplayer.session.ControlCommands;
 import com.mockplayer.session.EventRecorder;
 import com.mockplayer.session.QueryCommands;
@@ -1159,6 +1161,26 @@ public class ControlCommandsSuite extends TestSuite {
             return farStill.get();
         }, 60);
         ctx.check("mine distance rejected", farStill::get);
+        // attackBlock 同口径距离校验：远处攻击不应触发 onBreakBlock 事件（旧实现会直接发包）
+        AtomicBoolean attackFarFired = new AtomicBoolean();
+        BotListener farAttackListener = new BotListener() {
+            @Override
+            public void onBreakBlock(Bot bot, BlockPos pos) {
+                if (stoneFar.get() != null && pos.equals(stoneFar.get())) {
+                    attackFarFired.set(true);
+                }
+            }
+        };
+        ctx.run(() -> {
+            ((BotImpl) ctx.bot).events().addListener(farAttackListener);
+            if (stoneFar.get() != null) {
+                ControlCommands.attackBlock(ctx.botName,
+                        stoneFar.get().getX(), stoneFar.get().getY(), stoneFar.get().getZ());
+            }
+        });
+        ctx.await("attackBlock far wait", () -> ++wait[0] > 10, 30);
+        ctx.check("attackBlock far rejected", () -> !attackFarFired.get());
+        ctx.run(() -> ((BotImpl) ctx.bot).events().removeListener(farAttackListener));
     }
 
     private void chunkRadius(TestContext ctx) {

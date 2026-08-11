@@ -455,6 +455,11 @@ public class BotActionsImpl implements BotActions {
         if (player == null || pos == null || this.bot.getGameMode() == null) {
             return;
         }
+        // 原版等价距离判断：与 mineBlock 同口径（blockInteractionRange，生存约 4.5 格），
+        // 超距不发包（服务端也会拒绝，客户端提前拦下避免无意义包）
+        if (!player.isWithinBlockInteractionRange(pos, 0.0)) {
+            return;
+        }
         // 26.2 无 attackBlock：用 startDestroyBlock + 立即 stopDestroyBlock 模拟一次左键点击
         this.bot.getGameMode().startDestroyBlock(pos, Direction.UP);
         this.bot.getGameMode().stopDestroyBlock();
