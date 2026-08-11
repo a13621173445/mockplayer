@@ -1,24 +1,15 @@
 package com.mockplayer.neoforge;
 
-import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 
 import com.mockplayer.Constants;
 import com.mockplayer.config.CommandTreeReloader;
-import com.mockplayer.config.ModCommands;
-import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.config.MissingYaclScreen;
 import com.mockplayer.config.ModConfigScreenFactory;
 import com.mockplayer.gui.BotGui;
-import com.mockplayer.session.FakePlayerCommands;
-import com.mockplayer.session.FakePlayerNameArgument;
+import com.mockplayer.session.ClientCommandRegistrar;
 import com.mockplayer.session.SessionManager;
-import com.mockplayer.session.BatchCommands;
-import com.mockplayer.session.ControlCommands;
-import com.mockplayer.session.QueryCommands;
 import com.mockplayer.session.CommandSupport;
 
 import net.minecraft.commands.Commands;
@@ -76,78 +67,7 @@ public class MockplayerNeoForgeClient {
     }
 
     private static void registerCommands(RegisterClientCommandsEvent event) {
-        var dispatcher = event.getDispatcher();
-        registerAllCommands(dispatcher);
-    }
-
-    /** 按当前配置注册全部根命令（可重入：事件注册与热重载共用）。 */
-    private static void registerAllCommands(CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher) {
-        registeredRoots.clear();
-        ModConfig cfg = MockplayerConfig.get();
-        registerRoot(dispatcher, cfg.getCommandName(ModCommands.CONTROL),
-                ControlCommands.buildControlTree(factory(), cfg.getCommandName(ModCommands.CONTROL)));
-        registerRoot(dispatcher, cfg.getCommandName(ModCommands.QUERY),
-                QueryCommands.buildQueryTree(factory(), cfg.getCommandName(ModCommands.QUERY)));
-        registerRoot(dispatcher, cfg.getCommandName(ModCommands.NEWPLAYER),
-                newPlayerTree(cfg.getCommandName(ModCommands.NEWPLAYER)));
-        registerRoot(dispatcher, cfg.getCommandName(ModCommands.DELPLAYER),
-                delPlayerTree(cfg.getCommandName(ModCommands.DELPLAYER)));
-        registerRoot(dispatcher, cfg.getCommandName(ModCommands.CONNECT),
-                connectTree(cfg.getCommandName(ModCommands.CONNECT)));
-    }
-
-    /** 注册单个根命令；禁用（空名）则跳过。 */
-    private static void registerRoot(CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher,
-                                     String name, LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> tree) {
-        if (ModCommands.isDisabled(name)) {
-            return;
-        }
-        dispatcher.register(tree);
-        registeredRoots.add(name);
-    }
-
-    private static LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> newPlayerTree(String rootName) {
-        return Commands.literal(rootName)
-                .then(Commands.argument("name", FakePlayerNameArgument.fakePlayerName())
-                        .executes(ctx -> {
-                            String name = StringArgumentType.getString(ctx, "name");
-                            ctx.getSource().sendSuccess(() -> FakePlayerCommands.newPlayer(name), false);
-                            return 1;
-                        }))
-                .then(BatchCommands.newPlayerBatchNode(factory()));
-    }
-
-    private static LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> delPlayerTree(String rootName) {
-        return Commands.literal(rootName)
-                .then(Commands.argument("name", FakePlayerNameArgument.fakePlayerName())
-                        .suggests(FakePlayerCommands.fakePlayerNames())
-                        .executes(ctx -> {
-                            String name = StringArgumentType.getString(ctx, "name");
-                            ctx.getSource().sendSuccess(() -> FakePlayerCommands.delPlayer(name), false);
-                            return 1;
-                        }))
-                .then(BatchCommands.delPlayerBatchNode(factory()));
-    }
-
-    private static LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> connectTree(String rootName) {
-        return Commands.literal(rootName)
-                .then(Commands.argument("name", FakePlayerNameArgument.fakePlayerName())
-                        .suggests(FakePlayerCommands.fakePlayerNames())
-                        .then(Commands.argument("host", StringArgumentType.word())
-                                .executes(ctx -> {
-                                    String name = StringArgumentType.getString(ctx, "name");
-                                    String host = StringArgumentType.getString(ctx, "host");
-                                    ctx.getSource().sendSuccess(() -> FakePlayerCommands.connectPlayer(name, host, 25565), false);
-                                    return 1;
-                                })
-                                .then(Commands.argument("port", IntegerArgumentType.integer(1, 65535))
-                                        .executes(ctx -> {
-                                            String name = StringArgumentType.getString(ctx, "name");
-                                            String host = StringArgumentType.getString(ctx, "host");
-                                            int port = IntegerArgumentType.getInteger(ctx, "port");
-                                            ctx.getSource().sendSuccess(() -> FakePlayerCommands.connectPlayer(name, host, port), false);
-                                            return 1;
-                                        }))));
+        ClientCommandRegistrar.registerAll(event.getDispatcher(), factory(), registeredRoots);
     }
 
     /**

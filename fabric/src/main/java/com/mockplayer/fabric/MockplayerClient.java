@@ -1,21 +1,12 @@
 package com.mockplayer.fabric;
 
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 
 import com.mockplayer.config.CommandTreeReloader;
-import com.mockplayer.config.ModCommands;
-import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.gui.BotGui;
-import com.mockplayer.session.FakePlayerCommands;
-import com.mockplayer.session.FakePlayerNameArgument;
+import com.mockplayer.session.ClientCommandRegistrar;
 import com.mockplayer.session.SessionManager;
-import com.mockplayer.session.BatchCommands;
-import com.mockplayer.session.ControlCommands;
-import com.mockplayer.session.QueryCommands;
 import com.mockplayer.session.CommandSupport;
 
 import net.fabricmc.api.ClientModInitializer;
@@ -24,7 +15,6 @@ import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
-import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.client.Minecraft;
 
 import net.fabricmc.fabric.impl.command.client.ClientCommandInternals;
@@ -58,78 +48,8 @@ public class MockplayerClient implements ClientModInitializer {
     private void registerCommands() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             lastDispatcher = dispatcher;
-            registerAllCommands(dispatcher);
+            ClientCommandRegistrar.registerAll(dispatcher, factory(), registeredRoots);
         });
-    }
-
-    /** 按当前配置注册全部根命令（可重入：首次注册与热重载共用）。 */
-    private static void registerAllCommands(CommandDispatcher<FabricClientCommandSource> dispatcher) {
-        registeredRoots.clear();
-        ModConfig cfg = MockplayerConfig.get();
-        registerRoot(dispatcher, cfg.getCommandName(ModCommands.CONTROL),
-                ControlCommands.buildControlTree(factory(), cfg.getCommandName(ModCommands.CONTROL)));
-        registerRoot(dispatcher, cfg.getCommandName(ModCommands.QUERY),
-                QueryCommands.buildQueryTree(factory(), cfg.getCommandName(ModCommands.QUERY)));
-        registerRoot(dispatcher, cfg.getCommandName(ModCommands.NEWPLAYER),
-                newPlayerTree(cfg.getCommandName(ModCommands.NEWPLAYER)));
-        registerRoot(dispatcher, cfg.getCommandName(ModCommands.DELPLAYER),
-                delPlayerTree(cfg.getCommandName(ModCommands.DELPLAYER)));
-        registerRoot(dispatcher, cfg.getCommandName(ModCommands.CONNECT),
-                connectTree(cfg.getCommandName(ModCommands.CONNECT)));
-    }
-
-    /** 注册单个根命令；禁用（空名）则跳过。 */
-    private static void registerRoot(CommandDispatcher<FabricClientCommandSource> dispatcher,
-                                     String name, LiteralArgumentBuilder<FabricClientCommandSource> tree) {
-        if (ModCommands.isDisabled(name)) {
-            return;
-        }
-        dispatcher.register(tree);
-        registeredRoots.add(name);
-    }
-
-    private static LiteralArgumentBuilder<FabricClientCommandSource> newPlayerTree(String rootName) {
-        return literal(rootName)
-                .then(argument("name", FakePlayerNameArgument.fakePlayerName())
-                        .executes(ctx -> {
-                            String name = StringArgumentType.getString(ctx, "name");
-                            ctx.getSource().sendFeedback(FakePlayerCommands.newPlayer(name));
-                            return 1;
-                        }))
-                .then(BatchCommands.newPlayerBatchNode(factory()));
-    }
-
-    private static LiteralArgumentBuilder<FabricClientCommandSource> delPlayerTree(String rootName) {
-        return literal(rootName)
-                .then(argument("name", FakePlayerNameArgument.fakePlayerName())
-                        .suggests(FakePlayerCommands.fakePlayerNames())
-                        .executes(ctx -> {
-                            String name = StringArgumentType.getString(ctx, "name");
-                            ctx.getSource().sendFeedback(FakePlayerCommands.delPlayer(name));
-                            return 1;
-                        }))
-                .then(BatchCommands.delPlayerBatchNode(factory()));
-    }
-
-    private static LiteralArgumentBuilder<FabricClientCommandSource> connectTree(String rootName) {
-        return literal(rootName)
-                .then(argument("name", FakePlayerNameArgument.fakePlayerName())
-                        .suggests(FakePlayerCommands.fakePlayerNames())
-                        .then(argument("host", StringArgumentType.word())
-                                .executes(ctx -> {
-                                    String name = StringArgumentType.getString(ctx, "name");
-                                    String host = StringArgumentType.getString(ctx, "host");
-                                    ctx.getSource().sendFeedback(FakePlayerCommands.connectPlayer(name, host, 25565));
-                                    return 1;
-                                })
-                                .then(argument("port", IntegerArgumentType.integer(1, 65535))
-                                        .executes(ctx -> {
-                                            String name = StringArgumentType.getString(ctx, "name");
-                                            String host = StringArgumentType.getString(ctx, "host");
-                                            int port = IntegerArgumentType.getInteger(ctx, "port");
-                                            ctx.getSource().sendFeedback(FakePlayerCommands.connectPlayer(name, host, port));
-                                            return 1;
-                                        }))));
     }
 
     /**
@@ -144,7 +64,7 @@ public class MockplayerClient implements ClientModInitializer {
         }
         Set<String> oldRoots = new HashSet<>(registeredRoots);
         CommandTreeReloader.removeRoots(dispatcher, oldRoots);
-        registerAllCommands(dispatcher);
+        ClientCommandRegistrar.registerAll(dispatcher, factory(), registeredRoots);
         var connection = Minecraft.getInstance().getConnection();
         if (connection != null) {
             @SuppressWarnings("rawtypes")
