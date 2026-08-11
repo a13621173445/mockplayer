@@ -24,30 +24,21 @@ public class CombatStabSuite extends TestSuite {
 
     private static final String BOT = "tbot-stab";
 
-    /** 服务端状态快照（server 线程写、client 线程读，volatile 保证可见）。 */
-    private static final class State {
-        volatile boolean spearDamage;
-        volatile boolean swingSeen;
-        volatile boolean swingSampled;
-        volatile float scale = -1.0F;
-        volatile float huskHp = -1.0F;
-    }
-
     public CombatStabSuite() {
         super("combat-stab");
         test("左键戳刺与 GUI 左键/右键", this::stabAll);
     }
 
     private void stabAll(TestContext ctx) {
-        State st = new State();
+        CombatSupport.State st = new CombatSupport.State();
         SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
         SuitesSupport.awaitChunkLoaded(ctx, 600);
-        ctx.server(() -> summonHusk(ctx, 3.0));
+        ctx.server(() -> CombatSupport.summonHusk(ctx, BOT, 3.0));
         ctx.await("client sees husk", () -> ctx.bot.getEntitiesNear(64).stream()
                 .anyMatch(e -> e instanceof Zombie), 600);
         ctx.check("client sees husk", () -> ctx.bot.getEntitiesNear(64).stream()
                 .anyMatch(e -> e instanceof Zombie));
-        ctx.run(() -> giveSpear(ctx));
+        ctx.run(() -> CombatSupport.giveSpear(ctx, BOT));
         ctx.await("server holds spear", () -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
@@ -60,7 +51,7 @@ public class CombatStabSuite extends TestSuite {
         }, 400);
         ctx.check("server holds spear", () -> st.spearDamage);
         ctx.await("stab damage", () -> {
-            readSpearDamage(ctx, st);
+            CombatSupport.readSpearDamage(ctx, BOT, st);
             if (st.spearDamage && st.huskHp >= 0 && st.huskHp < 20 && st.swingSampled) {
                 return true;
             }
@@ -130,49 +121,8 @@ public class CombatStabSuite extends TestSuite {
         ctx.check("gui right-click raises spear", using::get);
         ctx.run(() -> {
             ctx.bot.actions().stopSustained();
-            ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
-                    ctx.server().createCommandSourceStack(), "kill @e[type=minecraft:husk]"));
+            CombatSupport.removeHusks(ctx);
             MockplayerApi.bots().removeBot(BOT, "command");
-        });
-    }
-
-    private static void summonHusk(TestContext ctx, double ahead) {
-        ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
-        if (sp != null) {
-            String cmd = String.format("summon minecraft:husk %.2f %.2f %.2f {NoAI:1b}",
-                    sp.getX() + ahead, sp.getY(), sp.getZ());
-            ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(), cmd);
-        }
-    }
-
-    private static void giveSpear(TestContext ctx) {
-        ctx.server().execute(() -> {
-            ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
-                    "item replace entity " + BOT + " weapon.mainhand with minecraft:iron_spear");
-            ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
-            if (sp != null) {
-                sp.getInventory().setSelectedSlot(0);
-            }
-        });
-        ctx.bot.getLocalPlayer().getInventory().setSelectedSlot(0);
-    }
-
-    private static void readSpearDamage(TestContext ctx, State st) {
-        ctx.server().execute(() -> {
-            ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
-            if (sp == null) {
-                return;
-            }
-            ServerLevel level = ctx.server().getLevel(Level.OVERWORLD);
-            AABB box = new AABB(sp.getX() - 12, sp.getY() - 12, sp.getZ() - 12,
-                    sp.getX() + 12, sp.getY() + 12, sp.getZ() + 12);
-            var zombies = List.copyOf(level.getEntitiesOfClass(Zombie.class, box));
-            var ds = zombies.isEmpty() ? null : zombies.get(0).getLastDamageSource();
-            st.spearDamage = ds != null && ds.is(DamageTypes.SPEAR);
-            st.scale = sp.getAttackStrengthScale(1.0F);
-            st.huskHp = zombies.isEmpty() ? -1.0F : zombies.get(0).getHealth();
-            st.swingSeen = sp.swinging;
-            st.swingSampled = true;
         });
     }
 }
