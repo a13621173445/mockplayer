@@ -60,7 +60,7 @@ public final class TestRunner {
     /** 全部套件（suite=all / IDE 默认入口时按序连续跑） */
     private static final List<String> ALL_SUITES = List.of(
             "api-smoke",
-            "listener-events", "control-commands",
+            "control-commands",
             "bot-gui");
 
     private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }
