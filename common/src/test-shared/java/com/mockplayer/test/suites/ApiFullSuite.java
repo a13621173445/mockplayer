@@ -2,9 +2,11 @@ package com.mockplayer.test.suites;
 
 import com.mockplayer.api.Bot;
 import com.mockplayer.api.BotLifecycle;
+import com.mockplayer.api.BotProfile;
 import com.mockplayer.api.MockplayerApi;
 import com.mockplayer.api.RemoveResult;
 import com.mockplayer.api.event.BotListener;
+import com.mockplayer.session.BotImpl;
 import com.mockplayer.test.framework.TestContext;
 import com.mockplayer.test.framework.TestSuite;
 import net.minecraft.core.BlockPos;
@@ -36,6 +38,38 @@ public class ApiFullSuite extends TestSuite {
         test("放置/挖掘与事件", this::placeMine);
         test("容器接口", this::containerApi);
         test("BotManager API", this::managerApi);
+        test("连接失败派发 onDisconnected", this::connectFailEvent);
+    }
+
+    private void connectFailEvent(TestContext ctx) {
+        String failName = "tbot-cf";
+        AtomicBoolean created = new AtomicBoolean();
+        AtomicBoolean disconnected = new AtomicBoolean();
+        AtomicReference<net.minecraft.network.DisconnectionDetails> details = new AtomicReference<>();
+        BotListener listener = new BotListener() {
+            @Override
+            public void onDisconnected(Bot bot, net.minecraft.network.DisconnectionDetails d) {
+                if (failName.equals(bot.getName())) {
+                    disconnected.set(true);
+                    details.set(d);
+                }
+            }
+        };
+        ctx.run(() -> {
+            Bot bot = MockplayerApi.bots().createBot(
+                    BotProfile.of(failName, "test", "127.0.0.1", 1));
+            created.set(bot != null);
+            // 连接失败回调经 render thread 派发，本 run 步骤内挂监听不会漏事件
+            if (bot instanceof BotImpl impl) {
+                impl.events().addListener(listener);
+            }
+        });
+        ctx.await("connect fail onDisconnected", disconnected::get, 300);
+        ctx.check("connect fail bot created", created::get);
+        ctx.check("connect fail onDisconnected", disconnected::get);
+        ctx.check("connect fail reason non-null", () -> details.get() != null
+                && details.get().reason() != null);
+        ctx.check("connect fail bot removed", () -> MockplayerApi.bots().getBot(failName).isEmpty());
     }
 
     private void infoInterfaces(TestContext ctx) {

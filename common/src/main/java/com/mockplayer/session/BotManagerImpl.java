@@ -70,6 +70,9 @@ public class BotManagerImpl implements BotManager {
                             Component.translatable(key, Component.literal(name).withStyle(ChatFormatting.AQUA))
                                     .withStyle(ChatFormatting.RED));
                 }
+                // 连接失败也派发 onDisconnected（API 监听者能感知失败，而非只有聊天提示）
+                bot.fireOnDisconnected(new net.minecraft.network.DisconnectionDetails(
+                        Component.translatable(key, name)));
             });
         });
         if (this.sessions.putIfAbsent(name, session) != null) {
