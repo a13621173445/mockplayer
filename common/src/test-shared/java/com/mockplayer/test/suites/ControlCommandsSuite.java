@@ -1150,6 +1150,8 @@ public class ControlCommandsSuite extends TestSuite {
         });
         wait[0] = 0;
         ctx.await("mine second start", () -> ++wait[0] >= 5, 20);
+        ctx.run(() -> ctx.checkNow("main player no crack from bot gameMode",
+                !mainDestroyingBlocksHasMainPlayer(), "count=" + mainDestroyingBlockCount()));
         ctx.run(() -> {
             if (!stopSent.get()) {
                 stopSent.set(true);
@@ -1357,6 +1359,36 @@ public class ControlCommandsSuite extends TestSuite {
                     Minecraft.getInstance().options.getClass().getDeclaredField("serverRenderDistance");
             f.setAccessible(true);
             return f.getInt(Minecraft.getInstance().options);
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /**
+     * 反射读主玩家 level 的 destroyingBlocks（裂纹进度）：
+     * 服务端会向主玩家广播 bot 的挖掘进度（原版行为），但绝不允许出现「主玩家自己 id」的条目
+     * （旧 bug：假人 gameMode 的 lambda 用主玩家 id 往主 level 画裂纹）。P0-1 隔离断言用。
+     */
+    private static boolean mainDestroyingBlocksHasMainPlayer() {
+        try {
+            java.lang.reflect.Field f =
+                    Minecraft.getInstance().level.getClass().getDeclaredField("destroyingBlocks");
+            f.setAccessible(true);
+            java.util.Map<?, ?> map = (java.util.Map<?, ?>) f.get(Minecraft.getInstance().level);
+            return Minecraft.getInstance().player != null
+                    && map.containsKey(Minecraft.getInstance().player.getId());
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    /** 反射读主玩家 level 的 destroyingBlocks（裂纹进度）数量（失败返回 -1）。 */
+    private static int mainDestroyingBlockCount() {
+        try {
+            java.lang.reflect.Field f =
+                    Minecraft.getInstance().level.getClass().getDeclaredField("destroyingBlocks");
+            f.setAccessible(true);
+            return ((java.util.Map<?, ?>) f.get(Minecraft.getInstance().level)).size();
         } catch (Exception e) {
             return -1;
         }

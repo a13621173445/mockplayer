@@ -41,7 +41,10 @@ public abstract class MixinMultiPlayerGameMode {
             method = {
                     "continueDestroyBlock", "destroyBlock", "ensureHasSentCarriedItem", "handleCreativeModeItemAdd",
                     "handleCreativeModeItemDrop", "isServerControlledInventory", "piercingAttack",
-                    "setLocalMode", "startDestroyBlock", "stopDestroyBlock", "tick"
+                    "setLocalMode", "startDestroyBlock", "stopDestroyBlock", "tick",
+                    // P0-1：私有方法/合成 lambda 同样读主玩家 player，必须一并替换
+                    "sameDestroyTarget", "performUseItemOn",
+                    "lambda$startDestroyBlock$1", "lambda$useItem$0"
             },
             at = @At(value = "FIELD", target = "Lnet/minecraft/client/Minecraft;player:Lnet/minecraft/client/player/LocalPlayer;")
     )
@@ -58,7 +61,9 @@ public abstract class MixinMultiPlayerGameMode {
     @Redirect(
             method = {
                     "continueDestroyBlock", "destroyBlock",
-                    "startDestroyBlock", "stopDestroyBlock", "useItem", "useItemOn"
+                    "startDestroyBlock", "stopDestroyBlock", "useItem", "useItemOn",
+                    // P0-1：私有方法/合成 lambda 同样读主玩家 level，必须一并替换
+                    "performUseItemOn", "lambda$startDestroyBlock$1", "lambda$useItem$0"
             },
             at = @At(value = "FIELD", target = "Lnet/minecraft/client/Minecraft;level:Lnet/minecraft/client/multiplayer/ClientLevel;")
     )
@@ -75,4 +80,3 @@ public abstract class MixinMultiPlayerGameMode {
         return mc.level;
     }
 }
-
