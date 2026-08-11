@@ -138,11 +138,20 @@ public class FakePlayerState {
         return this.lastDemoEvent;
     }
 
-    /** 在线玩家列表（name → 是否在线），供程序化 AI 感知周围玩家 */
-    private final java.util.Map<java.util.UUID, String> onlinePlayers = new java.util.concurrent.ConcurrentHashMap<>();
+    /** 在线玩家快照（名字/延迟/游戏模式/是否列出），供程序化 AI 感知周围玩家。 */
+    public record OnlinePlayerInfo(String name, int latency,
+                                   net.minecraft.world.level.GameType gameMode,
+                                   boolean listed) {
+    }
 
-    public void recordPlayerOnline(java.util.UUID uuid, String name) {
-        this.onlinePlayers.put(uuid, name);
+    /** 在线玩家列表（UUID → 快照）。 */
+    private final java.util.Map<java.util.UUID, OnlinePlayerInfo> onlinePlayers =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public void recordPlayerOnline(java.util.UUID uuid, String name, int latency,
+                                   net.minecraft.world.level.GameType gameMode,
+                                   boolean listed) {
+        this.onlinePlayers.put(uuid, new OnlinePlayerInfo(name, latency, gameMode, listed));
     }
 
     public void removePlayerOnline(java.util.UUID uuid) {
@@ -179,7 +188,7 @@ public class FakePlayerState {
         return this.lastOpenScreen;
     }
 
-    public java.util.Map<java.util.UUID, String> getOnlinePlayers() {
+    public java.util.Map<java.util.UUID, OnlinePlayerInfo> getOnlinePlayers() {
         return this.onlinePlayers;
     }
 

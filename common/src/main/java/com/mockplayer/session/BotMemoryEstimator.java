@@ -37,7 +37,7 @@ public final class BotMemoryEstimator {
         int packets = state.getAllLastPackets().size();
         long online = state.getOnlinePlayers().entrySet().stream()
                 .mapToLong(e -> ExactBytes.MAP_NODE + ExactBytes.UUID_OBJECT
-                        + ExactBytes.stringBytes(e.getValue()))
+                        + ExactBytes.stringBytes(e.getValue().name()))
                 .sum();
 
         long events = 0;

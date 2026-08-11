@@ -414,13 +414,17 @@ public class FakePlayListener extends ClientPacketListener {
                 infoMap.putIfAbsent(entry.profileId(), playerInfo);
             }
             String name = entry.profile() != null ? entry.profile().name() : entry.profileId().toString();
-            this.session.getState().recordPlayerOnline(entry.profileId(), name);
-            fire(b -> b.fireOnPlayerJoined(entry.profile()));
+            this.session.getState().recordPlayerOnline(entry.profileId(), name,
+                    entry.latency(), entry.gameMode(), entry.listed());
+            if (entry.profile() != null) {
+                fire(b -> b.fireOnPlayerJoined(entry.profile()));
+            }
         }
         for (net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry entry : packet.entries()) {
             // 已有玩家更新动作：记录 state（applyPlayerInfoUpdate 父类 private，假人不调；tab list 主体由 newEntries 填充）
             String name = entry.profile() != null ? entry.profile().name() : entry.profileId().toString();
-            this.session.getState().recordPlayerOnline(entry.profileId(), name);
+            this.session.getState().recordPlayerOnline(entry.profileId(), name,
+                    entry.latency(), entry.gameMode(), entry.listed());
         }
     }
 
@@ -938,7 +942,9 @@ public class FakePlayListener extends ClientPacketListener {
         MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
         net.minecraft.world.entity.EntityType<?> type = packet.getType();
         if (type == net.minecraft.world.entity.EntityTypes.PLAYER) {
-            String name = this.session.getState().getOnlinePlayers().get(packet.getUUID());
+            String name = this.session.getState().getOnlinePlayers().containsKey(packet.getUUID())
+                    ? this.session.getState().getOnlinePlayers().get(packet.getUUID()).name()
+                    : null;
             return new FakeRemotePlayer(
                     self.mockplayer$getLevel(),
                     new com.mojang.authlib.GameProfile(packet.getUUID(), name != null ? name : ""));

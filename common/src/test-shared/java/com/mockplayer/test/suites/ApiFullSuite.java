@@ -77,6 +77,14 @@ public class ApiFullSuite extends TestSuite {
         ctx.check("getUUID non-null", () -> ctx.bot().getUUID() != null);
         ctx.await("getOnlinePlayers non-empty", () -> !ctx.bot().getOnlinePlayers().isEmpty(), 200);
         ctx.check("getOnlinePlayers non-empty", () -> !ctx.bot().getOnlinePlayers().isEmpty());
+        ctx.check("state online players populated", () -> {
+            if (!(ctx.bot() instanceof BotImpl impl)) {
+                return false;
+            }
+            var map = impl.session().getState().getOnlinePlayers();
+            return !map.isEmpty() && map.values().stream()
+                    .allMatch(p -> p.name() != null && p.latency() >= 0 && p.gameMode() != null);
+        });
         ctx.check("getEntitiesNear pred (villager filter no-crash)", () ->
                 ctx.bot().getEntitiesNear(64, e -> e instanceof net.minecraft.world.entity.npc.villager.Villager) != null);
         ctx.check("getContainer empty (no menu open)", () -> ctx.bot().getContainer().isEmpty());
