@@ -34,6 +34,7 @@ public final class TestContext {
     private Step current;
     private int currentTicks;
     private boolean done;
+    private boolean executing;
 
     /** 当前用例的假人（用例自己创建后赋值；每用例独立，禁止跨用例共享）。 */
     public Bot bot;
@@ -44,11 +45,13 @@ public final class TestContext {
 
     /** 注册一个立即执行步骤（客户端主线程）。 */
     public void run(Runnable action) {
+        guardNotExecuting();
         queue.add(new Step(Kind.RUN, null, null, 0, action, null));
     }
 
     /** 注册一个服务端执行步骤（内嵌单机服务器线程）。 */
     public void server(Runnable action) {
+        guardNotExecuting();
         Minecraft mc = Minecraft.getInstance();
         queue.add(new Step(Kind.RUN, null, null, 0,
                 () -> mc.getSingleplayerServer().execute(action), null));
@@ -56,6 +59,7 @@ public final class TestContext {
 
     /** 注册一个条件等待：每 tick 检查一次，满足即继续，超时记录失败并继续。 */
     public void await(String desc, BooleanSupplier cond, int timeoutTicks) {
+        guardNotExecuting();
         queue.add(new Step(Kind.AWAIT, desc, cond, timeoutTicks, null, null));
     }
 
@@ -66,7 +70,18 @@ public final class TestContext {
 
     /** 注册一个断言（带失败详情，执行时求值）。 */
     public void check(String name, BooleanSupplier cond, Supplier<String> detail) {
+        guardNotExecuting();
         queue.add(new Step(Kind.CHECK, name, cond, 0, null, detail));
+    }
+
+    /** 步骤执行中禁止嵌套入队：嵌套步骤会排在当前 await 之后永不执行（历史坑）。 */
+    private void guardNotExecuting() {
+        if (executing) {
+            throw new IllegalStateException(
+                    "TestContext step executed while another step is running: "
+                            + "register steps in the test body, not inside run/server callbacks "
+                            + "(use checkNow for immediate assertions)");
+        }
     }
 
     /** 立即记录一个断言（供 run 步骤内部使用；普通用例主体请用延迟 {@link #check}）。 */
@@ -98,7 +113,12 @@ public final class TestContext {
         while (current == null && !queue.isEmpty()) {
             current = queue.poll();
             if (current.kind() == Kind.RUN) {
-                current.action().run();
+                executing = true;
+                try {
+                    current.action().run();
+                } finally {
+                    executing = false;
+                }
                 current = null;
             } else if (current.kind() == Kind.CHECK) {
                 boolean ok = current.cond().getAsBoolean();
