@@ -59,8 +59,8 @@ public final class TestRunner {
 
     /** 全部套件（suite=all / IDE 默认入口时按序连续跑） */
     private static final List<String> ALL_SUITES = List.of(
-            "api-smoke", "api-full", "use-items", "containers", "containers-all", "crafting", "furnace",
-            "combat-stab", "combat-sprint", "enchanting", "merchant", "gui-actions", "listener-events", "control-commands",
+            "api-smoke", "api-full", "use-items", "containers", "containers-all",
+            "combat-stab", "combat-sprint", "merchant", "gui-actions", "listener-events", "control-commands",
             "bot-gui");
 
     private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }

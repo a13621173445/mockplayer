@@ -6,7 +6,10 @@ import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.test.suites.BatchSuite;
 import com.mockplayer.test.suites.ConfigSuite;
+import com.mockplayer.test.suites.CraftingSuite;
 import com.mockplayer.test.suites.DebugNameTagSuite;
+import com.mockplayer.test.suites.EnchantingSuite;
+import com.mockplayer.test.suites.FurnaceSuite;
 import com.mockplayer.test.suites.ApiSmokeSuite;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
@@ -44,7 +47,10 @@ public final class SuiteRunner {
             new ApiSmokeSuite(),
             new ConfigSuite(),
             new BatchSuite(),
-            new DebugNameTagSuite());
+            new DebugNameTagSuite(),
+            new CraftingSuite(),
+            new FurnaceSuite(),
+            new EnchantingSuite());
 
     private static Phase phase = Phase.WAIT_TITLE;
     private static volatile long phaseStart;
