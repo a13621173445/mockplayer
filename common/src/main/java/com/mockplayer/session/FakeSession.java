@@ -21,7 +21,12 @@ import org.slf4j.LoggerFactory;
  *
  * P0 目标：假人能登录上线（服务端 Tab 可见、客户端能看到实体）。
  * 连接流程复用 MC 自带类：Connection + 登录协议，不重写网络层。
+ *
+ * 内部契约：本类公开方法供同包实现/命令层使用；跨包白名单仅限
+ * com.mockplayer.mixin.*（Mixin 注入读取会话状态）、平台入口与测试套件，
+ * 外部/附属 mod 请走 {@link com.mockplayer.api.Bot} 接口。
  */
+@com.mockplayer.api.Internal
 public class FakeSession {
 
     public static final Logger LOG = LoggerFactory.getLogger("Mockplayer/FakeSession");

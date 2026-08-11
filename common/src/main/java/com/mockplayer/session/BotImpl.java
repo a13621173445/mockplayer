@@ -51,12 +51,17 @@ public class BotImpl implements Bot {
         this.actions = new BotActionsImpl(this);
     }
 
-    /** 内部：事件总线（FakePlayListener/FakeSession 触发事件用） */
+    /**
+     * 内部：事件总线（FakePlayListener/FakeSession 触发事件用）。
+     * 跨包白名单：QueryCommands（同包）、测试套件 ControlCommandsSuite（挂/摘监听器）。
+     */
+    @com.mockplayer.api.Internal
     public BotEventBus events() {
         return this.events;
     }
 
-    /** 内部：底层会话 */
+    /** 内部：底层会话（BotMemoryEstimator/QueryCommands 同包使用）。 */
+    @com.mockplayer.api.Internal
     public FakeSession session() {
         return this.session;
     }
