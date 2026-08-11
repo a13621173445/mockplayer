@@ -30,7 +30,13 @@ public class FakePlayerNameArgument implements ArgumentType<String> {
     @Override
     public String parse(StringReader reader) throws CommandSyntaxException {
         try {
-            return StringArgumentType.word().parse(reader);
+            String name = StringArgumentType.word().parse(reader);
+            // 只校验长度：word() 已保证无空格；离线服实际接受 '-'/'.'（测试假人名就带连字符），
+            // 字符集限制比服务端还严会误伤。超长名字服务端会拒绝，这里提前给出友好报错。
+            if (name.length() > 16) {
+                throw INVALID_NAME.createWithContext(reader);
+            }
+            return name;
         } catch (CommandSyntaxException e) {
             throw INVALID_NAME.createWithContext(reader);
         }

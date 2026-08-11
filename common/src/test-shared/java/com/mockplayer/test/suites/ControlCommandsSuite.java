@@ -9,6 +9,7 @@ import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.session.BotImpl;
 import com.mockplayer.session.ControlCommands;
 import com.mockplayer.session.EventRecorder;
+import com.mockplayer.session.FakePlayerNameArgument;
 import com.mockplayer.session.QueryCommands;
 import com.mockplayer.session.SessionManager;
 import com.mockplayer.test.framework.TestContext;
@@ -968,6 +969,16 @@ public class ControlCommandsSuite extends TestSuite {
         });
     }
 
+    /** FakePlayerNameArgument 是否拒绝该名字（抛 CommandSyntaxException）。 */
+    private static boolean throwsInvalidName(String name) {
+        try {
+            new FakePlayerNameArgument().parse(new com.mojang.brigadier.StringReader(name));
+            return false;
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+            return true;
+        }
+    }
+
     private void errorsAndI18n(TestContext ctx) {
         createBot(ctx);
         SuitesSupport.awaitChunkLoaded(ctx, 200);
@@ -984,6 +995,9 @@ public class ControlCommandsSuite extends TestSuite {
             ctx.checkNow("error invalid_effect", invalidEffect.contains("nonexistent"));
             ctx.checkNow("error blank_message", !blank.isBlank() && !blank.contains("commands.mockplayer.control."));
             ctx.checkNow("error entity_not_found", noEntity.contains("zzz-no-entity"));
+            // 名字参数规则：超 16 字符在客户端直接报参数错误（离线服接受连字符，不做字符集限制）
+            ctx.checkNow("name arg too long rejected",
+                    throwsInvalidName("toolongname123456789"), "should throw");
             List<Component> outputs = new ArrayList<>();
             outputs.add(ControlCommands.move(ctx.botName, "forward"));
             outputs.add(ControlCommands.stop(ctx.botName));
