@@ -4,6 +4,7 @@ import com.mockplayer.api.Bot;
 import com.mockplayer.api.MockplayerApi;
 import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.MockplayerConfig;
+import com.mockplayer.test.suites.BatchSuite;
 import com.mockplayer.test.suites.ConfigSuite;
 import com.mockplayer.test.suites.ApiSmokeSuite;
 import net.minecraft.client.Minecraft;
@@ -40,10 +41,11 @@ public final class SuiteRunner {
     /** 已迁移套件注册表：迁移一个套件就加进这里，同时从旧 TestRunner 删除对应 case。 */
     private static final List<TestSuite> SUITES = List.of(
             new ApiSmokeSuite(),
-            new ConfigSuite());
+            new ConfigSuite(),
+            new BatchSuite());
 
     private static Phase phase = Phase.WAIT_TITLE;
-    private static long phaseStart;
+    private static volatile long phaseStart;
     private static boolean worldCreationStarted;
     private static boolean gamerulesApplied;
     private static int testLanPort = -1;
@@ -56,6 +58,7 @@ public final class SuiteRunner {
     private static final List<TestContext.Record> records = new ArrayList<>();
     private static int suiteCooldown;
     private static long suiteStart;
+    private static volatile boolean finished;
 
     private SuiteRunner() {
     }
@@ -71,6 +74,7 @@ public final class SuiteRunner {
             return;
         }
         if (platform == null) {
+            startHardWatchdog();
             platform = p;
             queue = "all".equals(suiteName) ? new ArrayList<>(SUITES)
                     : List.of(SUITES.stream().filter(s -> s.name().equals(suiteName)).findFirst()
@@ -84,8 +88,59 @@ public final class SuiteRunner {
         advance(mc);
         if (phase != Phase.DONE && now - phaseStart > TIMEOUT_MS) {
             records.add(new TestContext.Record("timeout @" + phase, false, "global timeout"));
-            finishSuite();
+            finishAll();
         }
+    }
+
+    /**
+     * 硬超时 watchdog：即使客户端 tick 被某个步骤阻塞（同步 run 卡死），
+     * 超过全局超时也强制终止进程并报错，保证 CI 永不挂死。
+     */
+    private static void startHardWatchdog() {
+        Thread t = new Thread(() -> {
+            while (!finished) {
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                if (System.currentTimeMillis() - phaseStart > TIMEOUT_MS) {
+                    System.err.println("[mocktest] FATAL: global timeout exceeded, forcing exit");
+                    Runtime.getRuntime().halt(1);
+                }
+            }
+        }, "mocktest-hard-watchdog");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** 关客户端；stop 卡住时 15 秒后强制退出兜底。 */
+    private static void exitGame() {
+        if (finished) {
+            return;
+        }
+        finished = true;
+        Minecraft.getInstance().stop();
+        new Thread(() -> {
+            try {
+                Thread.sleep(15_000);
+            } catch (InterruptedException ignored) {
+            }
+            Runtime.getRuntime().halt(0);
+        }, "mocktest-exit-watchdog").start();
+    }
+
+    /** 全部完成（全局超时路径）：写结果、打印、关客户端。 */
+    private static void finishAll() {
+        if (phase == Phase.DONE) {
+            return;
+        }
+        phase = Phase.DONE;
+        writeResultJson(System.currentTimeMillis() - suiteStart);
+        boolean passed = records.stream().allMatch(TestContext.Record::passed);
+        System.out.println("[mocktest] suite " + suite.name() + " " + (passed ? "PASSED" : "FAILED")
+                + " (" + records.size() + " checks)");
+        exitGame();
     }
 
     private static void advance(Minecraft mc) {
@@ -182,7 +237,7 @@ public final class SuiteRunner {
             phaseStart = suiteStart;
         } else {
             phase = Phase.DONE;
-            Minecraft.getInstance().stop();
+            exitGame();
         }
     }
 
