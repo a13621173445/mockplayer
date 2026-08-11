@@ -154,6 +154,9 @@ public class ApiFullSuite extends TestSuite {
                 }
             });
         });
+        // 先等客户端背包同步到主手木块再换手，避免换手包与服务端写入竞态
+        ctx.await("client mainhand planks ready before swap", () ->
+                ctx.bot().getLocalPlayer().getMainHandItem().is(Items.OAK_PLANKS), 200);
         ctx.run(() -> {
             if (!swapped.get()) {
                 swapped.set(true);

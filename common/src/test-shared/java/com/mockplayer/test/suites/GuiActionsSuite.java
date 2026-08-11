@@ -273,6 +273,8 @@ public class GuiActionsSuite extends TestSuite {
                 // 先关自动重生再 kill：否则 bot 立刻复活，isDeadOrDying 窗口太短会偶发漏采
                 com.mockplayer.session.SessionManager.getInstance().getSession(BOT).setAutoRespawn(false);
                 ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
+                        ctx.server().createCommandSourceStack(), "gamemode survival " + BOT));
+                ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
                         ctx.server().createCommandSourceStack(), "kill " + BOT));
             }
         });
