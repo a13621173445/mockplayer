@@ -68,37 +68,6 @@ public class BotControlScreen extends Screen {
     private static final int FEEDBACK_Y = BotGui.PANEL_H - 14;
     private static final int CELL = 20;
     private static final int SLOT = 18;
-    /** 原版 HUD 经验条 sprite（与主玩家 ExperienceBar 同源）。 */
-    public static final Identifier XP_BAR_BACKGROUND =
-            Identifier.withDefaultNamespace("hud/experience_bar_background");
-    public static final Identifier XP_BAR_PROGRESS =
-            Identifier.withDefaultNamespace("hud/experience_bar_progress");
-    /** 原版 HUD 血量条 sprite（主玩家 Hud.HeartType 同源）。 */
-    public static final Identifier HEART_CONTAINER =
-            Identifier.withDefaultNamespace("hud/heart/container");
-    public static final Identifier HEART_FULL =
-            Identifier.withDefaultNamespace("hud/heart/full");
-    public static final Identifier HEART_HALF =
-            Identifier.withDefaultNamespace("hud/heart/half");
-    /** 原版 HUD 饥饿条 sprite（主玩家 Hud 同源）。 */
-    public static final Identifier FOOD_EMPTY =
-            Identifier.withDefaultNamespace("hud/food_empty");
-    public static final Identifier FOOD_HALF =
-            Identifier.withDefaultNamespace("hud/food_half");
-    public static final Identifier FOOD_FULL =
-            Identifier.withDefaultNamespace("hud/food_full");
-    /** 原版 HUD 盔甲条 sprite。 */
-    public static final Identifier ARMOR_EMPTY = Identifier.withDefaultNamespace("hud/armor_empty");
-    public static final Identifier ARMOR_HALF = Identifier.withDefaultNamespace("hud/armor_half");
-    public static final Identifier ARMOR_FULL = Identifier.withDefaultNamespace("hud/armor_full");
-    /** 原版 HUD 饥饿（饥饿效果）sprite。 */
-    public static final Identifier FOOD_EMPTY_HUNGER =
-            Identifier.withDefaultNamespace("hud/food_empty_hunger");
-    public static final Identifier FOOD_HALF_HUNGER =
-            Identifier.withDefaultNamespace("hud/food_half_hunger");
-    public static final Identifier FOOD_FULL_HUNGER =
-            Identifier.withDefaultNamespace("hud/food_full_hunger");
-
     // ===== 半透明面板配色（alpha < 0xFF，透出游戏场景） =====
     public static final int PANEL_BG_TOP = 0xB0253047;
     public static final int PANEL_BG_BOTTOM = 0xB00A0D16;
@@ -152,17 +121,6 @@ public class BotControlScreen extends Screen {
     /** 开关按钮状态色：开启绿 / 关闭红（文字颜色表示状态，不再拼 开/关 后缀）。 */
     public static final int TOGGLE_ON_COLOR = 0xFF55FF55;
     public static final int TOGGLE_OFF_COLOR = 0xFFFF5555;
-
-    /** 按配置不透明度合成颜色：alpha = 基础 alpha × opacity（0-1）。 */
-    public static int withAlpha(int color, float opacity) {
-        int alpha = Math.round(((color >>> 24) & 0xFF) * opacity);
-        return (color & 0xFFFFFF) | (alpha << 24);
-    }
-
-    /** 按钮 alpha：保证至少 35% 可读（面板越透明按钮也不至于看不清）。 */
-    public static float buttonAlpha(float opacity) {
-        return Math.max(0.35F, opacity);
-    }
 
     /** 当前选中假人（null = 未选中）。 */
     private Bot selected;
@@ -444,7 +402,7 @@ public class BotControlScreen extends Screen {
 
     /** 当前按钮 alpha（由 guiOpacity 配置推导，热重载后重开 GUI 生效）。 */
     private float currentButtonAlpha() {
-        return buttonAlpha(MockplayerConfig.get().getGuiOpacity());
+        return BotControlHud.buttonAlpha(MockplayerConfig.get().getGuiOpacity());
     }
 
     /** 按住持续按钮：按下执行 start，松开执行 end（移动/长按交互）。 */
@@ -839,9 +797,9 @@ public class BotControlScreen extends Screen {
         this.delButton.active = true;
         // Tab 高亮：当前 Tab 全亮，其余半透明（切 Tab 立即生效）
         float opacity = MockplayerConfig.get().getGuiOpacity();
-        this.tabStatus.setAlpha(this.tab == 0 ? 1.0F : buttonAlpha(opacity));
-        this.tabInventory.setAlpha(this.tab == 1 ? 1.0F : buttonAlpha(opacity));
-        this.tabActions.setAlpha(this.tab == 2 ? 1.0F : buttonAlpha(opacity));
+        this.tabStatus.setAlpha(this.tab == 0 ? 1.0F : BotControlHud.buttonAlpha(opacity));
+        this.tabInventory.setAlpha(this.tab == 1 ? 1.0F : BotControlHud.buttonAlpha(opacity));
+        this.tabActions.setAlpha(this.tab == 2 ? 1.0F : BotControlHud.buttonAlpha(opacity));
         this.refreshToggleLabels();
         this.refreshEntityButtons();
     }
@@ -1149,9 +1107,9 @@ public class BotControlScreen extends Screen {
         this.delButton.active = true;
         // Tab 高亮：当前 Tab 全亮，其余半透明（视觉上明显区分选中状态）
         float opacity = MockplayerConfig.get().getGuiOpacity();
-        this.tabStatus.setAlpha(this.tab == 0 ? 1.0F : buttonAlpha(opacity));
-        this.tabInventory.setAlpha(this.tab == 1 ? 1.0F : buttonAlpha(opacity));
-        this.tabActions.setAlpha(this.tab == 2 ? 1.0F : buttonAlpha(opacity));
+        this.tabStatus.setAlpha(this.tab == 0 ? 1.0F : BotControlHud.buttonAlpha(opacity));
+        this.tabInventory.setAlpha(this.tab == 1 ? 1.0F : BotControlHud.buttonAlpha(opacity));
+        this.tabActions.setAlpha(this.tab == 2 ? 1.0F : BotControlHud.buttonAlpha(opacity));
         // 开关回显（on/off 状态写进按钮文字）
         if (ready) {
             this.sneakButton.setMessage(Component.translatable("gui.mockplayer.action.sneak")
@@ -1459,14 +1417,14 @@ public class BotControlScreen extends Screen {
         int ph = BotGui.panelHeight(this.width, this.height);
         // 面板背景：半透明渐变 + 双层边框 + 顶栏 + 左栏分隔线（alpha < 0xFF 透出游戏场景）
         graphics.fillGradient(px, py, px + pw, py + ph,
-                withAlpha(PANEL_BG_TOP, opacity), withAlpha(PANEL_BG_BOTTOM, opacity));
-        graphics.outline(px, py, pw, ph, withAlpha(PANEL_BORDER, opacity));
-        graphics.outline(px + 1, py + 1, pw - 2, ph - 2, withAlpha(PANEL_BORDER_INNER, opacity));
+                BotControlHud.withAlpha(PANEL_BG_TOP, opacity), BotControlHud.withAlpha(PANEL_BG_BOTTOM, opacity));
+        graphics.outline(px, py, pw, ph, BotControlHud.withAlpha(PANEL_BORDER, opacity));
+        graphics.outline(px + 1, py + 1, pw - 2, ph - 2, BotControlHud.withAlpha(PANEL_BORDER_INNER, opacity));
         int headerH = this.sh(18);
-        graphics.fill(px, py, px + pw, py + headerH, withAlpha(PANEL_HEADER_BG, opacity));
-        graphics.fill(px, py + headerH - 1, px + pw, py + headerH, withAlpha(PANEL_ACCENT, opacity));
+        graphics.fill(px, py, px + pw, py + headerH, BotControlHud.withAlpha(PANEL_HEADER_BG, opacity));
+        graphics.fill(px, py + headerH - 1, px + pw, py + headerH, BotControlHud.withAlpha(PANEL_ACCENT, opacity));
         int dividerX = this.sx(LIST_X + LIST_W + 6);
-        graphics.fill(dividerX, py + headerH, dividerX + 1, py + ph, withAlpha(PANEL_DIVIDER, opacity));
+        graphics.fill(dividerX, py + headerH, dividerX + 1, py + ph, BotControlHud.withAlpha(PANEL_DIVIDER, opacity));
         this.drawBotScrollbar(graphics);
         // 控件全部按屏幕坐标直排（init 时 sx/sy/sw 换算好），命中与渲染同一坐标系
         super.extractRenderState(graphics, mouseX, mouseY, a);
@@ -1490,9 +1448,9 @@ public class BotControlScreen extends Screen {
         int thumbY = trackTop + Math.round((trackH - thumbH) * ratio);
         float opacity = MockplayerConfig.get().getGuiOpacity();
         graphics.fill(trackX, trackTop, trackX + this.sw(2), trackTop + trackH,
-                withAlpha(0x8F0E1420, opacity));
+                BotControlHud.withAlpha(0x8F0E1420, opacity));
         graphics.fill(trackX, thumbY, trackX + this.sw(2), thumbY + thumbH,
-                withAlpha(0xBF7FB2FF, opacity));
+                BotControlHud.withAlpha(0xBF7FB2FF, opacity));
     }
 
     /** 鼠标携带物品（拿起后跟随鼠标绘制，原版背包同款；数量用原版 itemDecorations）。 */
@@ -1526,7 +1484,7 @@ public class BotControlScreen extends Screen {
                         this.feedback.getString(), this.sw(BotGui.PANEL_W - 16 - 150))),
                 this.sx(BotGui.PANEL_W / 2), this.sy(FEEDBACK_Y), feedbackColor);
         // 底部常驻：当前选中假人（右对齐 + 最小左边界，左右都有边距，不贴边）
-        String selectedText = selectedTextDisplay(this.selected, this.font, 150);
+        String selectedText = BotControlHud.selectedTextDisplay(this.selected, this.font, 150);
         int selectedLeft = Math.max(BotGui.PANEL_W / 2 + 8,
                 BotGui.PANEL_W - 8 - this.font.width(selectedText));
         graphics.text(this.font, selectedText,
@@ -1554,30 +1512,18 @@ public class BotControlScreen extends Screen {
         }
     }
 
-    /** 底部常驻「当前选中假人」文本（绘制与测试共用）。 */
-    public static Component selectedText(Bot selected) {
-        return Component.translatable("gui.mockplayer.feedback.selected_bot",
-                selected == null
-                        ? Component.translatable("gui.mockplayer.value.none")
-                        : Component.literal(selected.getName()));
-    }
-
-    /** 右下角选中假人显示文本（按右侧固定宽度截断，名字长短自适应不溢出）。 */
-    public static String selectedTextDisplay(Bot selected, net.minecraft.client.gui.Font font, int maxWidth) {
-        return font.plainSubstrByWidth(selectedText(selected).getString(), Math.max(4, maxWidth));
-    }
 
     private void drawStatus(GuiGraphicsExtractor graphics) {
         graphics.text(this.font, Component.translatable("gui.mockplayer.section.status"),
                 this.sx(CONTENT_X), this.sy(CONTENT_Y), 0xFFA8C8FF);
-        List<Component> lines = statusLines(this.selected);
+        List<Component> lines = BotControlHud.statusLines(this.selected);
         net.minecraft.client.player.LocalPlayer player = this.selected.getLocalPlayer();
         int x = this.sx(CONTENT_X);
         int y = this.sy(CONTENT_Y + 12);
         int step = this.sh(11);
         int start = 0;
         if (player != null) {
-            // 原版血量条 + 饥饿条替代文本 ❤/🍗 行（statusLines 第 0 行跳过）
+            // 原版血量条 + 饥饿条替代文本 ❤/🍗 行（BotControlHud.statusLines 第 0 行跳过）
             this.drawVanillaHealthFood(graphics, this.sx(CONTENT_X), this.sy(CONTENT_Y + 14));
             y = this.sy(CONTENT_Y + 34);
             start = 1;
@@ -1652,11 +1598,11 @@ public class BotControlScreen extends Screen {
         for (int i = 0; i < 10; i++) {
             int xo = xLeft + i * 8;
             if (i * 2 + 1 < armor) {
-                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, ARMOR_FULL, xo, yLineArmor, 9, 9);
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, BotControlHud.ARMOR_FULL, xo, yLineArmor, 9, 9);
             } else if (i * 2 + 1 == armor) {
-                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, ARMOR_HALF, xo, yLineArmor, 9, 9);
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, BotControlHud.ARMOR_HALF, xo, yLineArmor, 9, 9);
             } else {
-                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, ARMOR_EMPTY, xo, yLineArmor, 9, 9);
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, BotControlHud.ARMOR_EMPTY, xo, yLineArmor, 9, 9);
             }
         }
     }
@@ -1724,13 +1670,13 @@ public class BotControlScreen extends Screen {
             Identifier half;
             Identifier full;
             if (player.hasEffect(net.minecraft.world.effect.MobEffects.HUNGER)) {
-                empty = FOOD_EMPTY_HUNGER;
-                half = FOOD_HALF_HUNGER;
-                full = FOOD_FULL_HUNGER;
+                empty = BotControlHud.FOOD_EMPTY_HUNGER;
+                half = BotControlHud.FOOD_HALF_HUNGER;
+                full = BotControlHud.FOOD_FULL_HUNGER;
             } else {
-                empty = FOOD_EMPTY;
-                half = FOOD_HALF;
-                full = FOOD_FULL;
+                empty = BotControlHud.FOOD_EMPTY;
+                half = BotControlHud.FOOD_HALF;
+                full = BotControlHud.FOOD_FULL;
             }
             if (player.getFoodData().getSaturationLevel() <= 0.0F && this.tickCount % (food * 3 + 1) == 0) {
                 yo = yLineBase + (this.heartRandom.nextInt(3) - 1);
@@ -1866,11 +1812,11 @@ public class BotControlScreen extends Screen {
         int barW = Math.min(182, CONTENT_W - 4);
         int x = this.sx(CONTENT_X + (CONTENT_W - barW) / 2);
         if (player.getXpNeededForNextLevel() > 0) {
-            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, XP_BAR_BACKGROUND, x, y, barW, 5);
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, BotControlHud.XP_BAR_BACKGROUND, x, y, barW, 5);
             int progress = (int) (player.experienceProgress * (barW + 1));
             if (progress > 0) {
                 // 原版裁剪：从进度 sprite 裁 0..progress 宽
-                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, XP_BAR_PROGRESS,
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, BotControlHud.XP_BAR_PROGRESS,
                         barW, 5, 0, 0, x, y, progress, 5);
             }
         }
@@ -1888,95 +1834,6 @@ public class BotControlScreen extends Screen {
         com.mockplayer.gui.BotGui.recordXpBar(player.experienceLevel, player.experienceProgress);
     }
 
-    /** 状态面板文本行（公共静态，GUI 渲染与测试共用同一数据源）。 */
-    public static List<Component> statusLines(Bot bot) {
-        List<Component> lines = new ArrayList<>();
-        if (bot == null) {
-            lines.add(Component.translatable("gui.mockplayer.status.no_bot"));
-            return lines;
-        }
-        net.minecraft.client.player.LocalPlayer player = bot.getLocalPlayer();
-        if (player == null) {
-            lines.add(Component.translatable("gui.mockplayer.status.not_playing"));
-            return lines;
-        }
-        MutableComponent stats = Component.literal("❤" + Math.round(player.getHealth()))
-                .withStyle(ChatFormatting.RED);
-        stats.append(Component.literal(" 🍗" + player.getFoodData().getFoodLevel()
-                + "(" + Math.round(player.getFoodData().getSaturationLevel()) + ")")
-                .withStyle(ChatFormatting.GOLD));
-        lines.add(stats);
-        Direction dir = Direction.fromYRot(player.getYRot());
-        lines.add(Component.translatable("gui.mockplayer.status.pos",
-                String.format(Locale.ROOT, "%.1f / %.1f / %.1f",
-                        player.getX(), player.getY(), player.getZ()),
-                dir.getName()));
-        double speed = player.getDeltaMovement().horizontalDistance() * 20.0;
-        lines.add(Component.translatable("gui.mockplayer.status.speed",
-                String.format(Locale.ROOT, "%.1f", speed),
-                bot.memoryInfo().trackedBytes() >= 1024L * 1024L
-                        ? String.format(Locale.ROOT, "%.1f MB",
-                        bot.memoryInfo().trackedBytes() / (1024.0 * 1024.0))
-                        : String.format(Locale.ROOT, "%.1f KB",
-                        bot.memoryInfo().trackedBytes() / 1024.0),
-                bot.getChunkRadius()));
-        ItemStack mainHand = player.getMainHandItem();
-        lines.add(Component.translatable("gui.mockplayer.status.slot",
-                player.getInventory().getSelectedSlot(),
-                mainHand.isEmpty() ? Component.translatable("gui.mockplayer.value.empty")
-                        : mainHand.getHoverName()));
-        Optional<BotContainer> container = bot.getContainer();
-        lines.add(Component.translatable("gui.mockplayer.status.container",
-                container.map(c -> (Component) c.getTitle())
-                        .orElseGet(() -> Component.translatable("gui.mockplayer.value.none"))));
-        lines.add(Component.translatable("gui.mockplayer.status.auto_respawn",
-                Component.translatable(bot.isAutoRespawn()
-                        ? "gui.mockplayer.value.on" : "gui.mockplayer.value.off")));
-        // 运行中状态
-        List<Component> running = new ArrayList<>();
-        Vec2 move = player.input.getMoveVector();
-        if (move.y > 0.01F) {
-            running.add(Component.translatable("gui.mockplayer.status.running_forward"));
-        } else if (move.y < -0.01F) {
-            running.add(Component.translatable("gui.mockplayer.status.running_backward"));
-        }
-        if (move.x > 0.01F) {
-            running.add(Component.translatable("gui.mockplayer.status.running_right"));
-        } else if (move.x < -0.01F) {
-            running.add(Component.translatable("gui.mockplayer.status.running_left"));
-        }
-        if (bot.actions().isSneaking()) {
-            running.add(Component.translatable("gui.mockplayer.status.running_sneak"));
-        }
-        if (bot.actions().isSprinting()) {
-            running.add(Component.translatable("gui.mockplayer.status.running_sprint"));
-        }
-        if (bot.actions().isJumping()) {
-            running.add(Component.translatable("gui.mockplayer.status.running_jump"));
-        }
-        if (bot.actions().isMining()) {
-            running.add(Component.translatable("gui.mockplayer.status.running_mining"));
-        }
-        if (bot.actions().isSustainedAttacking()) {
-            running.add(Component.translatable("gui.mockplayer.status.running_attack"));
-        }
-        if (bot.actions().isSustainedUsing()) {
-            running.add(Component.translatable("gui.mockplayer.status.running_use"));
-        }
-        MutableComponent runningLine = Component.translatable("gui.mockplayer.status.running");
-        if (running.isEmpty()) {
-            runningLine.append(Component.translatable("gui.mockplayer.value.none"));
-        } else {
-            for (int i = 0; i < running.size(); i++) {
-                if (i > 0) {
-                    runningLine.append(Component.literal(" / "));
-                }
-                runningLine.append(running.get(i));
-            }
-        }
-        lines.add(runningLine);
-        return lines;
-    }
 
     private void drawInventory(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         net.minecraft.client.player.LocalPlayer player = this.selected.getLocalPlayer();
@@ -1991,21 +1848,21 @@ public class BotControlScreen extends Screen {
         // 盔甲列（槽 5-8）
         for (int i = 0; i < 4; i++) {
             this.drawSlot(graphics, CONTENT_X, CONTENT_Y + i * CELL,
-                    inventoryItem(player, 5 + i), hovered == 5 + i, slotIcon(player, 5 + i));
+                    BotControlHud.inventoryItem(player, 5 + i), hovered == 5 + i, BotControlHud.slotIcon(player, 5 + i));
         }
         // 主背包 27 格（槽 9-35）
         for (int i = 0; i < 27; i++) {
             this.drawSlot(graphics, CONTENT_X + 24 + (i % 9) * CELL, CONTENT_Y + (i / 9) * CELL,
-                    inventoryItem(player, 9 + i), hovered == 9 + i, slotIcon(player, 9 + i));
+                    BotControlHud.inventoryItem(player, 9 + i), hovered == 9 + i, BotControlHud.slotIcon(player, 9 + i));
         }
         // 快捷栏 9 格（槽 36-44）
         for (int i = 0; i < 9; i++) {
             this.drawSlot(graphics, CONTENT_X + 24 + i * CELL, CONTENT_Y + 3 * CELL,
-                    inventoryItem(player, 36 + i), hovered == 36 + i, slotIcon(player, 36 + i));
+                    BotControlHud.inventoryItem(player, 36 + i), hovered == 36 + i, BotControlHud.slotIcon(player, 36 + i));
         }
         // 副手（槽 45）
         this.drawSlot(graphics, CONTENT_X + 24 + 9 * CELL, CONTENT_Y + 3 * CELL,
-                inventoryItem(player, 45), hovered == 45, slotIcon(player, 45));
+                BotControlHud.inventoryItem(player, 45), hovered == 45, BotControlHud.slotIcon(player, 45));
         // 红色丢弃格子（副手右侧一格）：物品放进去 = 原版点击菜单外丢弃
         this.drawDiscardSlot(graphics, CONTENT_X + 24 + 10 * CELL, CONTENT_Y + 3 * CELL,
                 hovered == net.minecraft.world.inventory.AbstractContainerMenu.SLOT_CLICKED_OUTSIDE);
@@ -2015,7 +1872,7 @@ public class BotControlScreen extends Screen {
                 this.sw(SLOT + 2), this.sw(SLOT + 2), 0xFFFFFF00);
         // 悬停物品信息（原版 tooltip + 数量行）
         if (hovered >= 0) {
-            List<Component> lines = slotTooltip(player, hovered);
+            List<Component> lines = BotControlHud.slotTooltip(player, hovered);
             if (lines != null) {
                 graphics.setTooltipForNextFrame(this.font,
                         lines.stream().map(Component::getVisualOrderText).toList(), mouseX, mouseY);
@@ -2035,9 +1892,9 @@ public class BotControlScreen extends Screen {
         int cell = this.sw(CELL);
         float opacity = MockplayerConfig.get().getGuiOpacity();
         graphics.fill(x, y, x + cell, y + cell,
-                hovered ? withAlpha(0x8FDF6060, opacity) : withAlpha(0x8FC04040, opacity));
+                hovered ? BotControlHud.withAlpha(0x8FDF6060, opacity) : BotControlHud.withAlpha(0x8FC04040, opacity));
         graphics.outline(x, y, cell, cell,
-                hovered ? withAlpha(0xBFE07070, opacity) : withAlpha(0xBFB03030, opacity));
+                hovered ? BotControlHud.withAlpha(0xBFE07070, opacity) : BotControlHud.withAlpha(0xBFB03030, opacity));
         String mark = "×";
         int tw = this.font.width(mark);
         graphics.text(this.font, Component.literal(mark),
@@ -2046,54 +1903,6 @@ public class BotControlScreen extends Screen {
         com.mockplayer.gui.BotGui.recordDiscardSlot();
     }
 
-    /**
-     * 背包 Tab 显示物品 = inventoryMenu 菜单槽（与 {@link #inventoryClick} 的
-     * handleContainerInput 用同一槽位语义；越界返回空）。
-     */
-    public static ItemStack inventoryItem(net.minecraft.client.player.LocalPlayer player, int menuSlot) {
-        if (player == null || menuSlot < 0 || menuSlot >= player.inventoryMenu.slots.size()) {
-            return ItemStack.EMPTY;
-        }
-        return player.inventoryMenu.getSlot(menuSlot).getItem();
-    }
-
-    /**
-     * 背包槽位空图标（原版装备/副手槽背景，如 container/slot/helmet、shield；
-     * 普通槽无图标返回 null）。绘制与测试共用同一数据源。
-     */
-    public static Identifier slotIcon(net.minecraft.client.player.LocalPlayer player, int menuSlot) {
-        if (player == null || menuSlot < 0 || menuSlot >= player.inventoryMenu.slots.size()) {
-            return null;
-        }
-        return player.inventoryMenu.getSlot(menuSlot).getNoItemIcon();
-    }
-
-    /**
-     * 背包槽位悬停 tooltip：原版物品信息 + 数量行（空槽返回 null）。
-     * 绘制与测试共用同一数据源。
-     */
-    public static List<Component> slotTooltip(net.minecraft.client.player.LocalPlayer player, int menuSlot) {
-        return itemTooltip(inventoryItem(player, menuSlot));
-    }
-
-    /**
-     * 容器菜单槽位悬停 tooltip：原版物品信息 + 数量行（空槽/越界返回 null）。
-     */
-    public static List<Component> containerSlotTooltip(BotContainer container, int menuSlot) {
-        if (container == null || menuSlot < 0 || menuSlot >= container.getSize()) {
-            return null;
-        }
-        return itemTooltip(container.getSlot(menuSlot));
-    }
-
-    /** 原版物品 tooltip lines + 数量行；空物品返回 null。 */
-    private static List<Component> itemTooltip(ItemStack stack) {
-        if (stack.isEmpty()) {
-            return null;
-        }
-        // 纯原版 tooltip（名称/附魔/组件），不额外拼数量行
-        return new ArrayList<>(Screen.getTooltipFromItem(Minecraft.getInstance(), stack));
-    }
 
     private void drawContainer(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         Optional<BotContainer> container = this.selected.getContainer();
@@ -2132,7 +1941,7 @@ public class BotControlScreen extends Screen {
         }
         // 悬停物品信息（原版 tooltip + 数量行）
         if (hovered >= 0) {
-            List<Component> lines = containerSlotTooltip(c, hovered);
+            List<Component> lines = BotControlHud.containerSlotTooltip(c, hovered);
             if (lines != null) {
                 graphics.setTooltipForNextFrame(this.font,
                         lines.stream().map(Component::getVisualOrderText).toList(), mouseX, mouseY);
@@ -2162,9 +1971,9 @@ public class BotControlScreen extends Screen {
         int slot = Math.max(1, cell - 2);
         float opacity = MockplayerConfig.get().getGuiOpacity();
         graphics.fill(x, y, x + cell, y + cell,
-                hovered ? withAlpha(SLOT_BG_HOVER, opacity) : withAlpha(SLOT_BG, opacity));
+                hovered ? BotControlHud.withAlpha(SLOT_BG_HOVER, opacity) : BotControlHud.withAlpha(SLOT_BG, opacity));
         graphics.outline(x, y, cell, cell,
-                hovered ? withAlpha(SLOT_BORDER_HOVER, opacity) : withAlpha(SLOT_BORDER, opacity));
+                hovered ? BotControlHud.withAlpha(SLOT_BORDER_HOVER, opacity) : BotControlHud.withAlpha(SLOT_BORDER, opacity));
         // 原版语义：槽位为空时画装备/副手背景图标（物品存在则不画）
         if (stack.isEmpty() && emptyIcon != null) {
             graphics.blitSprite(RenderPipelines.GUI_TEXTURED, emptyIcon, x + 1, y + 1,

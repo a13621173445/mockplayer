@@ -5,6 +5,7 @@ import com.mockplayer.api.MockplayerApi;
 import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.gui.BotControlScreen;
+import com.mockplayer.gui.BotControlHud;
 import com.mockplayer.gui.BotGui;
 import com.mockplayer.test.framework.TestContext;
 import com.mockplayer.test.framework.TestSuite;
@@ -104,7 +105,7 @@ public class BotGuiSuite extends TestSuite {
             ctx.checkNow("blur option untouched while open",
                     mc.options.menuBackgroundBlurriness().get() == blurBefore);
             ctx.checkNow("selected bot label",
-                    BotControlScreen.selectedText(ctx.bot()).getString().contains(ctx.botName()));
+                    BotControlHud.selectedText(ctx.bot()).getString().contains(ctx.botName()));
             int pw = mc.getWindow().getGuiScaledWidth();
             int ph = mc.getWindow().getGuiScaledHeight();
             int px = BotGui.panelX(pw, ph);
@@ -139,7 +140,7 @@ public class BotGuiSuite extends TestSuite {
         ctx.check("probe title rendered", () -> BotGui.probeLastTitle().contains(
                 Component.translatable("gui.mockplayer.title").getString()));
         ctx.check("status lines non-empty", () -> {
-            List<Component> lines = BotControlScreen.statusLines(ctx.bot());
+            List<Component> lines = BotControlHud.statusLines(ctx.bot());
             return lines.stream().anyMatch(l -> l.getString().contains("❤")
                     || l.getString().contains("🍗"));
         });
