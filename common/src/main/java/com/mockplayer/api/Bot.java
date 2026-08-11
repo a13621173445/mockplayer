@@ -173,7 +173,9 @@ public interface Bot {
      * 特化操作经 BotContainer.raw() cast 到具体菜单类。
      *
      * @return {@code Optional<BotContainer>}，未打开界面则为 empty
+     * @deprecated 与 {@link #getContainer()} 完全等价，保留仅为兼容，新代码请用 getContainer()
      */
+    @Deprecated
     Optional<BotContainer> getScreen();
 
     /**

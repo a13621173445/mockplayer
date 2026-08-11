@@ -57,7 +57,7 @@ public class ApiFullSuite extends TestSuite {
         };
         ctx.run(() -> {
             Bot bot = MockplayerApi.bots().createBot(
-                    BotProfile.of(failName, "test", "127.0.0.1", 1));
+                    BotProfile.of(failName, "test", "127.0.0.1", 1)).orElse(null);
             created.set(bot != null);
             // 连接失败回调经 render thread 派发，本 run 步骤内挂监听不会漏事件
             if (bot instanceof BotImpl impl) {
@@ -79,8 +79,7 @@ public class ApiFullSuite extends TestSuite {
         ctx.check("getOnlinePlayers non-empty", () -> !ctx.bot().getOnlinePlayers().isEmpty());
         ctx.check("getEntitiesNear pred (villager filter no-crash)", () ->
                 ctx.bot().getEntitiesNear(64, e -> e instanceof net.minecraft.world.entity.npc.villager.Villager) != null);
-        ctx.check("getScreen alias getContainer", () ->
-                ctx.bot().getScreen().isEmpty() == ctx.bot().getContainer().isEmpty());
+        ctx.check("getContainer empty (no menu open)", () -> ctx.bot().getContainer().isEmpty());
         ctx.run(() -> MockplayerApi.bots().removeBot(BOT, "command"));
     }
 

@@ -16,12 +16,12 @@ import java.util.Optional;
 public interface BotManager {
 
     /**
-     * 创建 bot。重名拒绝。
+     * 创建 bot。重名/参数非法返回 empty（失败风格与 {@link #getBot} 统一为 Optional）。
      *
      * @param profile 创建参数（name/owner 必填；host/port 空 = 跟随当前服务器）
-     * @return 创建结果：成功返回 Bot，重名返回 null
+     * @return 创建结果：成功返回含 Bot，重名/非法返回 empty
      */
-    Bot createBot(BotProfile profile);
+    Optional<Bot> createBot(BotProfile profile);
 
     /**
      * 按名字查找 bot。

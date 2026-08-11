@@ -23,6 +23,7 @@ public final class MockplayerApi {
      *
      * @param manager BotManager 实现
      */
+    @com.mockplayer.api.Internal
     public static void init(BotManager manager) {
         bots = manager;
     }

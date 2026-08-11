@@ -407,7 +407,7 @@ public class ListenerEventsSuite extends TestSuite {
         ctx.check("onDeath", () -> count("onDeath") >= 1);
         ctx.check("onRespawn", () -> count("onRespawn") >= 1);
         ctx.run(() -> {
-            bot2.set(MockplayerApi.bots().createBot(BotProfile.of("tbot-le2", "test")));
+            bot2.set(MockplayerApi.bots().createBot(BotProfile.of("tbot-le2", "test")).orElse(null));
         });
         ctx.await("bot2 seen", () -> {
             Bot b2 = bot2.get();

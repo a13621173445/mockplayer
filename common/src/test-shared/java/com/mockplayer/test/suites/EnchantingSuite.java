@@ -43,7 +43,7 @@ public class EnchantingSuite extends TestSuite {
         ctx.run(() -> SuitesSupport.openBlock(ctx, table[0]));
         ctx.await("enchanting menu open", () -> ctx.bot().getContainer().isPresent()
                 && ctx.bot().getContainer().get().getMenuType() == MenuType.ENCHANTMENT, 600);
-        ctx.check("getScreen present", () -> ctx.bot().getScreen().isPresent());
+        ctx.check("getContainer present", () -> ctx.bot().getContainer().isPresent());
         ctx.check("getContainer present (enchanting)", () -> ctx.bot().getContainer().isPresent());
         ctx.check("menuType is enchanting", () -> ctx.bot().getContainer()
                 .map(c -> c.getMenuType() == MenuType.ENCHANTMENT).orElse(false));

@@ -117,7 +117,7 @@ public class ApiSmokeSuite extends TestSuite {
         ctx.check("getContainer empty (no menu open)", () -> ctx.bot().getContainer().isEmpty());
         ctx.run(() -> {
             var boundaryApiBot = MockplayerApi.bots().createBot(
-                    BotProfile.of("tbot-api-b", "command"));
+                    BotProfile.of("tbot-api-b", "command")).orElse(null);
             if (boundaryApiBot == null) {
                 return;
             }

@@ -106,7 +106,7 @@ public class BatchSuite extends TestSuite {
     private void boundary(TestContext ctx) {
         ctx.run(() -> {
             var apiBot = MockplayerApi.bots().createBot(
-                    BotProfile.of("tbotbapi", "command"));
+                    BotProfile.of("tbotbapi", "command")).orElse(null);
             ctx.checkNow("batch boundary api bot created", apiBot != null);
             String dry = FakePlayerCommands.delPlayerBatch("tbotbapi", true).getString();
             ctx.checkNow("batch boundary dry not match", !dry.contains("tbotbapi"), "out=" + dry);
