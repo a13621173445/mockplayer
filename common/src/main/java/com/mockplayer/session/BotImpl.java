@@ -208,12 +208,6 @@ public class BotImpl implements Bot {
     }
 
     @Override
-    @Deprecated
-    public Optional<BotContainer> getScreen() {
-        return this.getContainer();
-    }
-
-    @Override
     public com.mockplayer.api.BotMemoryInfo memoryInfo() {
         return BotMemoryEstimator.estimate(this);
     }

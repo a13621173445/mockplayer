@@ -167,17 +167,6 @@ public interface Bot {
     Optional<BotContainer> getContainer();
 
     /**
-     * 当前打开的界面（服务端 openScreen 的任意菜单类型，通用视图）。
-     * 等价于 {@link #getContainer()}，语义化命名。任何菜单（原版 + mod）都可用，
-     * 特化操作经 BotContainer.raw() cast 到具体菜单类。
-     *
-     * @return {@code Optional<BotContainer>}，未打开界面则为 empty
-     * @deprecated 与 {@link #getContainer()} 完全等价，保留仅为兼容，新代码请用 getContainer()
-     */
-    @Deprecated
-    Optional<BotContainer> getScreen();
-
-    /**
      * 假人内存信息（JVM 堆真实值 + Mod 侧跟踪估算 + level 实体/区块数）。
      *
      * 口径：JVM 字段来自 Runtime（真实值）；per-bot 字段只统计本 mod 管理的结构，

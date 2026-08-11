@@ -64,6 +64,7 @@ public class ControlCommandsSuite extends TestSuite {
         test("挖掘时间与距离", this::mineTime);
         test("chunkRadius", this::chunkRadius);
         test("换维隔离注册表", this::dimensionIsolation);
+        test("容器命令路径 click/setSlot/close", this::containerCommandPaths);
         test("射线交互", this::raycast);
     }
 
@@ -871,6 +872,68 @@ public class ControlCommandsSuite extends TestSuite {
         ctx.run(() -> ControlCommands.close(ctx.botName()));
         ctx.await("container closed after query", () -> ctx.bot().getContainer().isEmpty(), 100);
         ctx.check("container closed after query", () -> ctx.bot().getContainer().isEmpty());
+    }
+
+    /** 容器命令路径：setSlot 本地乐观写（客户端断言）+ click 放取（服务端断言）+ close。 */
+    private void containerCommandPaths(TestContext ctx) {
+        AtomicReference<BlockPos> chestPos = new AtomicReference<>();
+        AtomicBoolean opened = new AtomicBoolean();
+        AtomicBoolean put = new AtomicBoolean();
+        AtomicBoolean chestHasStone = new AtomicBoolean();
+        AtomicBoolean taken = new AtomicBoolean();
+        createBot(ctx);
+        SuitesSupport.awaitChunkLoaded(ctx);
+        ctx.run(() -> ctx.server().execute(() -> {
+            var p = ctx.bot().getLocalPlayer();
+            chestPos.set(p.blockPosition().offset(2, 0, 0));
+            ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
+                    "setblock " + chestPos.get().getX() + " " + chestPos.get().getY() + " " + chestPos.get().getZ()
+                            + " minecraft:chest");
+            ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
+                    "item replace entity " + ctx.botName() + " weapon.mainhand with minecraft:stone");
+        }));
+        ctx.await("chest visible", () -> chestPos.get() != null
+                && ctx.bot().getBlockState(chestPos.get()).is(Blocks.CHEST), 200);
+        ctx.run(() -> {
+            if (!opened.get()) {
+                opened.set(true);
+                ControlCommands.useItemOn(ctx.botName(), chestPos.get().getX(), chestPos.get().getY(),
+                        chestPos.get().getZ(), "up");
+            }
+        });
+        ctx.await("container open", () -> ctx.bot().getContainer().isPresent(), 200);
+        ctx.run(() -> ControlCommands.setSlot(ctx.botName(), 0));
+        ctx.check("setSlot slot0 stone (client optimistic)",
+                () -> ctx.bot().getContainer().map(c -> c.getSlot(0).is(Items.STONE)).orElse(false));
+        ctx.run(() -> {
+            if (!put.get()) {
+                put.set(true);
+                ControlCommands.click(ctx.botName(), 54, 0, "pickup");
+                ControlCommands.click(ctx.botName(), 0, 0, "pickup");
+            }
+        });
+        ctx.await("click put stone into chest (server)", () -> {
+            ctx.server().execute(() -> {
+                ChestBlockEntity chest = (ChestBlockEntity)
+                        ctx.server().getLevel(Level.OVERWORLD).getBlockEntity(chestPos.get());
+                chestHasStone.set(chest != null && chest.getItem(0).is(Items.STONE));
+            });
+            return chestHasStone.get();
+        }, 200);
+        ctx.check("click chest slot0 stone (server)", chestHasStone::get);
+        ctx.run(() -> ControlCommands.click(ctx.botName(), 0, 0, "pickup"));
+        ctx.await("click took stone back (server)", () -> {
+            ctx.server().execute(() -> {
+                ChestBlockEntity chest = (ChestBlockEntity)
+                        ctx.server().getLevel(Level.OVERWORLD).getBlockEntity(chestPos.get());
+                taken.set(chest != null && chest.getItem(0).isEmpty());
+            });
+            return taken.get();
+        }, 200);
+        ctx.check("click chest slot0 empty (server)", taken::get);
+        ctx.run(() -> ControlCommands.close(ctx.botName()));
+        ctx.await("close closed container", () -> ctx.bot().getContainer().isEmpty(), 100);
+        ctx.check("close closed container", () -> ctx.bot().getContainer().isEmpty());
     }
 
     private void listen(TestContext ctx) {

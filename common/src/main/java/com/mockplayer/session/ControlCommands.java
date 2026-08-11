@@ -404,6 +404,76 @@ public class ControlCommands {
                 content).withStyle(CommandSupport.SUCCESS_COLOR);
     }
 
+    /**
+     * 通用动作样板（requirePlaying → 执行 → success）：与原逐方法样板逐字节等价。
+     * 只用于「先查 PLAYING 再执行」的动作。
+     */
+    private static Component run(String actionKey, String name,
+                                 java.util.function.Consumer<Bot> action, Object... extra) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        action.accept(findBot(name));
+        return success(actionKey, name, extra);
+    }
+
+    /**
+     * 通用动作样板（只查 not_found，不查 not_playing）：setSneak/setSprint 原语义。
+     */
+    private static Component runAny(String actionKey, String name,
+                                    java.util.function.Consumer<Bot> action) {
+        Bot bot = findBot(name);
+        if (bot == null) {
+            return fail("commands.mockplayer.control.not_found", playerName(name));
+        }
+        action.accept(bot);
+        return success(actionKey, name);
+    }
+
+    /** 带用户输入原文的通用动作样板（chat/command/renameItem 原语义）。 */
+    private static Component runContent(String actionKey, String name,
+                                        java.util.function.Consumer<Bot> action, String content) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        action.accept(findBot(name));
+        return contentSuccess(actionKey, name, content);
+    }
+
+    /** 实体目标动作样板（requirePlaying → 解析实体 → 执行 → success，原语义）。 */
+    private static Component runEntity(String actionKey, String name, String target,
+                                       java.util.function.BiConsumer<Bot, Entity> action) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        Bot bot = findBot(name);
+        Entity entity = resolveEntity(bot, target);
+        if (entity == null) {
+            return fail("commands.mockplayer.control.entity_not_found",
+                    playerName(name), target == null ? "?" : target);
+        }
+        action.accept(bot, entity);
+        return success(actionKey, name, entity.getName());
+    }
+
+    /** 容器动作样板（requirePlaying → 取容器 → 执行，原语义；无容器返回提示）。 */
+    private static Component withContainer(String name,
+                                           java.util.function.Function<BotContainer, Component> fn) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        Bot bot = findBot(name);
+        Optional<BotContainer> c = bot.getContainer();
+        if (c.isEmpty()) {
+            return info("commands.mockplayer.control.container.none", playerName(name));
+        }
+        return fn.apply(c.get());
+    }
+
     private static Bot findBot(String name) {
         return CommandSupport.findBot(name);
     }
@@ -506,183 +576,88 @@ public class ControlCommands {
     }
 
     public static Component stop(String name) {
-        Bot bot = findBot(name);
-        if (bot == null) {
-            return fail("commands.mockplayer.control.not_found", playerName(name));
-        }
-        if (bot.getLifecycle() != BotLifecycle.PLAYING) {
-            return fail("commands.mockplayer.control.not_playing", playerName(name));
-        }
-        bot.actions().stop();
-        return success("stop", name);
+        return run("stop", name, b -> b.actions().stop());
     }
 
     public static Component setSneak(String name, boolean on) {
-        Bot bot = findBot(name);
-        if (bot == null) {
-            return fail("commands.mockplayer.control.not_found", playerName(name));
-        }
-        bot.actions().setSneak(on);
-        return success(on ? "sneak" : "unsneak", name);
+        return runAny(on ? "sneak" : "unsneak", name, b -> b.actions().setSneak(on));
     }
 
     public static Component setSprint(String name, boolean on) {
-        Bot bot = findBot(name);
-        if (bot == null) {
-            return fail("commands.mockplayer.control.not_found", playerName(name));
-        }
-        bot.actions().setSprint(on);
-        return success(on ? "sprint" : "unsprint", name);
+        return runAny(on ? "sprint" : "unsprint", name, b -> b.actions().setSprint(on));
     }
 
     public static Component jump(String name) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().jump();
-        return success("jump", name);
+        return run("jump", name, b -> b.actions().jump());
     }
 
     public static Component look(String name, float yaw, float pitch) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().look(yaw, pitch);
-        return success("look", name, yaw, pitch);
+        return run("look", name, b -> b.actions().look(yaw, pitch), yaw, pitch);
     }
 
     public static Component lookAt(String name, double x, double y, double z) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().lookAt(new Vec3(x, y, z));
-        return success("lookAt", name, String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f", x, y, z));
+        return run("lookAt", name, b -> b.actions().lookAt(new Vec3(x, y, z)),
+                String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f", x, y, z));
     }
 
     public static Component turn(String name, float yaw, float pitch) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().turn(yaw, pitch);
-        return success("turn", name, yaw, pitch);
+        return run("turn", name, b -> b.actions().turn(yaw, pitch), yaw, pitch);
     }
 
     public static Component attack(String name, String target) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        Bot bot = findBot(name);
-        Entity entity = resolveEntity(bot, target);
-        if (entity == null) {
-            return fail("commands.mockplayer.control.entity_not_found", playerName(name), target == null ? "?" : target);
-        }
-        bot.actions().lookAt(entity);
-        bot.actions().attack(entity);
-        return success("attack", name, entity.getName());
+        return runEntity("attack", name, target,
+                (b, e) -> {
+                    b.actions().lookAt(e);
+                    b.actions().attack(e);
+                });
     }
 
     public static Component stab(String name) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().stab();
-        return success("stab", name);
+        return run("stab", name, b -> b.actions().stab());
     }
 
     public static Component sustainedAttack(String name, String target) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        Bot bot = findBot(name);
-        Entity entity = resolveEntity(bot, target);
-        if (entity == null) {
-            return fail("commands.mockplayer.control.entity_not_found", playerName(name), target == null ? "?" : target);
-        }
-        bot.actions().lookAt(entity);
-        bot.actions().sustainedAttack(entity);
-        return success("sustainedAttack", name, entity.getName());
+        return runEntity("sustainedAttack", name, target,
+                (b, e) -> {
+                    b.actions().lookAt(e);
+                    b.actions().sustainedAttack(e);
+                });
     }
 
     public static Component sustainedUse(String name, String target) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        Bot bot = findBot(name);
-        Entity entity = resolveEntity(bot, target);
-        if (entity == null) {
-            return fail("commands.mockplayer.control.entity_not_found", playerName(name), target == null ? "?" : target);
-        }
-        bot.actions().lookAt(entity);
-        bot.actions().sustainedUse(entity);
-        return success("sustainedUse", name, entity.getName());
+        return runEntity("sustainedUse", name, target,
+                (b, e) -> {
+                    b.actions().lookAt(e);
+                    b.actions().sustainedUse(e);
+                });
     }
 
     public static Component attackLook(String name) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().attackLook();
-        return success("attackLook", name);
+        return run("attackLook", name, b -> b.actions().attackLook());
     }
 
     public static Component useLook(String name) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().useLook();
-        return success("useLook", name);
+        return run("useLook", name, b -> b.actions().useLook());
     }
 
     public static Component sustainedAttackLook(String name) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().sustainedAttackLook();
-        return success("sustainedAttackLook", name);
+        return run("sustainedAttackLook", name, b -> b.actions().sustainedAttackLook());
     }
 
     public static Component sustainedUseLook(String name) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().sustainedUseLook();
-        return success("sustainedUseLook", name);
+        return run("sustainedUseLook", name, b -> b.actions().sustainedUseLook());
     }
 
     public static Component stopSustained(String name) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().stopSustained();
-        return success("stopSustained", name);
+        return run("stopSustained", name, b -> b.actions().stopSustained());
     }
 
     public static Component interact(String name, String target) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        Bot bot = findBot(name);
-        Entity entity = resolveEntity(bot, target);
-        if (entity == null) {
-            return fail("commands.mockplayer.control.entity_not_found", playerName(name), target == null ? "?" : target);
-        }
-        bot.actions().lookAt(entity);
-        bot.actions().interact(entity);
-        return success("interact", name, entity.getName());
+        return runEntity("interact", name, target,
+                (b, e) -> {
+                    b.actions().lookAt(e);
+                    b.actions().interact(e);
+                });
     }
 
     public static Component useItem(String name, String hand) {
@@ -694,19 +669,14 @@ public class ControlCommands {
         if (h == null) {
             return fail("commands.mockplayer.control.invalid_hand", hand == null ? "" : hand);
         }
-        findBot(name).actions().useItem(h);
-        return success("useItem", name, h == InteractionHand.MAIN_HAND
-                ? Component.translatable("commands.mockplayer.control.hand.main")
-                : Component.translatable("commands.mockplayer.control.hand.off"));
+        return run("useItem", name, b -> b.actions().useItem(h),
+                h == InteractionHand.MAIN_HAND
+                        ? Component.translatable("commands.mockplayer.control.hand.main")
+                        : Component.translatable("commands.mockplayer.control.hand.off"));
     }
 
     public static Component releaseUsingItem(String name) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().releaseUsingItem();
-        return success("releaseUsingItem", name);
+        return run("releaseUsingItem", name, b -> b.actions().releaseUsingItem());
     }
 
     public static Component useItemOn(String name, int x, int y, int z, String side) {
@@ -718,9 +688,11 @@ public class ControlCommands {
         if (dir == null) {
             return fail("commands.mockplayer.control.invalid_side", side == null ? "" : side);
         }
-        findBot(name).actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
-        findBot(name).actions().useItemOn(new BlockPos(x, y, z), dir);
-        return success("useItemOn", name, x + " " + y + " " + z + " " + dir.getName());
+        return run("useItemOn", name,
+                b -> {
+                    b.actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
+                    b.actions().useItemOn(new BlockPos(x, y, z), dir);
+                }, x + " " + y + " " + z + " " + dir.getName());
     }
 
     public static Component placeBlock(String name, int x, int y, int z, String side) {
@@ -732,39 +704,32 @@ public class ControlCommands {
         if (dir == null) {
             return fail("commands.mockplayer.control.invalid_side", side == null ? "" : side);
         }
-        findBot(name).actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
-        findBot(name).actions().placeBlock(new BlockPos(x, y, z), dir);
-        return success("placeBlock", name, x + " " + y + " " + z + " " + dir.getName());
+        return run("placeBlock", name,
+                b -> {
+                    b.actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
+                    b.actions().placeBlock(new BlockPos(x, y, z), dir);
+                }, x + " " + y + " " + z + " " + dir.getName());
     }
 
     public static Component mineBlock(String name, int x, int y, int z) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
-        findBot(name).actions().mineBlock(new BlockPos(x, y, z));
-        return success("mineBlock", name, x + " " + y + " " + z);
+        return run("mineBlock", name,
+                b -> {
+                    b.actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
+                    b.actions().mineBlock(new BlockPos(x, y, z));
+                }, x + " " + y + " " + z);
     }
 
     public static Component attackBlock(String name, int x, int y, int z) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
-        findBot(name).actions().attackBlock(new BlockPos(x, y, z));
-        return success("attackBlock", name, x + " " + y + " " + z);
+        return run("attackBlock", name,
+                b -> {
+                    b.actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
+                    b.actions().attackBlock(new BlockPos(x, y, z));
+                }, x + " " + y + " " + z);
     }
 
     public static Component hotbar(String name, int slot) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
         int index = Math.max(0, Math.min(8, slot - 1));
-        findBot(name).actions().setSelectedSlot(index);
-        return success("hotbar", name, index + 1);
+        return run("hotbar", name, b -> b.actions().setSelectedSlot(index), index + 1);
     }
 
     public static Component chunkRadius(String name, int radius) {
@@ -776,31 +741,21 @@ public class ControlCommands {
                 || radius > com.mockplayer.config.ModConfig.MAX_FAKE_PLAYER_CHUNK_RADIUS) {
             return fail("commands.mockplayer.control.invalid_chunk_radius", radius);
         }
-        findBot(name).setChunkRadius(radius);
-        return success("chunkRadius", name, radius);
+        return run("chunkRadius", name, b -> b.setChunkRadius(radius), radius);
     }
 
     public static Component drop(String name, Integer slot, Boolean all) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        Bot bot = findBot(name);
-        if (slot == null || slot < 0) {
-            bot.actions().dropSelected();
-        } else {
-            bot.actions().drop(Math.min(8, slot), all != null && all);
-        }
-        return success("drop", name, slot == null ? "-" : slot);
+        return run("drop", name, bot -> {
+            if (slot == null || slot < 0) {
+                bot.actions().dropSelected();
+            } else {
+                bot.actions().drop(Math.min(8, slot), all != null && all);
+            }
+        }, slot == null ? "-" : slot);
     }
 
     public static Component swapHands(String name) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().swapHands();
-        return success("swapHands", name);
+        return run("swapHands", name, b -> b.actions().swapHands());
     }
 
     public static Component mount(String name, String target, Boolean onlyRideables) {
@@ -824,51 +779,31 @@ public class ControlCommands {
     }
 
     public static Component dismount(String name) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().dismount();
-        return success("dismount", name);
+        return run("dismount", name, b -> b.actions().dismount());
     }
 
     /** 关闭假人当前打开的容器 GUI（原版 LocalPlayer.closeContainer 等价，发关闭包）。 */
     public static Component close(String name) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        Bot bot = findBot(name);
-        Optional<BotContainer> c = bot.getContainer();
-        if (c.isEmpty()) {
-            return info("commands.mockplayer.control.container.none", playerName(name));
-        }
-        c.get().close();
-        return success("close", name);
+        return withContainer(name, c -> {
+            c.close();
+            return success("close", name);
+        });
     }
 
     /** 点击容器槽位（拿取/放置/换位/拖拽，ContainerInput 枚举小写名）。 */
     public static Component click(String name, int slot, int button, String mode) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        Bot bot = findBot(name);
-        Optional<BotContainer> c = bot.getContainer();
-        if (c.isEmpty()) {
-            return info("commands.mockplayer.control.container.none", playerName(name));
-        }
         net.minecraft.world.inventory.ContainerInput input = resolveClickMode(mode);
-        if (input == null) {
-            return fail("commands.mockplayer.control.invalid_click_mode", mode == null ? "" : mode);
-        }
-        BotContainer container = c.get();
-        if (slot < -1 || slot >= container.getSize()) {
-            // 越界点击会让原版 clicked 抛 IndexOutOfBounds（客户端崩溃），命令层先拦下
-            return fail("commands.mockplayer.control.invalid_slot", slot);
-        }
-        container.click(slot, button, input);
-        return success("click", name, slot, button, mode);
+        return withContainer(name, container -> {
+            if (input == null) {
+                return fail("commands.mockplayer.control.invalid_click_mode", mode == null ? "" : mode);
+            }
+            if (slot < -1 || slot >= container.getSize()) {
+                // 越界点击会让原版 clicked 抛 IndexOutOfBounds（客户端崩溃），命令层先拦下
+                return fail("commands.mockplayer.control.invalid_slot", slot);
+            }
+            container.click(slot, button, input);
+            return success("click", name, slot, button, mode);
+        });
     }
 
     private static net.minecraft.world.inventory.ContainerInput resolveClickMode(String mode) {
@@ -919,25 +854,18 @@ public class ControlCommands {
 
     /** 把假人主手物品乐观写入容器槽位（服务端回包为准）。 */
     public static Component setSlot(String name, int slot) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        Bot bot = findBot(name);
-        Optional<BotContainer> c = bot.getContainer();
-        if (c.isEmpty()) {
-            return info("commands.mockplayer.control.container.none", playerName(name));
-        }
-        if (bot.getLocalPlayer() == null) {
-            return fail("commands.mockplayer.control.not_playing", playerName(name));
-        }
-        BotContainer container = c.get();
-        if (slot < 0 || slot >= container.getSize()) {
-            // 越界写入会让原版 setItem 抛 IndexOutOfBounds（客户端崩溃），命令层先拦下
-            return fail("commands.mockplayer.control.invalid_slot", slot);
-        }
-        container.setSlot(slot, bot.getLocalPlayer().getMainHandItem());
-        return success("setSlot", name, slot);
+        return withContainer(name, container -> {
+            Bot bot = findBot(name);
+            if (bot.getLocalPlayer() == null) {
+                return fail("commands.mockplayer.control.not_playing", playerName(name));
+            }
+            if (slot < 0 || slot >= container.getSize()) {
+                // 越界写入会让原版 setItem 抛 IndexOutOfBounds（客户端崩溃），命令层先拦下
+                return fail("commands.mockplayer.control.invalid_slot", slot);
+            }
+            container.setSlot(slot, bot.getLocalPlayer().getMainHandItem());
+            return success("setSlot", name, slot);
+        });
     }
 
     public static Component chat(String name, String message) {
@@ -948,8 +876,7 @@ public class ControlCommands {
         if (message == null || message.isBlank()) {
             return fail("commands.mockplayer.control.blank_message");
         }
-        findBot(name).actions().chat(message);
-        return contentSuccess("chat", name, message);
+        return runContent("chat", name, b -> b.actions().chat(message), message);
     }
 
     public static Component command(String name, String commandLine) {
@@ -960,51 +887,34 @@ public class ControlCommands {
         if (commandLine == null || commandLine.isBlank()) {
             return fail("commands.mockplayer.control.blank_message");
         }
-        findBot(name).actions().sendCommand(commandLine);
-        return contentSuccess("command", name, commandLine);
+        return runContent("command", name, b -> b.actions().sendCommand(commandLine), commandLine);
     }
 
     public static Component wakeUp(String name) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().wakeUp();
-        return success("wakeUp", name);
+        return run("wakeUp", name, b -> b.actions().wakeUp());
     }
 
     public static Component respawn(String name) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().respawn();
-        return success("respawn", name);
+        return run("respawn", name, b -> b.actions().respawn());
     }
 
     public static Component editBook(String name, int slot, String page, String title) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
         int index = Math.max(0, Math.min(8, slot - 1));
-        findBot(name).actions().editBook(index,
-                List.of(page == null ? "" : page),
-                title == null || title.isBlank() ? Optional.empty() : Optional.of(title));
-        return success("editBook", name, index + 1);
+        return run("editBook", name,
+                b -> b.actions().editBook(index,
+                        List.of(page == null ? "" : page),
+                        title == null || title.isBlank() ? Optional.empty() : Optional.of(title)),
+                index + 1);
     }
 
     public static Component editSign(String name, int x, int y, int z, boolean front, String[] lines) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
         String[] four = new String[4];
         for (int i = 0; i < 4; i++) {
             four[i] = lines != null && i < lines.length ? lines[i] : "";
         }
-        findBot(name).actions().editSign(new BlockPos(x, y, z), front, four);
-        return success("editSign", name, x + " " + y + " " + z);
+        return run("editSign", name,
+                b -> b.actions().editSign(new BlockPos(x, y, z), front, four),
+                x + " " + y + " " + z);
     }
 
     public static Component setBeacon(String name, String primary, String secondary) {
@@ -1032,17 +942,13 @@ public class ControlCommands {
         if (newName == null || newName.isBlank()) {
             return fail("commands.mockplayer.control.blank_message");
         }
-        findBot(name).actions().renameItem(newName);
-        return contentSuccess("renameItem", name, newName);
+        return runContent("renameItem", name, b -> b.actions().renameItem(newName), newName);
     }
 
     public static Component pickItemFromBlock(String name, int x, int y, int z, boolean includeData) {
-        Component blocked = requirePlaying(name);
-        if (blocked != null) {
-            return blocked;
-        }
-        findBot(name).actions().pickItemFromBlock(new BlockPos(x, y, z), includeData);
-        return success("pickItemFromBlock", name, x + " " + y + " " + z);
+        return run("pickItemFromBlock", name,
+                b -> b.actions().pickItemFromBlock(new BlockPos(x, y, z), includeData),
+                x + " " + y + " " + z);
     }
 
     // ===== Tab 补全 =====
