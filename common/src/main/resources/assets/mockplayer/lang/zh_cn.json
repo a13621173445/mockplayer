@@ -1,4 +1,5 @@
 {
+    "config.mockplayer.save_failed": "保存 mockplayer 配置失败，修改未生效",
     "commands.mockplayer.newplayer.not_in_server": "你不在服务器中，无法创建假人",
     "commands.mockplayer.newplayer.success": "已创建假人 %s",
     "commands.mockplayer.newplayer.fail": "假人 %s 已存在或名字无效",

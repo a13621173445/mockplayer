@@ -1,6 +1,8 @@
 package com.mockplayer.config;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,15 +74,26 @@ public final class MockplayerConfig {
 
     /** 把当前配置保存到配置文件（YACL 保存按钮调用）。 */
     public static void save() {
-        ModConfigIO.save(path(), MockplayerConfig.current);
-        fireReload();
+        save(MockplayerConfig.current);
     }
 
     /** 替换当前配置并保存（界面绑定/测试共用）。 */
     public static void save(ModConfig config) {
         MockplayerConfig.current = config;
         MockplayerConfig.loaded = true;
-        ModConfigIO.save(path(), config);
+        try {
+            ModConfigIO.save(path(), config);
+        } catch (Exception e) {
+            // 磁盘只读/路径非法等：不崩客户端，提示玩家配置未落盘（i18n）
+            LOGGER.warn("Failed to save mockplayer config to {}", path(), e);
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null) {
+                mc.player.sendSystemMessage(
+                        Component.translatable("config.mockplayer.save_failed")
+                                .withStyle(ChatFormatting.RED));
+            }
+            return;
+        }
         fireReload();
     }
 

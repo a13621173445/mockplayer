@@ -1,4 +1,5 @@
 {
+    "config.mockplayer.save_failed": "Failed to save mockplayer config; changes not persisted",
     "commands.mockplayer.newplayer.not_in_server": "Not in a server",
     "commands.mockplayer.newplayer.success": "Created fake player %s",
     "commands.mockplayer.newplayer.fail": "Fake player %s already exists or the name is invalid",
