@@ -904,6 +904,15 @@ public class ControlCommandsSuite extends TestSuite {
         ctx.check("memory event cache exact after damage",
                 () -> ctx.bot().memoryInfo().eventCacheBytes() > 0);
         ctx.run(() -> {
+            EventRecorder before = QueryCommands.getRecorder(ctx.botName());
+            com.mockplayer.config.ModConfig cfg = com.mockplayer.config.MockplayerConfig.get();
+            cfg.setEventCacheSize(30);
+            com.mockplayer.config.MockplayerConfig.save(cfg);
+            EventRecorder after = QueryCommands.getRecorder(ctx.botName());
+            ctx.checkNow("listen recorder rebuilt on config reload",
+                    after != null && after != before);
+        });
+        ctx.run(() -> {
             if (!off.get()) {
                 off.set(true);
                 String offText = QueryCommands.listen(ctx.botName(), false).getString();

@@ -41,7 +41,7 @@ public final class BotMemoryEstimator {
                 .sum();
 
         long events = 0;
-        EventRecorder recorder = QueryCommands.getRecorder(bot.getName());
+        EventRecorder recorder = EventRecorderRegistry.get(bot.getName());
         if (recorder != null) {
             events = recorder.getCacheBytes();
         }

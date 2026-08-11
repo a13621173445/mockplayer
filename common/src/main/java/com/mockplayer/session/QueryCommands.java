@@ -19,9 +19,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * /query 命令集：假人状态查询 + 事件监听（与 /control 动作命令完全分离）。
@@ -33,9 +31,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * - memory 的 JVM 堆是真实值，per-bot 是 Mod 侧估算（口径见 BotMemoryInfo）。
  */
 public class QueryCommands {
-
-    /** 当前开启的事件监听器（bot 名 → recorder），listen off 时摘除并清除。 */
-    private static final Map<String, EventRecorder> RECORDERS = new ConcurrentHashMap<>();
 
     private QueryCommands() {
     }
@@ -224,11 +219,11 @@ public class QueryCommands {
             return CommandSupport.fail("commands.mockplayer.query.not_playing", CommandSupport.playerName(name));
         }
         if (on) {
-            EventRecorder recorder = RECORDERS.computeIfAbsent(name, n -> new EventRecorder(name));
+            EventRecorder recorder = EventRecorderRegistry.computeIfAbsent(name, EventRecorder::new);
             impl.events().addListener(recorder);
             return CommandSupport.info("commands.mockplayer.query.listen.on", CommandSupport.playerName(name));
         }
-        EventRecorder recorder = RECORDERS.remove(name);
+        EventRecorder recorder = EventRecorderRegistry.remove(name);
         if (recorder != null) {
             impl.events().removeListener(recorder);
         }
@@ -236,7 +231,7 @@ public class QueryCommands {
     }
 
     public static Component events(String name, int count) {
-        EventRecorder recorder = RECORDERS.get(name);
+        EventRecorder recorder = EventRecorderRegistry.get(name);
         if (recorder == null) {
             return CommandSupport.info("commands.mockplayer.query.events.not_listening", CommandSupport.playerName(name));
         }
@@ -245,7 +240,7 @@ public class QueryCommands {
 
     /** 当前监听的 recorder（查询/测试用；未监听返回 null）。 */
     public static EventRecorder getRecorder(String name) {
-        return RECORDERS.get(name);
+        return EventRecorderRegistry.get(name);
     }
 
     /** 假人内存占用查询：JVM 堆真实值 + Mod 侧精确记账分解 + level 实体/区块数。 */
