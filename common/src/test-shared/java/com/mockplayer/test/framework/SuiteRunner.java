@@ -5,11 +5,13 @@ import com.mockplayer.api.MockplayerApi;
 import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.test.suites.BatchSuite;
+import com.mockplayer.test.suites.CombatStabSuite;
 import com.mockplayer.test.suites.ConfigSuite;
 import com.mockplayer.test.suites.CraftingSuite;
 import com.mockplayer.test.suites.DebugNameTagSuite;
 import com.mockplayer.test.suites.EnchantingSuite;
 import com.mockplayer.test.suites.FurnaceSuite;
+import com.mockplayer.test.suites.MerchantSuite;
 import com.mockplayer.test.suites.ApiSmokeSuite;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
@@ -50,7 +52,9 @@ public final class SuiteRunner {
             new DebugNameTagSuite(),
             new CraftingSuite(),
             new FurnaceSuite(),
-            new EnchantingSuite());
+            new EnchantingSuite(),
+            new MerchantSuite(),
+            new CombatStabSuite());
 
     private static Phase phase = Phase.WAIT_TITLE;
     private static volatile long phaseStart;
@@ -67,6 +71,7 @@ public final class SuiteRunner {
     private static int suiteCooldown;
     private static long suiteStart;
     private static volatile boolean finished;
+    private static boolean sanitized;
 
     private SuiteRunner() {
     }
@@ -192,11 +197,12 @@ public final class SuiteRunner {
             suiteCooldown--;
             return;
         }
-        if (caseIndex == 0) {
+        if (caseIndex == 0 && !sanitized) {
             // 套件开始：sanitize（删全部假人 + kill 非玩家实体 + 配置复位）
             sanitize(mc.getSingleplayerServer());
             records.clear();
             suite.before();
+            sanitized = true;
         }
         if (ctx == null) {
             var cs = suite.cases();
@@ -239,6 +245,7 @@ public final class SuiteRunner {
             suite = queue.get(suiteIndex);
             caseIndex = 0;
             ctx = null;
+            sanitized = false;
             records.clear();
             suiteCooldown = 40;
             suiteStart = System.currentTimeMillis();
