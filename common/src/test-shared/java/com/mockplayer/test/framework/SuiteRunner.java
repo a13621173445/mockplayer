@@ -6,6 +6,7 @@ import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.test.suites.BatchSuite;
 import com.mockplayer.test.suites.ConfigSuite;
+import com.mockplayer.test.suites.DebugNameTagSuite;
 import com.mockplayer.test.suites.ApiSmokeSuite;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
@@ -42,7 +43,8 @@ public final class SuiteRunner {
     private static final List<TestSuite> SUITES = List.of(
             new ApiSmokeSuite(),
             new ConfigSuite(),
-            new BatchSuite());
+            new BatchSuite(),
+            new DebugNameTagSuite());
 
     private static Phase phase = Phase.WAIT_TITLE;
     private static volatile long phaseStart;
