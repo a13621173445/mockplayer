@@ -63,6 +63,8 @@ public class FakeSession {
     private BotImpl bot;
     /** 死亡后是否自动重生（默认 true = 产品行为不变；测试可关闭以验证 respawn 命令） */
     private volatile boolean autoRespawn = true;
+    /** 是否持有假人配置阶段串行锁（handleLoginFinished 获取，进 play/断线释放）。 */
+    private volatile boolean fakeConfigLockHeld;
 
     public FakeSession(String name) {
         this.name = name;
@@ -147,6 +149,22 @@ public class FakeSession {
     private void notifyConnectFail(String key) {
         if (this.onConnectFail != null) {
             this.onConnectFail.accept(key);
+        }
+    }
+
+    /** 获取假人配置阶段串行锁（FakeLoginListener.handleLoginFinished 调用，幂等）。 */
+    public void acquireFakeConfigLock() {
+        if (!this.fakeConfigLockHeld) {
+            com.mockplayer.session.FakeConnectionRegistry.lockFakeConfig();
+            this.fakeConfigLockHeld = true;
+        }
+    }
+
+    /** 释放假人配置阶段串行锁（进 play/断线/tick 兜底调用；幂等）。 */
+    public void releaseFakeConfigLock() {
+        if (this.fakeConfigLockHeld) {
+            this.fakeConfigLockHeld = false;
+            com.mockplayer.session.FakeConnectionRegistry.unlockFakeConfig();
         }
     }
 
@@ -356,6 +374,12 @@ public class FakeSession {
             } catch (Exception e) {
                 LOG.error("[{}] 假人 listener tick 出错", name, e);
             }
+        }
+
+        // 配置锁兜底：已进 play 或连接已断但锁未释放时补释放（防异常路径泄漏死锁）
+        if (this.fakeConfigLockHeld
+                && (this.playListener != null || !this.isConnected())) {
+            this.releaseFakeConfigLock();
         }
 
         // 驱动假人 level 实体 tick（复用原版 ClientLevel.tickEntities）：

@@ -184,6 +184,8 @@ public class FakePlayListener extends ClientPacketListener {
         // 4. 存进 session（供 tick 驱动物理）
         this.session.setFakePlayer(this.fakePlayer);
         this.session.setPlayListener(this);
+        // 配置阶段结束：释放 Fabric 配置 addon 串行锁（下一个假人才能进配置）
+        this.session.releaseFakeConfigLock();
         // 重置登录后首包血量检查标志（服务端若认为假人已死，登录后第一个 setHealth 包血量 <= 0）
         this.checkDeathOnLogin = true;
         // 标记已连接（消除 connected 与 PLAYING 的跨线程竞态，见 FakeSession.doConnectTcp 注释）
