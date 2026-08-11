@@ -15,6 +15,7 @@ import com.mockplayer.test.suites.DebugNameTagSuite;
 import com.mockplayer.test.suites.EnchantingSuite;
 import com.mockplayer.test.suites.FurnaceSuite;
 import com.mockplayer.test.suites.MerchantSuite;
+import com.mockplayer.test.suites.UseItemsSuite;
 import com.mockplayer.test.suites.ApiSmokeSuite;
 import com.mockplayer.test.suites.ApiFullSuite;
 import net.minecraft.client.Minecraft;
@@ -62,7 +63,8 @@ public final class SuiteRunner {
             new CombatSprintSuite(),
             new ContainerSuite(),
             new ContainersAllSuite(),
-            new ApiFullSuite());
+            new ApiFullSuite(),
+            new UseItemsSuite());
 
     private static Phase phase = Phase.WAIT_TITLE;
     private static volatile long phaseStart;

@@ -59,7 +59,7 @@ public final class TestRunner {
 
     /** 全部套件（suite=all / IDE 默认入口时按序连续跑） */
     private static final List<String> ALL_SUITES = List.of(
-            "api-smoke", "use-items",
+            "api-smoke",
             "gui-actions", "listener-events", "control-commands",
             "bot-gui");
 
