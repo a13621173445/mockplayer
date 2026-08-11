@@ -160,19 +160,22 @@ public class FakePlayerState {
         return this.lastStopSound;
     }
 
-    /** 最近一次打开的容器（假人不弹主玩家 UI，记录类型/标题供 AI 感知） */
-    private volatile Object lastOpenScreen;
+    /** 最近一次打开的容器（假人不弹主玩家 UI，记录类型/标题供 AI 感知）。 */
+    private volatile OpenScreenInfo lastOpenScreen;
 
-    public void recordOpenScreen(Object menuType, int containerId, net.minecraft.network.chat.Component title) {
-        this.lastOpenScreen = new Object() {
-            @Override
-            public String toString() {
-                return "OpenScreen{" + menuType + ", id=" + containerId + ", title=" + title.getString() + "}";
-            }
-        };
+    /** 打开的容器界面快照（record，类型安全，替代旧匿名 Object）。 */
+    public record OpenScreenInfo(net.minecraft.world.inventory.MenuType<?> menuType,
+                                 int containerId,
+                                 net.minecraft.network.chat.Component title) {
     }
 
-    public Object getLastOpenScreen() {
+    public void recordOpenScreen(net.minecraft.world.inventory.MenuType<?> menuType,
+                                 int containerId,
+                                 net.minecraft.network.chat.Component title) {
+        this.lastOpenScreen = new OpenScreenInfo(menuType, containerId, title);
+    }
+
+    public OpenScreenInfo getLastOpenScreen() {
         return this.lastOpenScreen;
     }
 
