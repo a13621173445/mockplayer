@@ -45,10 +45,10 @@ import java.util.Optional;
  */
 public class BotControlScreen extends Screen {
 
-    private static final int LIST_X = 8;
-    private static final int LIST_W = 88;
+    static final int LIST_X = 8;
+    static final int LIST_W = 88;
     private static final int LIST_TITLE_Y = 26;
-    private static final int LIST_TOP = 34;
+    static final int LIST_TOP = 34;
     private static final int BOT_ROW_H = 15;
     /** 底部输入区上限：名字输入框一行 + 新建/删除一行（假人多时固定在此，列表区滚动）。 */
     private static final int BOT_INPUT_Y = BotGui.PANEL_H - 14 - 32;
@@ -138,7 +138,7 @@ public class BotControlScreen extends Screen {
     private Button newButton;
     private Button delButton;
     /** 左栏假人列表滚动偏移（0 = 显示第一个）。 */
-    private int botScrollOffset;
+    int botScrollOffset;
     /** 左栏滑条是否正在拖动。 */
     private boolean scrollbarDragging;
     /** 原版 HUD 血量渲染状态（闪烁动画，与 Hud 同逻辑）。 */
@@ -180,11 +180,11 @@ public class BotControlScreen extends Screen {
     private final List<Entity> entityTargets = new ArrayList<>();
     /** 长按重复按钮（turn/chunk 等调整型控件，tick 驱动重复触发）。 */
     private final List<RepeatHoldButton> repeatButtons = new ArrayList<>();
-    /** 动作 Tab 分区标题逻辑 y（init 响应式计算，drawActions 渲染用）。 */
-    private int lookTitleY;
-    private int moveTitleY;
-    private int interactTitleY;
-    private int systemTitleY;
+    /** 动作 Tab 分区标题逻辑 y（init 响应式计算，BotActionsPanel 渲染用）。 */
+    int lookTitleY;
+    int moveTitleY;
+    int interactTitleY;
+    int systemTitleY;
 
     public BotControlScreen() {
         super(Component.translatable("gui.mockplayer.title"));
@@ -665,7 +665,7 @@ public class BotControlScreen extends Screen {
     // ===== 数据/选择 =====
 
     /** 只列 CORE 假人（管理边界：GUI 与本 mod 命令一致，不管理 API/附属创建）。 */
-    private static List<Bot> coreBots() {
+    static List<Bot> coreBots() {
         return MockplayerApi.bots().getBots().stream()
                 .filter(b -> b.source() == BotSource.CORE)
                 .toList();
@@ -1364,32 +1364,13 @@ public class BotControlScreen extends Screen {
         graphics.fill(px, py + headerH - 1, px + pw, py + headerH, BotControlHud.withAlpha(PANEL_ACCENT, opacity));
         int dividerX = this.sx(LIST_X + LIST_W + 6);
         graphics.fill(dividerX, py + headerH, dividerX + 1, py + ph, BotControlHud.withAlpha(PANEL_DIVIDER, opacity));
-        this.drawBotScrollbar(graphics);
+        BotListPanel.render(this, graphics);
         // 控件全部按屏幕坐标直排（init 时 sx/sy/sw 换算好），命中与渲染同一坐标系
         super.extractRenderState(graphics, mouseX, mouseY, a);
         this.drawContent(graphics, mouseX, mouseY);
         if (this.tab == 1 && this.selected != null) {
             this.drawCarried(graphics, mouseX, mouseY);
         }
-    }
-
-    /** 左栏假人列表滑条（原版风格轨道 + 滑块；仅多假人时显示，可拖动/滚轮）。 */
-    private void drawBotScrollbar(GuiGraphicsExtractor graphics) {
-        List<Bot> bots = coreBots();
-        if (!shouldShowScrollbar(bots.size(), VISIBLE_BOT_SLOTS)) {
-            return;
-        }
-        int trackX = this.sx(LIST_X + LIST_W - 3);
-        int trackTop = this.sy(LIST_TOP);
-        int trackH = this.sh(LIST_BOTTOM - LIST_TOP);
-        int thumbH = Math.max(18, Math.round(trackH * VISIBLE_BOT_SLOTS / (float) bots.size()));
-        float ratio = (float) this.botScrollOffset / (bots.size() - VISIBLE_BOT_SLOTS);
-        int thumbY = trackTop + Math.round((trackH - thumbH) * ratio);
-        float opacity = MockplayerConfig.get().getGuiOpacity();
-        graphics.fill(trackX, trackTop, trackX + this.sw(2), trackTop + trackH,
-                BotControlHud.withAlpha(0x8F0E1420, opacity));
-        graphics.fill(trackX, thumbY, trackX + this.sw(2), thumbY + thumbH,
-                BotControlHud.withAlpha(0xBF7FB2FF, opacity));
     }
 
     /** 鼠标携带物品（拿起后跟随鼠标绘制，原版背包同款；数量用原版 itemDecorations）。 */
@@ -1447,21 +1428,8 @@ public class BotControlScreen extends Screen {
                     BotInventoryPanel.render(this, graphics, mouseX, mouseY);
                 }
             }
-            default -> this.drawActions(graphics);
+            default -> BotActionsPanel.render(this, graphics);
         }
-    }
-
-
-    /** 动作 Tab：分区标题（按钮本身由控件渲染）。 */
-    private void drawActions(GuiGraphicsExtractor graphics) {
-        graphics.text(this.font, Component.translatable("gui.mockplayer.section.look"),
-                this.sx(CONTENT_X), this.sy(this.lookTitleY), 0xFFA8C8FF);
-        graphics.text(this.font, Component.translatable("gui.mockplayer.section.move"),
-                this.sx(CONTENT_X), this.sy(this.moveTitleY), 0xFFA8C8FF);
-        graphics.text(this.font, Component.translatable("gui.mockplayer.section.interact"),
-                this.sx(CONTENT_X), this.sy(this.interactTitleY), 0xFFA8C8FF);
-        graphics.text(this.font, Component.translatable("gui.mockplayer.section.system"),
-                this.sx(CONTENT_X), this.sy(this.systemTitleY), 0xFFA8C8FF);
     }
 
 }
