@@ -24,12 +24,7 @@ public class MockplayerTestMod implements ClientModInitializer {
         if (suite == null || suite.isBlank()) {
             return;
         }
-        ClientTickEvents.END_CLIENT_TICK.register(mc -> {
-            if (!"all".equals(suite) && SuiteRunner.isMigrated(suite)) {
-                SuiteRunner.tick(mc, suite, new FabricTestPlatform());
-            } else {
-                TestRunner.tick(mc, suite);
-            }
-        });
+        ClientTickEvents.END_CLIENT_TICK.register(mc ->
+                SuiteRunner.tick(mc, suite, new FabricTestPlatform()));
     }
 }

@@ -5,6 +5,7 @@ import com.mockplayer.api.MockplayerApi;
 import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.MockplayerConfig;
 import com.mockplayer.test.suites.BatchSuite;
+import com.mockplayer.test.suites.BotGuiSuite;
 import com.mockplayer.test.suites.CombatStabSuite;
 import com.mockplayer.test.suites.CombatSprintSuite;
 import com.mockplayer.test.suites.ContainerSuite;
@@ -70,7 +71,8 @@ public final class SuiteRunner {
             new UseItemsSuite(),
             new GuiActionsSuite(),
             new ListenerEventsSuite(),
-            new ControlCommandsSuite());
+            new ControlCommandsSuite(),
+            new BotGuiSuite());
 
     private static Phase phase = Phase.WAIT_TITLE;
     private static volatile long phaseStart;
@@ -233,6 +235,12 @@ public final class SuiteRunner {
             tc.body().accept(ctx);
         }
         ctx.tick();
+        if (ctx.failed()) {
+            // 任一断言失败/等待超时：立即停止游戏，不再继续后续用例与套件
+            records.addAll(ctx.records());
+            finishAll();
+            return;
+        }
         if (ctx.isDone()) {
             records.addAll(ctx.records());
             ctx = null;

@@ -35,6 +35,7 @@ public final class TestContext {
     private int currentTicks;
     private boolean done;
     private boolean executing;
+    private boolean failed;
 
     /** 当前用例的假人（用例自己创建后赋值；每用例独立，禁止跨用例共享）。 */
     public Bot bot;
@@ -99,6 +100,11 @@ public final class TestContext {
         return done;
     }
 
+    /** 是否已有断言失败/等待超时（SuiteRunner 据此立即停止游戏）。 */
+    public boolean failed() {
+        return failed;
+    }
+
     /** 断言记录（结果写入用）。 */
     public List<Record> records() {
         return List.copyOf(records);
@@ -124,6 +130,9 @@ public final class TestContext {
                 boolean ok = current.cond().getAsBoolean();
                 String detail = ok ? "" : (current.detail() != null ? current.detail().get() : "");
                 records.add(new Record(current.name(), ok, detail));
+                if (!ok) {
+                    failed = true;
+                }
                 current = null;
             }
         }
@@ -138,6 +147,7 @@ public final class TestContext {
         } else if (++currentTicks > current.timeoutTicks()) {
             records.add(new Record("await: " + current.name(), false,
                     "timeout after " + current.timeoutTicks() + " ticks"));
+            failed = true;
             current = null;
             currentTicks = 0;
         }

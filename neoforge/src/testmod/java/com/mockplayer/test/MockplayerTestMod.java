@@ -35,12 +35,6 @@ public class MockplayerTestMod {
             return;
         }
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post e) ->
-                {
-                    if (!"all".equals(suite) && SuiteRunner.isMigrated(suite)) {
-                        SuiteRunner.tick(Minecraft.getInstance(), suite, new NeoForgeTestPlatform());
-                    } else {
-                        TestRunner.tick(Minecraft.getInstance(), suite);
-                    }
-                });
+                SuiteRunner.tick(Minecraft.getInstance(), suite, new NeoForgeTestPlatform()));
     }
 }

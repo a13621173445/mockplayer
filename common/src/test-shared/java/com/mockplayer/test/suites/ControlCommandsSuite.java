@@ -49,8 +49,7 @@ import java.util.stream.Collectors;
 public class ControlCommandsSuite extends TestSuite {
 
     private int botSeq;
-    private Bot sharedBot;
-    private boolean botCreated;
+    private String lastBotName;
 
     public ControlCommandsSuite() {
         super("control-commands");
@@ -66,31 +65,27 @@ public class ControlCommandsSuite extends TestSuite {
     }
 
     private void createBot(TestContext ctx) {
-        if (botCreated) {
-            ctx.bot = sharedBot;
-            ctx.botName = "tbot-ctl";
-            return;
-        }
-        botCreated = true;
-        MockplayerApi.bots().removeBot("tbot-ctl", "command");
-        com.mockplayer.session.FakePlayerCommands.newPlayer("tbot-ctl");
-        sharedBot = MockplayerApi.bots().getBot("tbot-ctl").orElse(null);
-        ctx.bot = sharedBot;
-        ctx.botName = "tbot-ctl";
+        // 每个用例强制独立 bot：唯一名（不同 UUID，不继承玩家数据），绝不复用
+        botSeq++;
+        String name = "tbot-ctl" + botSeq;
+        MockplayerApi.bots().removeBot(name, "command");
+        com.mockplayer.session.FakePlayerCommands.newPlayer(name);
+        ctx.bot = MockplayerApi.bots().getBot(name).orElse(null);
+        ctx.botName = name;
+        lastBotName = name;
     }
 
     @Override
     public void after() {
-        if (sharedBot != null) {
-            MockplayerApi.bots().removeBot("tbot-ctl", "command");
-            sharedBot = null;
-            botCreated = false;
+        if (lastBotName != null) {
+            MockplayerApi.bots().removeBot(lastBotName, "command");
+            lastBotName = null;
         }
     }
 
     private void treeCompletions(TestContext ctx) {
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> {
             var dispatcher = new com.mojang.brigadier.CommandDispatcher<CommandSourceStack>();
             registerAll(dispatcher);
@@ -198,7 +193,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicReference<double[]> base = new AtomicReference<>();
         AtomicReference<double[]> cur = new AtomicReference<>();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
@@ -235,7 +230,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicReference<Float> serverYRot = new AtomicReference<>(-999.0F);
         AtomicInteger stage = new AtomicInteger();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> {
             ControlCommands.look(ctx.botName, 30.0F, 20.0F);
             ctx.checkNow("look local yRot", Math.abs(ctx.bot.getLocalPlayer().getYRot() - 30.0F) < 1.0F);
@@ -293,8 +288,8 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean sustainedHit = new AtomicBoolean();
         AtomicReference<Vec3> huskEye = new AtomicReference<>();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> ctx.server().execute(() -> {
             ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
             if (sp != null) {
@@ -373,7 +368,7 @@ public class ControlCommandsSuite extends TestSuite {
     private void interactVillager(TestContext ctx) {
         AtomicBoolean open = new AtomicBoolean();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> ctx.server().execute(() -> {
             ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
             if (sp != null) {
@@ -383,7 +378,7 @@ public class ControlCommandsSuite extends TestSuite {
             }
         }));
         ctx.await("villager near", () -> ctx.bot.getEntitiesNear(16).stream()
-                .anyMatch(e -> e instanceof Villager), 300);
+                .anyMatch(e -> e instanceof Villager), 200);
         ctx.run(() -> ControlCommands.interact(ctx.botName, null));
         ctx.await("interact villager opened merchant", () -> {
             ctx.server().execute(() -> {
@@ -405,7 +400,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean swapped = new AtomicBoolean();
         AtomicReference<String> mainBefore = new AtomicReference<>("");
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> {
             mainBefore.set(Minecraft.getInstance().player.getMainHandItem().getHoverName().getString());
             ctx.server().execute(() -> {
@@ -416,7 +411,7 @@ public class ControlCommandsSuite extends TestSuite {
             });
         });
         ctx.await("hotbar synced", () -> ctx.bot.getLocalPlayer().getInventory()
-                .getItem(1).is(Items.OAK_PLANKS), 300);
+                .getItem(1).is(Items.OAK_PLANKS), 200);
         ctx.run(() -> ControlCommands.hotbar(ctx.botName, 2));
         ctx.await("hotbar switched bot slot", () -> {
             ctx.server().execute(() -> {
@@ -444,7 +439,7 @@ public class ControlCommandsSuite extends TestSuite {
                     "item replace entity " + ctx.botName + " weapon.offhand with minecraft:stick");
         }));
         ctx.await("swap items synced", () -> ctx.bot.getLocalPlayer().getOffhandItem()
-                .is(Items.STICK), 300);
+                .is(Items.STICK), 200);
         ctx.run(() -> ControlCommands.swapHands(ctx.botName));
         ctx.await("swapHands exchanged", () -> {
             ctx.server().execute(() -> {
@@ -463,7 +458,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean released = new AtomicBoolean();
         AtomicBoolean useChecked = new AtomicBoolean();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> {
             MockplayerApi.listen(new com.mockplayer.api.event.BotListener() {
                 @Override
@@ -488,7 +483,7 @@ public class ControlCommandsSuite extends TestSuite {
                     ctx.server().createCommandSourceStack(),
                     "item replace entity " + ctx.botName + " weapon.mainhand with minecraft:bread"));
         });
-        ctx.await("bread in hand", () -> ctx.bot.getLocalPlayer().getMainHandItem().is(Items.BREAD), 400);
+        ctx.await("bread in hand", () -> ctx.bot.getLocalPlayer().getMainHandItem().is(Items.BREAD), 300);
         ctx.run(() -> ctx.server().execute(() -> {
             ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
             if (sp != null) {
@@ -529,7 +524,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean woke = new AtomicBoolean();
         AtomicBoolean clicked = new AtomicBoolean();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> ctx.server().execute(() -> {
             ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
                     "time set 13000");
@@ -547,7 +542,7 @@ public class ControlCommandsSuite extends TestSuite {
         ctx.await("bed visible", () -> bed.get() != null
                 && ctx.bot.getBlockState(bed.get()).is(
                 net.minecraft.core.registries.BuiltInRegistries.BLOCK
-                        .get(net.minecraft.resources.Identifier.tryParse("minecraft:red_bed")).get().value()), 600);
+                        .get(net.minecraft.resources.Identifier.tryParse("minecraft:red_bed")).get().value()), 200);
         ctx.run(() -> {
             if (!clicked.get()) {
                 clicked.set(true);
@@ -581,8 +576,8 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicReference<Double> startX = new AtomicReference<>(0.0);
         int[] stable = {0};
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> ctx.server().execute(() -> {
             var p = ctx.bot.getLocalPlayer();
             var cartPos = p.blockPosition().offset(2, 0, 0);
@@ -607,7 +602,7 @@ public class ControlCommandsSuite extends TestSuite {
                 System.out.println("[cart-diag] server=" + serverCarts.get() + " client=" + client);
             }
             return client;
-        }, 600);
+        }, 200);
         ctx.run(() -> ControlCommands.mount(ctx.botName, "minecart", null));
         ctx.await("mount minecart stable", () -> {
             ctx.server().execute(() -> {
@@ -668,7 +663,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean placedAt = new AtomicBoolean();
         AtomicBoolean creativeOk = new AtomicBoolean();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> {
             if (!dirtGiven.get()) {
                 dirtGiven.set(true);
@@ -761,7 +756,7 @@ public class ControlCommandsSuite extends TestSuite {
                         && level.getBlockState(pos2.get()).is(Blocks.AIR));
             });
             return mined2.get();
-        }, 300);
+        }, 200);
         ctx.check("mineBlock broke dirt (survival)", mined2::get);
         ctx.check("mineBlock auto-face target", () -> facing(ctx.bot.getLocalPlayer(),
                 Vec3.atCenterOf(pos2.get()), 12.0F, 20.0F));
@@ -795,7 +790,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean closed = new AtomicBoolean();
         AtomicBoolean chestHasStone = new AtomicBoolean();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> ctx.server().execute(() -> {
             ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
                     "give " + ctx.botName + " minecraft:stone 3");
@@ -810,7 +805,7 @@ public class ControlCommandsSuite extends TestSuite {
                     Vec3.atCenterOf(chestPos.get()));
         }));
         ctx.await("chest visible", () -> chestPos.get() != null
-                && ctx.bot.getBlockState(chestPos.get()).is(Blocks.CHEST), 600);
+                && ctx.bot.getBlockState(chestPos.get()).is(Blocks.CHEST), 200);
         ctx.run(() -> {
             if (!clicked.get()) {
                 clicked.set(true);
@@ -829,7 +824,7 @@ public class ControlCommandsSuite extends TestSuite {
                             p.x + 1.0, p.y, p.z));
         }));
         ctx.await("villager near for query", () -> ctx.bot.getEntitiesNear(16).stream()
-                .anyMatch(e -> e instanceof Villager), 300);
+                .anyMatch(e -> e instanceof Villager), 200);
         ctx.run(() -> {
             if (!queried.get()) {
                 queried.set(true);
@@ -886,7 +881,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean hasDamage = new AtomicBoolean();
         AtomicBoolean off = new AtomicBoolean();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.check("memory event cache zero before listen",
                 () -> ctx.bot.memoryInfo().eventCacheBytes() == 0);
         ctx.run(() -> {
@@ -932,7 +927,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean respawned = new AtomicBoolean();
         AtomicBoolean alive = new AtomicBoolean();
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> {
             if (!killed.get()) {
                 killed.set(true);
@@ -969,7 +964,7 @@ public class ControlCommandsSuite extends TestSuite {
 
     private void errorsAndI18n(TestContext ctx) {
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> {
             String notFound = ControlCommands.attack("nobody-cc", null).getString();
             String invalidHand = ControlCommands.useItem(ctx.botName, "bad").getString();
@@ -1064,7 +1059,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicInteger stable = new AtomicInteger();
         int[] wait = {0};
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> {
             ctx.bot.getLocalPlayer().getInventory().setSelectedSlot(0);
             ctx.server().execute(() -> {
@@ -1100,7 +1095,7 @@ public class ControlCommandsSuite extends TestSuite {
             }
             stable.set(0);
             return false;
-        }, 300);
+        }, 200);
         ctx.run(() -> {
             if (stone1.get() != null) {
                 ControlCommands.mineBlock(ctx.botName,
@@ -1176,7 +1171,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicBoolean mainChunkSource = new AtomicBoolean();
         int[] wait = {0};
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> {
             if (!teleported.get()) {
                 teleported.set(true);
@@ -1238,7 +1233,7 @@ public class ControlCommandsSuite extends TestSuite {
                 return true;
             }
             return false;
-        }, 300);
+        }, 200);
         ctx.check("chunk server requestedViewDistance after set", () -> serverRequested.get() == 4,
                 () -> "server=" + serverRequested.get());
         ctx.check("chunk server tracking view after set", () -> serverView.get() == 4,
@@ -1300,7 +1295,7 @@ public class ControlCommandsSuite extends TestSuite {
         int[] stage = {0};
         int[] wait = {0};
         createBot(ctx);
-        SuitesSupport.awaitChunkLoaded(ctx, 600);
+        SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> {
             base.set(ctx.bot.getLocalPlayer().blockPosition());
             ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
@@ -1322,7 +1317,7 @@ public class ControlCommandsSuite extends TestSuite {
                 huskHp.set(h != null ? h.getHealth() : -1.0F);
             });
             return huskFound.get() && huskHp.get() == 20.0F;
-        }, 300);
+        }, 200);
         ctx.run(() -> {
             if (huskFound.get() && huskHp.get() >= 20.0F) {
                 ctx.bot.actions().lookAt(Vec3.atCenterOf(huskPos.get()));
@@ -1336,7 +1331,7 @@ public class ControlCommandsSuite extends TestSuite {
                 huskHp.set(h != null ? h.getHealth() : 20.0F);
             });
             return huskFound.get() && huskHp.get() < 20.0F;
-        }, 300);
+        }, 200);
         ctx.check("attackLook damages entity", () -> huskFound.get() && huskHp.get() < 20.0F);
         ctx.await("sustainedAttackLook continuous damage", () -> {
             if (huskFound.get() && huskHp.get() >= 13.0F) {
@@ -1352,7 +1347,7 @@ public class ControlCommandsSuite extends TestSuite {
                 return true;
             }
             return false;
-        }, 400);
+        }, 300);
         ctx.check("sustainedAttackLook continuous damage", sustainedHit::get);
         ctx.run(() -> ControlCommands.stopSustained(ctx.botName));
         ctx.run(() -> {
@@ -1370,7 +1365,7 @@ public class ControlCommandsSuite extends TestSuite {
             }
             chestOpen.set(ctx.bot.getContainer().isPresent());
             return chestOpen.get();
-        }, 300);
+        }, 200);
         ctx.check("useLook opens container", chestOpen::get);
         ctx.run(() -> ctx.bot.getContainer().ifPresent(c -> c.close()));
         ctx.run(() -> {
@@ -1389,7 +1384,7 @@ public class ControlCommandsSuite extends TestSuite {
             ctx.server().execute(() -> dirtBroken.set(ctx.server().getLevel(Level.OVERWORLD)
                     .getBlockState(dirtPos.get()).isAir()));
             return dirtBroken.get();
-        }, 400);
+        }, 300);
         ctx.check("sustainedAttackLook breaks block", dirtBroken::get);
         ctx.run(() -> ControlCommands.stopSustained(ctx.botName));
         ctx.run(() -> {
@@ -1417,7 +1412,7 @@ public class ControlCommandsSuite extends TestSuite {
             ctx.server().execute(() -> farStill.set(ctx.server().getLevel(Level.OVERWORLD)
                     .getBlockState(farPos.get()).is(Blocks.STONE)));
             return farStill.get();
-        }, 400);
+        }, 300);
         ctx.check("look out of reach no break", farStill::get);
         ctx.run(() -> ControlCommands.stopSustained(ctx.botName));
         ctx.run(() -> {
@@ -1449,7 +1444,7 @@ public class ControlCommandsSuite extends TestSuite {
                 return true;
             }
             return false;
-        }, 300);
+        }, 200);
         ctx.check("turn changes look target", () -> turnHp.get() >= 19.99F,
                 () -> "hp=" + turnHp.get());
         ctx.run(() -> {
@@ -1581,5 +1576,6 @@ public class ControlCommandsSuite extends TestSuite {
         return -1;
     }
 }
+
 
 
