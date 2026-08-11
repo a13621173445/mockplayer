@@ -53,7 +53,6 @@ public class MockplayerClient implements ClientModInitializer {
         KeyMappingHelper.registerKeyMapping(BotGui.KEY_BINDING);
         registerCommands();
         registerTick();
-        registerDisconnect();
     }
 
     private void registerCommands() {
@@ -189,10 +188,4 @@ public class MockplayerClient implements ClientModInitializer {
         });
     }
 
-    private void registerDisconnect() {
-        // 主玩家断线 → 假人清理已由 MixinMinecraft 在 Minecraft.disconnect 统一处理
-        // （能区分 transfer 空窗 vs 真退出，避免主玩家被传送到子服时误清假人）。
-        // 这里仅过滤假人自己的断开（假人各自独立清理，无需事件处理）。
-        // 保留监听以防 Mixin 未生效场景，但不再直接 clearAll。
-    }
 }

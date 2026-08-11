@@ -32,7 +32,6 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
@@ -59,7 +58,6 @@ public class MockplayerNeoForgeClient {
         // "This bus only accepts subclasses of IModBusEvent"。必须注册到 NeoForge.EVENT_BUS。
         NeoForge.EVENT_BUS.addListener(MockplayerNeoForgeClient::registerCommands);
         NeoForge.EVENT_BUS.addListener(MockplayerNeoForgeClient::onClientTick);
-        NeoForge.EVENT_BUS.addListener(MockplayerNeoForgeClient::onPlayerLogout);
         // 配置保存/重载后立即重建命令树（GUI 保存即热重载）
         MockplayerConfig.onReload(MockplayerNeoForgeClient::reloadCommands);
         // 原版按键注册（mod 总线 IModBusEvent）：GUI 快捷键走原版 KeyMapping 链路
@@ -206,9 +204,4 @@ public class MockplayerNeoForgeClient {
         event.register(BotGui.KEY_BINDING);
     }
 
-    private static void onPlayerLogout(ClientPlayerNetworkEvent.LoggingOut event) {
-        // 主玩家断线 → 假人清理已由 MixinMinecraft 在 Minecraft.disconnect 统一处理
-        // （能区分 transfer 空窗 vs 真退出，避免主玩家被传送到子服时误清假人）。
-        // 假人连接断开也触发本事件，但假人各自独立清理（cleanupOnKick），这里无需处理。
-    }
 }
