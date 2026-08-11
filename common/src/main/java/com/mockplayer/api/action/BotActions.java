@@ -13,6 +13,8 @@ import net.minecraft.world.phys.Vec3;
  * 在每个 tick 应用到假人输入（写 fakePlayer.input / 设置朝向），直到调用 {@link #stop()} 重置。
  * 一次性动作（attack/mine/use 等）立即执行一次（走 fakePlayer.gameMode，复用原版客户端逻辑）。
  *
+ * 风格规则（P3-4）：持续状态 setter/开关返回 this（可链式）；一次性动作统一 void。
+ *
  * 所有方法必须在主线程调用。
  */
 public interface BotActions {
@@ -346,22 +348,22 @@ public interface BotActions {
      *
      * @param message 消息内容；以 "/" 开头会自动走命令包路径
      */
-    BotActions chat(String message);
+    void chat(String message);
 
     /**
      * 执行服务端命令（等价 ChatScreen 输入 "/命令" 回车）。
      */
-    BotActions sendCommand(String command);
+    void sendCommand(String command);
 
     /**
      * 起床（等价 InBedChatScreen 起床按钮：发 STOP_SLEEPING）。
      */
-    BotActions wakeUp();
+    void wakeUp();
 
     /**
      * 重生（等价 DeathScreen 重生按钮：发 PERFORM_RESPAWN）。
      */
-    BotActions respawn();
+    void respawn();
 
     /**
      * 写书（等价 BookEditScreen 保存：发 EditBookPacket）。
@@ -370,7 +372,7 @@ public interface BotActions {
      * @param pages 各页内容
      * @param title 成书标题（写书并署名时为 present）
      */
-    BotActions editBook(int slot, java.util.List<String> pages, java.util.Optional<String> title);
+    void editBook(int slot, java.util.List<String> pages, java.util.Optional<String> title);
 
     /**
      * 写告示牌（等价 SignEditScreen 完成：发 SignUpdatePacket）。
@@ -379,21 +381,21 @@ public interface BotActions {
      * @param isFrontText 正面/背面文本
      * @param lines       4 行文本
      */
-    BotActions editSign(net.minecraft.core.BlockPos pos, boolean isFrontText, String[] lines);
+    void editSign(net.minecraft.core.BlockPos pos, boolean isFrontText, String[] lines);
 
     /**
      * 设置信标效果（等价 BeaconScreen 确认：发 SetBeaconPacket）。
      */
-    BotActions setBeacon(java.util.Optional<net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect>> primary,
+    void setBeacon(java.util.Optional<net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect>> primary,
             java.util.Optional<net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect>> secondary);
 
     /**
      * 铁砧改名（等价 AnvilScreen 输入名字：发 RenameItemPacket）。
      */
-    BotActions renameItem(String name);
+    void renameItem(String name);
 
     /**
      * 中键取方块到主手（等价创造模式 pick block：发 PickItemFromBlockPacket）。
      */
-    BotActions pickItemFromBlock(net.minecraft.core.BlockPos pos, boolean includeData);
+    void pickItemFromBlock(net.minecraft.core.BlockPos pos, boolean includeData);
 }

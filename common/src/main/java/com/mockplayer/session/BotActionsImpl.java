@@ -923,115 +923,107 @@ public class BotActionsImpl implements BotActions {
     }
 
     @Override
-    public BotActions chat(String message) {
+    public void chat(String message) {
         net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
         if (c == null) {
-            return this;
+            return;
         }
         // 原版等价过滤：StringUtil.filterText 移除 §(167) 等非法聊天字符，
         // 服务端 tryHandleChat 对含 § 的消息直接 disconnect(illegal_characters) 踢人。
         String filtered = net.minecraft.util.StringUtil.filterText(message);
         if (filtered.isEmpty()) {
-            return this;
+            return;
         }
         if (filtered.startsWith("/")) {
-            return this.sendCommand(filtered.substring(1));
+            this.sendCommand(filtered.substring(1));
+            return;
         }
         // offline 服务器不要求签名（signature=null）+ 空 lastSeen（原版无历史消息时等同）
         c.send(new net.minecraft.network.protocol.game.ServerboundChatPacket(
                 filtered, java.time.Instant.now(), net.minecraft.util.Crypt.SaltSupplier.getLong(), null,
                 new net.minecraft.network.chat.LastSeenMessages.Update(0, new java.util.BitSet(), (byte) 0)));
-        return this;
     }
 
     @Override
-    public BotActions sendCommand(String command) {
+    public void sendCommand(String command) {
         net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
         if (c == null) {
-            return this;
+            return;
         }
         // 命令通道同样走 tryHandleChat 校验：含 § 会被踢，先过滤
         String filtered = net.minecraft.util.StringUtil.filterText(command);
         if (filtered.isEmpty()) {
-            return this;
+            return;
         }
         c.send(new net.minecraft.network.protocol.game.ServerboundChatCommandPacket(filtered));
-        return this;
     }
 
     @Override
-    public BotActions wakeUp() {
+    public void wakeUp() {
         LocalPlayer player = this.bot.getLocalPlayer();
         net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
         if (player == null || c == null) {
-            return this;
+            return;
         }
         c.send(new net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket(
                 player, net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket.Action.STOP_SLEEPING));
-        return this;
     }
 
     @Override
-    public BotActions respawn() {
+    public void respawn() {
         net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
         if (c == null) {
-            return this;
+            return;
         }
         c.send(new net.minecraft.network.protocol.game.ServerboundClientCommandPacket(
                 net.minecraft.network.protocol.game.ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
-        return this;
     }
 
     @Override
-    public BotActions editBook(int slot, java.util.List<String> pages, java.util.Optional<String> title) {
+    public void editBook(int slot, java.util.List<String> pages, java.util.Optional<String> title) {
         net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
         if (c == null) {
-            return this;
+            return;
         }
         c.send(new net.minecraft.network.protocol.game.ServerboundEditBookPacket(slot, pages, title));
-        return this;
     }
 
     @Override
-    public BotActions editSign(net.minecraft.core.BlockPos pos, boolean isFrontText, String[] lines) {
+    public void editSign(net.minecraft.core.BlockPos pos, boolean isFrontText, String[] lines) {
         net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
         if (c == null || lines == null || lines.length < 4) {
-            return this;
+            return;
         }
         c.send(new net.minecraft.network.protocol.game.ServerboundSignUpdatePacket(
                 pos, isFrontText, lines[0], lines[1], lines[2], lines[3]));
-        return this;
     }
 
     @Override
-    public BotActions setBeacon(
+    public void setBeacon(
             java.util.Optional<net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect>> primary,
             java.util.Optional<net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect>> secondary) {
         net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
         if (c == null) {
-            return this;
+            return;
         }
         c.send(new net.minecraft.network.protocol.game.ServerboundSetBeaconPacket(primary, secondary));
-        return this;
     }
 
     @Override
-    public BotActions renameItem(String name) {
+    public void renameItem(String name) {
         net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
         if (c == null) {
-            return this;
+            return;
         }
         c.send(new net.minecraft.network.protocol.game.ServerboundRenameItemPacket(name));
-        return this;
     }
 
     @Override
-    public BotActions pickItemFromBlock(net.minecraft.core.BlockPos pos, boolean includeData) {
+    public void pickItemFromBlock(net.minecraft.core.BlockPos pos, boolean includeData) {
         net.minecraft.client.multiplayer.ClientPacketListener c = this.conn();
         if (c == null) {
-            return this;
+            return;
         }
         c.send(new net.minecraft.network.protocol.game.ServerboundPickItemFromBlockPacket(pos, includeData));
-        return this;
     }
 }
