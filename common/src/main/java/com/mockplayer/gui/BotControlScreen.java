@@ -1253,7 +1253,8 @@ public class BotControlScreen extends Screen {
         if (this.tab == 1) {
             Optional<BotContainer> container = this.selected.getContainer();
             if (container.isPresent()) {
-                int slot = this.containerSlotAt(mx, my, this.containerSlotCount(container.get()));
+                int slot = BotContainerPanel.containerSlotAt(this, mx, my,
+                        BotContainerPanel.containerSlotCount(this, container.get()));
                 if (slot >= 0) {
                     this.containerClick(container.get(), slot, info);
                     return true;
@@ -1328,44 +1329,6 @@ public class BotControlScreen extends Screen {
         } catch (Exception e) {
             this.setError(Component.translatable("gui.mockplayer.feedback.error", e.getMessage()));
         }
-    }
-
-    /** 容器菜单格子：容器槽（每行 9）+ 下方假人背包（菜单末尾 36 槽）。 */
-    private int containerSlotAt(double mx, double my, int containerSize) {
-        double bx = mx - CONTENT_X;
-        double by = my - CONTENT_Y - CONTAINER_HEADER_H;
-        int rows = (containerSize + 8) / 9;
-        int gx = (int) (bx / CELL);
-        int gy = (int) (by / CELL);
-        if (gx >= 0 && gx < 9 && gy >= 0 && gy < rows && gy * 9 + gx < containerSize) {
-            return gy * 9 + gx;
-        }
-        int playerY = rows * CELL + 8;
-        int py = (int) ((by - playerY) / CELL);
-        if (gx >= 0 && gx < 9 && py >= 0 && py < 4) {
-            int offset = containerSize + py * 9 + gx;
-            Optional<BotContainer> container = this.selected.getContainer();
-            if (container.isPresent() && offset < container.get().getSize()) {
-                return offset;
-            }
-        }
-        return -1;
-    }
-
-    /** 容器菜单的「容器槽」数量：slots 中连续的前段、container 不是假人背包的部分（箱子=27）。 */
-    private int containerSlotCount(BotContainer container) {
-        net.minecraft.client.player.LocalPlayer player = this.selected.getLocalPlayer();
-        if (player == null) {
-            return 0;
-        }
-        int count = 0;
-        for (net.minecraft.world.inventory.Slot slot : container.raw().slots) {
-            if (slot.container == player.getInventory()) {
-                break;
-            }
-            count++;
-        }
-        return count;
     }
 
     private void containerClick(BotContainer container, int slot, MouseButtonInfo info) {
@@ -1479,7 +1442,7 @@ public class BotControlScreen extends Screen {
             case 1 -> {
                 // 背包 Tab 合并容器：开容器自动切容器布局，关容器回 46 槽背包
                 if (this.selected.getContainer().isPresent()) {
-                    this.drawContainer(graphics, mouseX, mouseY);
+                    BotContainerPanel.render(this, graphics, mouseX, mouseY);
                 } else {
                     BotInventoryPanel.render(this, graphics, mouseX, mouseY);
                 }
@@ -1488,52 +1451,6 @@ public class BotControlScreen extends Screen {
         }
     }
 
-
-    private void drawContainer(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-        Optional<BotContainer> container = this.selected.getContainer();
-        if (container.isEmpty()) {
-            graphics.text(this.font, Component.translatable("gui.mockplayer.status.no_container"),
-                    this.sx(CONTENT_X), this.sy(CONTENT_Y), 0xAAAAAA);
-            return;
-        }
-        BotContainer c = container.get();
-        AbstractContainerMenu menu = c.raw();
-        int containerSize = this.containerSlotCount(c);
-        int rows = (containerSize + 8) / 9;
-        // 顶部标题行：X 按钮（控件）+ 容器标题
-        graphics.text(this.font, this.font.plainSubstrByWidth(
-                        c.getTitle().getString(), this.sw(CONTENT_W - 20)),
-                this.sx(CONTENT_X + 16), this.sy(CONTENT_Y + 2), 0xFFD7D7D7);
-        double mx = this.localX(mouseX);
-        double my = this.localY(mouseY);
-        int hovered = this.containerSlotAt(mx, my, containerSize);
-        for (int i = 0; i < containerSize; i++) {
-            BotInventoryPanel.drawSlot(this, graphics, CONTENT_X + (i % 9) * CELL,
-                    CONTENT_Y + CONTAINER_HEADER_H + (i / 9) * CELL,
-                    c.getSlot(i), hovered == i, menu.getSlot(i).getNoItemIcon());
-        }
-        // 假人背包部分（菜单末尾 36 槽）
-        int playerY = rows * CELL + 8;
-        int playerCount = Math.min(36, c.getSize() - containerSize);
-        for (int i = 0; i < playerCount; i++) {
-            int idx = containerSize + i;
-            if (idx < c.getSize()) {
-                BotInventoryPanel.drawSlot(this, graphics, CONTENT_X + (i % 9) * CELL,
-                        CONTENT_Y + CONTAINER_HEADER_H + playerY + (i / 9) * CELL,
-                        c.getSlot(idx), hovered == idx,
-                        menu.getSlot(idx).getNoItemIcon());
-            }
-        }
-        // 悬停物品信息（原版 tooltip + 数量行）
-        if (hovered >= 0) {
-            List<Component> lines = BotControlHud.containerSlotTooltip(c, hovered);
-            if (lines != null) {
-                graphics.setTooltipForNextFrame(this.font,
-                        lines.stream().map(Component::getVisualOrderText).toList(), mouseX, mouseY);
-                com.mockplayer.gui.BotGui.recordTooltip();
-            }
-        }
-    }
 
     /** 动作 Tab：分区标题（按钮本身由控件渲染）。 */
     private void drawActions(GuiGraphicsExtractor graphics) {
