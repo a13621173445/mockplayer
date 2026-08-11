@@ -14,7 +14,9 @@ configurations {
 sourceSets {
     testmod {
         compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        compileClasspath += project(':common').sourceSets.testShared.output
         runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+        runtimeClasspath += project(':common').sourceSets.testShared.output
     }
     noyacl {
         compileClasspath += sourceSets.main.compileClasspath + sourceSets.testmod.output
@@ -23,6 +25,17 @@ sourceSets {
         }
         runtimeClasspath += sourceSets.testmod.output
     }
+}
+
+// 新框架共享测试源码：testmod 编译/运行前先构建 common 的 testShared 输出
+// moddev 只把 testmod 自己的 classes 目录作为 mod 文件加载，common 测试类必须复制进来
+tasks.register('copyTestSharedClasses', Copy) {
+    from project(':common').sourceSets.testShared.output
+    into layout.buildDirectory.dir('classes/java/testmod')
+}
+tasks.named('testmodClasses').configure {
+    dependsOn tasks.named('copyTestSharedClasses')
+    dependsOn project(':common').tasks.named('testSharedClasses')
 }
 
 // neoforge loader 扫描 testmod 的 classes 目录作为独立 mod 文件，必须物理含 META-INF/neoforge.mods.toml

@@ -1,0 +1,266 @@
+package com.mockplayer.test.framework;
+
+import com.mockplayer.api.Bot;
+import com.mockplayer.api.MockplayerApi;
+import com.mockplayer.config.ModConfig;
+import com.mockplayer.config.MockplayerConfig;
+import com.mockplayer.test.suites.ApiSmokeSuite;
+import net.minecraft.client.Minecraft;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.MinecraftServer.MultiplayerScope;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.LevelSettings;
+import net.minecraft.world.level.WorldDataConfiguration;
+import net.minecraft.world.level.levelgen.WorldOptions;
+import net.minecraft.world.level.levelgen.presets.WorldPresets;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+/**
+ * 新框架执行器：主菜单 → 清旧档+建超平坦世界 → 单机就绪+开局域网+锁 gamerules →
+ * 套件循环（sanitize → before → 用例逐个 tick 驱动 → after）→ 结果 JSON → 自动退出。
+ *
+ * 隔离策略（不重建世界）：套件前删全部假人 + kill 非玩家实体 + 配置复位 + 40 tick 冷却；
+ * 用例间不共享任何字段（每个用例独立 TestContext）。
+ */
+public final class SuiteRunner {
+
+    private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }
+
+    private static final long TIMEOUT_MS = 180_000;
+
+    /** 已迁移套件注册表：迁移一个套件就加进这里，同时从旧 TestRunner 删除对应 case。 */
+    private static final List<TestSuite> SUITES = List.of(new ApiSmokeSuite());
+
+    private static Phase phase = Phase.WAIT_TITLE;
+    private static long phaseStart;
+    private static boolean worldCreationStarted;
+    private static boolean gamerulesApplied;
+    private static int testLanPort = -1;
+    private static TestPlatform platform;
+    private static List<TestSuite> queue;
+    private static int suiteIndex;
+    private static TestSuite suite;
+    private static int caseIndex;
+    private static TestContext ctx;
+    private static final List<TestContext.Record> records = new ArrayList<>();
+    private static int suiteCooldown;
+    private static long suiteStart;
+
+    private SuiteRunner() {
+    }
+
+    /** 该套件是否已迁移到新框架（双端入口路由用：迁移的走新框架，未迁移的走旧 TestRunner）。 */
+    public static boolean isMigrated(String suiteName) {
+        return SUITES.stream().anyMatch(s -> s.name().equals(suiteName));
+    }
+
+    /** 客户端 tick 入口：platform 由双端 testmod 传入，suiteName 与旧入口一致（all / 套件名）。 */
+    public static void tick(Minecraft mc, String suiteName, TestPlatform p) {
+        if (phase == Phase.DONE) {
+            return;
+        }
+        if (platform == null) {
+            platform = p;
+            queue = "all".equals(suiteName) ? new ArrayList<>(SUITES)
+                    : List.of(SUITES.stream().filter(s -> s.name().equals(suiteName)).findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("unknown suite: " + suiteName)));
+            suiteIndex = 0;
+            suite = queue.get(0);
+            suiteStart = System.currentTimeMillis();
+            phaseStart = suiteStart;
+        }
+        long now = System.currentTimeMillis();
+        advance(mc);
+        if (phase != Phase.DONE && now - phaseStart > TIMEOUT_MS) {
+            records.add(new TestContext.Record("timeout @" + phase, false, "global timeout"));
+            finishSuite();
+        }
+    }
+
+    private static void advance(Minecraft mc) {
+        switch (phase) {
+            case WAIT_TITLE -> {
+                if (mc.level != null) {
+                    phase = Phase.WAIT_WORLD;
+                    phaseStart = System.currentTimeMillis();
+                } else if (!worldCreationStarted) {
+                    worldCreationStarted = true;
+                    phaseStart = System.currentTimeMillis();
+                    deleteOldWorld(mc);
+                    createWorld(mc);
+                }
+            }
+            case WAIT_WORLD -> {
+                if (mc.getSingleplayerServer() != null && mc.level != null && mc.player != null) {
+                    MinecraftServer server = mc.getSingleplayerServer();
+                    if (!gamerulesApplied) {
+                        gamerulesApplied = true;
+                        applyTestGameRules(server);
+                    }
+                    if (!server.isPublished()) {
+                        if (testLanPort < 0) {
+                            testLanPort = findFreeTestPort();
+                        }
+                        server.publishServer(MultiplayerScope.LAN, GameType.SURVIVAL, false, testLanPort);
+                    }
+                    if (server.isPublished() && server.getPort() > 0) {
+                        phase = Phase.RUN;
+                        phaseStart = System.currentTimeMillis();
+                    }
+                }
+            }
+            case RUN -> run(mc);
+        }
+    }
+
+    private static void run(Minecraft mc) {
+        if (suiteCooldown > 0) {
+            suiteCooldown--;
+            return;
+        }
+        if (caseIndex == 0) {
+            // 套件开始：sanitize（删全部假人 + kill 非玩家实体 + 配置复位）
+            sanitize(mc.getSingleplayerServer());
+            records.clear();
+            suite.before();
+        }
+        if (ctx == null) {
+            var cs = suite.cases();
+            if (caseIndex >= cs.size()) {
+                finishSuite();
+                return;
+            }
+            var tc = cs.get(caseIndex);
+            ctx = new TestContext();
+            System.out.println("[mocktest] case " + suite.name() + "/" + tc.name());
+            tc.body().accept(ctx);
+        }
+        ctx.tick();
+        if (ctx.isDone()) {
+            records.addAll(ctx.records());
+            ctx = null;
+            caseIndex++;
+        }
+    }
+
+    private static void sanitize(MinecraftServer server) {
+        for (Bot b : MockplayerApi.bots().getBots()) {
+            MockplayerApi.bots().removeBot(b.getName(), "command");
+        }
+        MockplayerConfig.save(new ModConfig());
+        server.execute(() -> server.getCommands().performPrefixedCommand(
+                server.createCommandSourceStack(), "kill @e[type=!minecraft:player]"));
+    }
+
+    private static void finishSuite() {
+        suite.after();
+        long elapsed = System.currentTimeMillis() - suiteStart;
+        writeResultJson(elapsed);
+        boolean passed = records.stream().allMatch(TestContext.Record::passed);
+        System.out.println("[mocktest] suite " + suite.name() + " " + (passed ? "PASSED" : "FAILED")
+                + " (" + records.size() + " checks) in " + elapsed + "ms");
+        suiteIndex++;
+        if (suiteIndex < queue.size()) {
+            suite = queue.get(suiteIndex);
+            caseIndex = 0;
+            ctx = null;
+            records.clear();
+            suiteCooldown = 40;
+            suiteStart = System.currentTimeMillis();
+            phaseStart = suiteStart;
+        } else {
+            phase = Phase.DONE;
+            Minecraft.getInstance().stop();
+        }
+    }
+
+    /** 写当前套件结果 JSON（test-results/<suite>.json，格式兼容旧消费方）。 */
+    private static void writeResultJson(long durationMs) {
+        boolean passed = records.stream().allMatch(TestContext.Record::passed);
+        StringBuilder json = new StringBuilder();
+        json.append("{\n  \"suite\": \"").append(suite.name()).append("\",\n");
+        json.append("  \"passed\": ").append(passed).append(",\n");
+        json.append("  \"duration_ms\": ").append(durationMs).append(",\n");
+        json.append("  \"results\": [\n");
+        for (int i = 0; i < records.size(); i++) {
+            TestContext.Record r = records.get(i);
+            json.append("    {\"name\": \"").append(r.name().replace("\"", "\\\""))
+                    .append("\", \"status\": \"").append(r.passed() ? "PASS" : "FAIL")
+                    .append("\", \"detail\": \"").append(r.detail().replace("\"", "\\\""))
+                    .append("\"}");
+            if (i < records.size() - 1) {
+                json.append(",");
+            }
+            json.append("\n");
+        }
+        json.append("  ]\n}\n");
+        try {
+            File dir = new File("test-results");
+            if (!dir.exists() && !dir.mkdirs()) {
+                System.out.println("[mocktest] cannot create test-results dir");
+            }
+            File out = new File(dir, suite.name() + ".json");
+            try (FileWriter w = new FileWriter(out, StandardCharsets.UTF_8)) {
+                w.write(json.toString());
+            }
+            System.out.println("[mocktest] wrote " + out.getAbsolutePath());
+        } catch (Exception e) {
+            System.out.println("[mocktest] failed to write result: " + e);
+        }
+    }
+
+    private static int findFreeTestPort() {
+        try (java.net.ServerSocket socket = new java.net.ServerSocket(0)) {
+            return socket.getLocalPort();
+        } catch (java.io.IOException e) {
+            return 25566;
+        }
+    }
+
+    private static void deleteOldWorld(Minecraft mc) {
+        try {
+            var source = mc.getLevelSource();
+            if (source.levelExists("mocktest")) {
+                Path levelPath = source.getLevelPath("mocktest");
+                System.out.println("[mocktest] deleting old world: " + levelPath);
+                try (var walk = Files.walk(levelPath)) {
+                    walk.sorted(Comparator.reverseOrder()).forEach(p -> {
+                        try {
+                            Files.delete(p);
+                        } catch (java.io.IOException ignored) {
+                        }
+                    });
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("[mocktest] failed to delete old world: " + e);
+        }
+    }
+
+    private static void applyTestGameRules(MinecraftServer server) {
+        var rules = server.getGameRules();
+        rules.set(net.minecraft.world.level.gamerules.GameRules.ADVANCE_TIME, false, server);
+        rules.set(net.minecraft.world.level.gamerules.GameRules.ADVANCE_WEATHER, false, server);
+        rules.set(net.minecraft.world.level.gamerules.GameRules.SPAWN_MOBS, false, server);
+        System.out.println("[mocktest] test gamerules applied (advance_time/advance_weather/spawn_mobs = false)");
+    }
+
+    private static void createWorld(Minecraft mc) {
+        System.out.println("[mocktest] creating singleplayer world 'mocktest' (flat)");
+        mc.createWorldOpenFlows().createFreshLevel(
+                "mocktest",
+                new LevelSettings("mocktest", GameType.SURVIVAL,
+                        LevelSettings.DifficultySettings.DEFAULT, true, WorldDataConfiguration.DEFAULT),
+                new WorldOptions(0L, false, false),
+                WorldPresets::createTestWorldDimensions,
+                null);
+    }
+}

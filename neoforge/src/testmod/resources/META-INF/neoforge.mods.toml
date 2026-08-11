@@ -12,4 +12,4 @@ environment="CLIENT"
 [[dependencies.mockplayer_test]]
 modId="mockplayer"
 type="required"
-versionRange="[1.0,)"
+versionRange="[0.1,)"

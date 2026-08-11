@@ -1,5 +1,6 @@
 package com.mockplayer.test;
 
+import com.mockplayer.test.framework.SuiteRunner;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
@@ -34,6 +35,12 @@ public class MockplayerTestMod {
             return;
         }
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post e) ->
-                TestRunner.tick(Minecraft.getInstance(), suite));
+                {
+                    if (!"all".equals(suite) && SuiteRunner.isMigrated(suite)) {
+                        SuiteRunner.tick(Minecraft.getInstance(), suite, new NeoForgeTestPlatform());
+                    } else {
+                        TestRunner.tick(Minecraft.getInstance(), suite);
+                    }
+                });
     }
 }

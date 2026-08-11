@@ -1,5 +1,6 @@
 package com.mockplayer.test;
 
+import com.mockplayer.test.framework.SuiteRunner;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
@@ -23,6 +24,12 @@ public class MockplayerTestMod implements ClientModInitializer {
         if (suite == null || suite.isBlank()) {
             return;
         }
-        ClientTickEvents.END_CLIENT_TICK.register(mc -> TestRunner.tick(mc, suite));
+        ClientTickEvents.END_CLIENT_TICK.register(mc -> {
+            if (!"all".equals(suite) && SuiteRunner.isMigrated(suite)) {
+                SuiteRunner.tick(mc, suite, new FabricTestPlatform());
+            } else {
+                TestRunner.tick(mc, suite);
+            }
+        });
     }
 }

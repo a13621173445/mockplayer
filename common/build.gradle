@@ -27,6 +27,16 @@ dependencies {
 
 }
 
+// 双端共享的游戏内测试源码（新框架）：fabric/neoforge testmod 各自挂接本源集，
+// 测试逻辑只写一份；平台差异通过 TestPlatform SPI 注入
+sourceSets {
+    testShared {
+        java.srcDir 'src/test-shared/java'
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+}
+
 configurations {
     commonJava {
         canBeResolved = false
