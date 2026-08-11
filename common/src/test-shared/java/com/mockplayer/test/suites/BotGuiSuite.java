@@ -73,8 +73,8 @@ public class BotGuiSuite extends TestSuite {
         String name = "tbot-gui" + botSeq;
         MockplayerApi.bots().removeBot(name, "command");
         com.mockplayer.session.FakePlayerCommands.newPlayer(name);
-        ctx.bot = MockplayerApi.bots().getBot(name).orElse(null);
-        ctx.botName = name;
+        ctx.setBot(MockplayerApi.bots().getBot(name).orElse(null));
+        ctx.setBotName(name);
         lastBotName = name;
     }
 
@@ -104,14 +104,14 @@ public class BotGuiSuite extends TestSuite {
 
     private void openAndProbe(TestContext ctx) {
         createBot(ctx);
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 200);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
         SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> {
             Minecraft mc = Minecraft.getInstance();
             ctx.checkNow("bot gui opened", BotGui.open(mc));
             ctx.checkNow("selected bot label",
-                    BotControlScreen.selectedText(ctx.bot).getString().contains(ctx.botName));
+                    BotControlScreen.selectedText(ctx.bot()).getString().contains(ctx.botName()));
             int pw = mc.getWindow().getGuiScaledWidth();
             int ph = mc.getWindow().getGuiScaledHeight();
             int px = BotGui.panelX(pw, ph);
@@ -142,11 +142,11 @@ public class BotGuiSuite extends TestSuite {
         ctx.check("probe tick ran", () -> BotGui.probeTickCount() > 0);
         ctx.check("bot list shows bot", () -> bgScreen() != null && bgScreen().children().stream()
                 .anyMatch(child -> child instanceof Button b
-                        && b.getMessage().getString().contains(ctx.botName)));
+                        && b.getMessage().getString().contains(ctx.botName())));
         ctx.check("probe title rendered", () -> BotGui.probeLastTitle().contains(
                 Component.translatable("gui.mockplayer.title").getString()));
         ctx.check("status lines non-empty", () -> {
-            List<Component> lines = BotControlScreen.statusLines(ctx.bot);
+            List<Component> lines = BotControlScreen.statusLines(ctx.bot());
             return lines.stream().anyMatch(l -> l.getString().contains("❤")
                     || l.getString().contains("🍗"));
         });
@@ -171,8 +171,8 @@ public class BotGuiSuite extends TestSuite {
 
     private void actionMove(TestContext ctx) {
         createBot(ctx);
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 200);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
         SuitesSupport.awaitChunkLoaded(ctx, 200);
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         AtomicReference<double[]> base = new AtomicReference<>();
@@ -188,7 +188,7 @@ public class BotGuiSuite extends TestSuite {
                     + fwd.getX() + "," + fwd.getY());
             bgClick(fwd);
             ctx.server().execute(() -> {
-                ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
+                ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName());
                 if (sp != null) {
                     base.set(new double[]{sp.getX(), sp.getZ()});
                 }
@@ -196,7 +196,7 @@ public class BotGuiSuite extends TestSuite {
         });
         ctx.await("gui move forward server moved", () -> {
             ctx.server().execute(() -> {
-                ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
+                ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName());
                 if (sp != null) {
                     cur.set(new double[]{sp.getX(), sp.getZ()});
                 }
@@ -223,20 +223,20 @@ public class BotGuiSuite extends TestSuite {
 
     private void hotbar(TestContext ctx) {
         createBot(ctx);
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 200);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
         SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> ctx.server().execute(() -> {
             var cmds = ctx.server().getCommands();
             var src = ctx.server().createCommandSourceStack();
-            cmds.performPrefixedCommand(src, "item replace entity " + ctx.botName
+            cmds.performPrefixedCommand(src, "item replace entity " + ctx.botName()
                     + " hotbar.0 with minecraft:stone");
-            cmds.performPrefixedCommand(src, "item replace entity " + ctx.botName
+            cmds.performPrefixedCommand(src, "item replace entity " + ctx.botName()
                     + " hotbar.1 with minecraft:stick");
-            cmds.performPrefixedCommand(src, "item replace entity " + ctx.botName
+            cmds.performPrefixedCommand(src, "item replace entity " + ctx.botName()
                     + " hotbar.2 with minecraft:bread");
         }));
-        ctx.await("hotbar synced", () -> ctx.bot.getLocalPlayer().getInventory()
+        ctx.await("hotbar synced", () -> ctx.bot().getLocalPlayer().getInventory()
                 .getItem(1).is(Items.STICK), 200);
         ensureTab(ctx, "gui.mockplayer.tab.inventory");
         ctx.run(() -> {
@@ -248,7 +248,7 @@ public class BotGuiSuite extends TestSuite {
         ctx.await("gui hotbar switch server", () -> {
             AtomicBoolean ok = new AtomicBoolean();
             ctx.server().execute(() -> {
-                ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
+                ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName());
                 ok.set(sp != null && sp.getInventory().getSelectedSlot() == 1);
             });
             if (!ok.get()) {
@@ -261,13 +261,13 @@ public class BotGuiSuite extends TestSuite {
             return ok.get();
         }, 120);
         ctx.check("hotbar slot click not pickup", () ->
-                ctx.bot.getLocalPlayer().containerMenu.getCarried().isEmpty());
+                ctx.bot().getLocalPlayer().containerMenu.getCarried().isEmpty());
     }
 
     private void attackLook(TestContext ctx) {
         createBot(ctx);
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 200);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
         SuitesSupport.awaitChunkLoaded(ctx, 200);
         AtomicReference<BlockPos> huskPos = new AtomicReference<>();
         AtomicReference<Float> huskHp = new AtomicReference<>(-1.0F);
@@ -275,7 +275,7 @@ public class BotGuiSuite extends TestSuite {
         ctx.run(() -> ctx.server().execute(() -> {
             if (!summoned.get()) {
                 summoned.set(true);
-                huskPos.set(ctx.bot.getLocalPlayer().blockPosition().offset(3, 0, 0));
+                huskPos.set(ctx.bot().getLocalPlayer().blockPosition().offset(3, 0, 0));
                 BlockPos hp = huskPos.get();
                 ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
                         String.format("summon minecraft:husk %.2f %.2f %.2f {NoAI:1b}",
@@ -293,7 +293,7 @@ public class BotGuiSuite extends TestSuite {
         ctx.await("actions tab for attack", () -> ++wait[0] >= 5, 20);
         ctx.await("attackLook damages entity", () -> {
             ctx.server().execute(() -> {
-                var sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
+                var sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName());
                 if (sp != null) {
                     var level = ctx.server().getLevel(Level.OVERWORLD);
                     var husk = level != null ? level.getEntitiesOfClass(Zombie.class,
@@ -304,10 +304,10 @@ public class BotGuiSuite extends TestSuite {
                     huskHp.set(husk != null ? husk.getHealth() : -1.0F);
                 }
             });
-            boolean huskVisible = ctx.bot.getEntitiesNear(16).stream()
+            boolean huskVisible = ctx.bot().getEntitiesNear(16).stream()
                     .anyMatch(e -> e instanceof Zombie);
             if (huskHp.get() >= 20.0F && huskVisible) {
-                ctx.bot.actions().lookAt(Vec3.atCenterOf(huskPos.get()));
+                ctx.bot().actions().lookAt(Vec3.atCenterOf(huskPos.get()));
                 BotControlScreen screen = bgScreen();
                 Button atk = bgFindButton(screen, "gui.mockplayer.action.attack_look");
                 if (atk != null) {
@@ -326,20 +326,20 @@ public class BotGuiSuite extends TestSuite {
 
     private void useLook(TestContext ctx) {
         createBot(ctx);
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 200);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
         SuitesSupport.awaitChunkLoaded(ctx, 200);
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         AtomicReference<BlockPos> chestPos = new AtomicReference<>();
         ctx.run(() -> {
-            chestPos.set(ctx.bot.getLocalPlayer().blockPosition().offset(2, 0, 0));
+            chestPos.set(ctx.bot().getLocalPlayer().blockPosition().offset(2, 0, 0));
             ctx.server().execute(() -> ctx.server().getLevel(Level.OVERWORLD)
                     .setBlock(chestPos.get(), Blocks.CHEST.defaultBlockState(), 3));
         });
         SuitesSupport.awaitBlockVisible(ctx, chestPos::get, Blocks.CHEST, 200);
         ctx.await("useLook opens container", () -> {
-            if (ctx.bot.getContainer().isEmpty()) {
-                ctx.bot.actions().lookAt(Vec3.atCenterOf(chestPos.get()));
+            if (ctx.bot().getContainer().isEmpty()) {
+                ctx.bot().actions().lookAt(Vec3.atCenterOf(chestPos.get()));
                 BotControlScreen screen = bgScreen();
                 Button use = bgFindButton(screen, "gui.mockplayer.action.use_look");
                 if (use != null) {
@@ -347,17 +347,17 @@ public class BotGuiSuite extends TestSuite {
                     bgRelease(use);
                 }
             }
-            return ctx.bot.getContainer().isPresent();
+            return ctx.bot().getContainer().isPresent();
         }, 200);
-        ctx.check("useLook opens container", () -> ctx.bot.getContainer().isPresent());
-        ctx.run(() -> ctx.bot.getContainer().ifPresent(c -> c.close()));
-        ctx.await("container closed", () -> ctx.bot.getContainer().isEmpty(), 100);
+        ctx.check("useLook opens container", () -> ctx.bot().getContainer().isPresent());
+        ctx.run(() -> ctx.bot().getContainer().ifPresent(c -> c.close()));
+        ctx.await("container closed", () -> ctx.bot().getContainer().isEmpty(), 100);
     }
 
     private void chunkButtons(TestContext ctx) {
         createBot(ctx);
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 200);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
         SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> {
             BotControlScreen screen = bgScreen();
@@ -366,8 +366,8 @@ public class BotGuiSuite extends TestSuite {
                 bgClick(plus);
             }
         });
-        ctx.await("chunk +1 applied", () -> ctx.bot.getChunkRadius() == 3, 100);
-        ctx.check("chunk +1 applied", () -> ctx.bot.getChunkRadius() == 3);
+        ctx.await("chunk +1 applied", () -> ctx.bot().getChunkRadius() == 3, 100);
+        ctx.check("chunk +1 applied", () -> ctx.bot().getChunkRadius() == 3);
         ctx.run(() -> {
             BotControlScreen screen = bgScreen();
             Button minus = bgFindButton(screen, "gui.mockplayer.action.chunk_minus");
@@ -375,14 +375,14 @@ public class BotGuiSuite extends TestSuite {
                 bgClick(minus);
             }
         });
-        ctx.await("chunk -1 applied", () -> ctx.bot.getChunkRadius() == 2, 100);
-        ctx.check("chunk -1 applied", () -> ctx.bot.getChunkRadius() == 2);
+        ctx.await("chunk -1 applied", () -> ctx.bot().getChunkRadius() == 2, 100);
+        ctx.check("chunk -1 applied", () -> ctx.bot().getChunkRadius() == 2);
     }
 
     private void chat(TestContext ctx) {
         createBot(ctx);
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 200);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
         SuitesSupport.awaitChunkLoaded(ctx, 200);
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         AtomicReference<String> msg = new AtomicReference<>("");
@@ -413,21 +413,21 @@ public class BotGuiSuite extends TestSuite {
 
     private void autoRespawn(TestContext ctx) {
         createBot(ctx);
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 200);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
         SuitesSupport.awaitChunkLoaded(ctx, 200);
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         AtomicBoolean before = new AtomicBoolean();
         ctx.run(() -> {
             BotControlScreen screen = bgScreen();
-            before.set(ctx.bot.isAutoRespawn());
+            before.set(ctx.bot().isAutoRespawn());
             Button toggle = bgFindButton(screen, "gui.mockplayer.action.auto_respawn");
             if (toggle != null) {
                 bgClick(toggle);
             }
         });
-        ctx.await("auto respawn toggled", () -> ctx.bot.isAutoRespawn() != before.get(), 50);
-        ctx.check("auto respawn toggled", () -> ctx.bot.isAutoRespawn() != before.get());
+        ctx.await("auto respawn toggled", () -> ctx.bot().isAutoRespawn() != before.get(), 50);
+        ctx.check("auto respawn toggled", () -> ctx.bot().isAutoRespawn() != before.get());
         ctx.run(() -> {
             BotControlScreen screen = bgScreen();
             Button toggle = bgFindButton(screen, "gui.mockplayer.action.auto_respawn");
@@ -435,8 +435,8 @@ public class BotGuiSuite extends TestSuite {
                 bgClick(toggle);
             }
         });
-        ctx.await("auto respawn restored", () -> ctx.bot.isAutoRespawn() == before.get(), 50);
-        ctx.check("auto respawn restored", () -> ctx.bot.isAutoRespawn() == before.get());
+        ctx.await("auto respawn restored", () -> ctx.bot().isAutoRespawn() == before.get(), 50);
+        ctx.check("auto respawn restored", () -> ctx.bot().isAutoRespawn() == before.get());
     }
 
     private void keyMapping(TestContext ctx) {
@@ -459,13 +459,13 @@ public class BotGuiSuite extends TestSuite {
 
     private void holdRepeat(TestContext ctx) {
         createBot(ctx);
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 200);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
         SuitesSupport.awaitChunkLoaded(ctx, 200);
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         float[] startYaw = {0.0F};
         ctx.run(() -> {
-            startYaw[0] = ctx.bot.getLocalPlayer().getYRot();
+            startYaw[0] = ctx.bot().getLocalPlayer().getYRot();
             BotControlScreen screen = bgScreen();
             Button right = bgFindButton(screen, "gui.mockplayer.action.turn_right");
             if (right != null) {
@@ -473,7 +473,7 @@ public class BotGuiSuite extends TestSuite {
             }
         });
         ctx.await("hold turn_right rotates", () -> {
-            float delta = Math.abs((((ctx.bot.getLocalPlayer().getYRot() - startYaw[0]) % 360) + 360) % 360);
+            float delta = Math.abs((((ctx.bot().getLocalPlayer().getYRot() - startYaw[0]) % 360) + 360) % 360);
             return delta >= 30.0F;
         }, 200);
         ctx.run(() -> {
@@ -484,42 +484,42 @@ public class BotGuiSuite extends TestSuite {
             }
         });
         ctx.check("hold turn_right rotates >=30", () -> {
-            float delta = Math.abs((((ctx.bot.getLocalPlayer().getYRot() - startYaw[0]) % 360) + 360) % 360);
+            float delta = Math.abs((((ctx.bot().getLocalPlayer().getYRot() - startYaw[0]) % 360) + 360) % 360);
             return delta >= 30.0F;
         });
     }
 
     private void xpBar(TestContext ctx) {
         createBot(ctx);
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 200);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
         SuitesSupport.awaitChunkLoaded(ctx, 200);
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         ctx.run(() -> ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
                 ctx.server().createCommandSourceStack(),
-                "experience set " + ctx.botName + " 10 levels")));
-        ctx.await("xp synced", () -> ctx.bot.getLocalPlayer().experienceLevel >= 10, 200);
-        ctx.check("xp synced", () -> ctx.bot.getLocalPlayer().experienceLevel >= 10);
+                "experience set " + ctx.botName() + " 10 levels")));
+        ctx.await("xp synced", () -> ctx.bot().getLocalPlayer().experienceLevel >= 10, 200);
+        ctx.check("xp synced", () -> ctx.bot().getLocalPlayer().experienceLevel >= 10);
         ctx.await("xp bar probe rendered", () -> BotGui.probeXpBarCount() > 0, 100);
         ctx.check("xp bar probe rendered", () -> BotGui.probeXpBarCount() > 0);
     }
 
     private void shieldHold(TestContext ctx) {
         createBot(ctx);
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 200);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
         SuitesSupport.awaitChunkLoaded(ctx, 200);
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         AtomicBoolean using = new AtomicBoolean();
         ctx.run(() -> ctx.server().execute(() -> {
             var cmds = ctx.server().getCommands();
             var src = ctx.server().createCommandSourceStack();
-            cmds.performPrefixedCommand(src, "item replace entity " + ctx.botName
+            cmds.performPrefixedCommand(src, "item replace entity " + ctx.botName()
                     + " weapon.mainhand with minecraft:iron_sword");
-            cmds.performPrefixedCommand(src, "item replace entity " + ctx.botName
+            cmds.performPrefixedCommand(src, "item replace entity " + ctx.botName()
                     + " weapon.offhand with minecraft:shield");
         }));
-        ctx.await("shield synced", () -> ctx.bot.getLocalPlayer().getOffhandItem()
+        ctx.await("shield synced", () -> ctx.bot().getLocalPlayer().getOffhandItem()
                 .is(Items.SHIELD), 200);
         ctx.run(() -> {
             BotControlScreen screen = bgScreen();
@@ -530,7 +530,7 @@ public class BotGuiSuite extends TestSuite {
         });
         ctx.await("hold use_look raises shield", () -> {
             ctx.server().execute(() -> {
-                ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
+                ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName());
                 using.set(sp != null && sp.isUsingItem()
                         && sp.getUseItem().is(Items.SHIELD));
             });
@@ -543,25 +543,25 @@ public class BotGuiSuite extends TestSuite {
             if (use != null) {
                 bgRelease(use);
             }
-            ctx.bot.actions().stopSustained();
+            ctx.bot().actions().stopSustained();
         });
     }
 
     private void discardSlot(TestContext ctx) {
         createBot(ctx);
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 200);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
         SuitesSupport.awaitChunkLoaded(ctx, 200);
         ctx.run(() -> Minecraft.getInstance().gui.setScreen(null));
         ctx.run(() -> ctx.server().execute(() -> {
-            ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
+            ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName());
             if (sp != null) {
                 sp.getInventory().clearContent();
             }
             ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
-                    "give " + ctx.botName + " minecraft:emerald 1");
+                    "give " + ctx.botName() + " minecraft:emerald 1");
         }));
-        ctx.await("emerald synced", () -> ctx.bot.getLocalPlayer().getInventory()
+        ctx.await("emerald synced", () -> ctx.bot().getLocalPlayer().getInventory()
                 .getItem(0).is(Items.EMERALD), 200);
         ensureTab(ctx, "gui.mockplayer.tab.inventory");
         ctx.run(() -> {
@@ -570,7 +570,7 @@ public class BotGuiSuite extends TestSuite {
                 bgClickInventorySlot(screen, 36);
             }
         });
-        ctx.await("emerald carried", () -> ctx.bot.getLocalPlayer().containerMenu
+        ctx.await("emerald carried", () -> ctx.bot().getLocalPlayer().containerMenu
                 .getCarried().is(Items.EMERALD), 100);
         ctx.run(() -> {
             BotControlScreen screen = bgScreen();
@@ -578,16 +578,16 @@ public class BotGuiSuite extends TestSuite {
                 bgClickDiscardSlot(screen);
             }
         });
-        ctx.await("discard clears carried", () -> ctx.bot.getLocalPlayer().containerMenu
+        ctx.await("discard clears carried", () -> ctx.bot().getLocalPlayer().containerMenu
                 .getCarried().isEmpty(), 100);
-        ctx.check("discard clears carried", () -> ctx.bot.getLocalPlayer().containerMenu
+        ctx.check("discard clears carried", () -> ctx.bot().getLocalPlayer().containerMenu
                 .getCarried().isEmpty());
     }
 
     private void mainPlayerMineIsolation(TestContext ctx) {
         ctx.run(() -> {
-            if (ctx.botName != null) {
-                MockplayerApi.bots().removeBot(ctx.botName, "command");
+            if (ctx.botName() != null) {
+                MockplayerApi.bots().removeBot(ctx.botName(), "command");
             }
         });
         ctx.check("main player still can mine (no crash)", () -> true);

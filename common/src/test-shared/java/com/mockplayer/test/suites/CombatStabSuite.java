@@ -34,9 +34,9 @@ public class CombatStabSuite extends TestSuite {
         SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
         SuitesSupport.awaitChunkLoaded(ctx, 600);
         ctx.server(() -> CombatSupport.summonHusk(ctx, BOT, 3.0));
-        ctx.await("client sees husk", () -> ctx.bot.getEntitiesNear(64).stream()
+        ctx.await("client sees husk", () -> ctx.bot().getEntitiesNear(64).stream()
                 .anyMatch(e -> e instanceof Zombie), 600);
-        ctx.check("client sees husk", () -> ctx.bot.getEntitiesNear(64).stream()
+        ctx.check("client sees husk", () -> ctx.bot().getEntitiesNear(64).stream()
                 .anyMatch(e -> e instanceof Zombie));
         ctx.run(() -> CombatSupport.giveSpear(ctx, BOT));
         ctx.await("server holds spear", () -> {
@@ -56,12 +56,12 @@ public class CombatStabSuite extends TestSuite {
                 return true;
             }
             if (st.scale >= 1.0F) {
-                Entity target = ctx.bot.getEntitiesNear(64).stream()
+                Entity target = ctx.bot().getEntitiesNear(64).stream()
                         .filter(e -> e instanceof Zombie).findFirst().orElse(null);
                 if (target != null) {
-                    ctx.bot.getLocalPlayer().getInventory().setSelectedSlot(0);
-                    ctx.bot.actions().lookAt(target);
-                    ctx.bot.actions().stab();
+                    ctx.bot().getLocalPlayer().getInventory().setSelectedSlot(0);
+                    ctx.bot().actions().lookAt(target);
+                    ctx.bot().actions().stab();
                 }
             }
             return false;
@@ -69,11 +69,11 @@ public class CombatStabSuite extends TestSuite {
         ctx.check("husk hurt by SPEAR (left-click stab)", () -> st.huskHp >= 0 && st.huskHp < 20);
         ctx.check("stab swing animation broadcast", () -> st.swingSeen);
         ctx.check("fake still PLAYING (no server crash)",
-                () -> ctx.bot.getLifecycle() == BotLifecycle.PLAYING);
+                () -> ctx.bot().getLifecycle() == BotLifecycle.PLAYING);
         // GUI 左键：蓄力满 → 记录血 → attackLook → 血降
         float[] hpBefore = {-1.0F};
-        ctx.await("gui spear charge", () -> ctx.bot.getLocalPlayer() != null
-                && ctx.bot.getLocalPlayer().getAttackStrengthScale(1.0F) >= 0.99F, 200);
+        ctx.await("gui spear charge", () -> ctx.bot().getLocalPlayer() != null
+                && ctx.bot().getLocalPlayer().getAttackStrengthScale(1.0F) >= 0.99F, 200);
         ctx.server(() -> {
             ServerLevel level = ctx.server().getLevel(Level.OVERWORLD);
             var husk = level != null ? level.getEntitiesOfClass(
@@ -82,12 +82,12 @@ public class CombatStabSuite extends TestSuite {
             hpBefore[0] = husk != null ? husk.getHealth() : -1.0F;
         });
         ctx.run(() -> {
-            Entity target = ctx.bot.getEntitiesNear(64).stream()
+            Entity target = ctx.bot().getEntitiesNear(64).stream()
                     .filter(e -> e instanceof Zombie).findFirst().orElse(null);
             if (target != null) {
-                ctx.bot.actions().lookAt(target);
+                ctx.bot().actions().lookAt(target);
             }
-            ctx.bot.actions().attackLook();
+            ctx.bot().actions().attackLook();
         });
         ctx.await("gui left-click spear stabs", () -> {
             ctx.server().execute(() -> {
@@ -102,12 +102,12 @@ public class CombatStabSuite extends TestSuite {
         ctx.check("gui left-click spear stabs", () -> st.huskHp >= 0 && hpBefore[0] > 0
                 && st.huskHp < hpBefore[0], () -> "hp " + hpBefore[0] + " -> " + st.huskHp);
         ctx.run(() -> {
-            Entity target = ctx.bot.getEntitiesNear(64).stream()
+            Entity target = ctx.bot().getEntitiesNear(64).stream()
                     .filter(e -> e instanceof Zombie).findFirst().orElse(null);
             if (target != null) {
-                ctx.bot.actions().lookAt(target);
+                ctx.bot().actions().lookAt(target);
             }
-            ctx.bot.actions().useLook();
+            ctx.bot().actions().useLook();
         });
         AtomicBoolean using = new AtomicBoolean();
         ctx.await("gui right-click raises spear", () -> {
@@ -120,7 +120,7 @@ public class CombatStabSuite extends TestSuite {
         }, 100);
         ctx.check("gui right-click raises spear", using::get);
         ctx.run(() -> {
-            ctx.bot.actions().stopSustained();
+            ctx.bot().actions().stopSustained();
             CombatSupport.removeHusks(ctx);
             MockplayerApi.bots().removeBot(BOT, "command");
         });

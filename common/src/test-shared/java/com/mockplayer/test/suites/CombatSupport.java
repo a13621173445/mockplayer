@@ -46,7 +46,7 @@ public final class CombatSupport {
                 sp.getInventory().setSelectedSlot(0);
             }
         });
-        ctx.bot.getLocalPlayer().getInventory().setSelectedSlot(0);
+        ctx.bot().getLocalPlayer().getInventory().setSelectedSlot(0);
     }
 
     public static void readSpearDamage(TestContext ctx, String bot, State st) {

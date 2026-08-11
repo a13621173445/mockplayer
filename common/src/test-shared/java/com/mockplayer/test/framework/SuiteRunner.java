@@ -230,7 +230,7 @@ public final class SuiteRunner {
             }
             var tc = cs.get(caseIndex);
             ctx = new TestContext();
-            ctx.platform = platform;
+            ctx.setPlatform(platform);
             System.out.println("[mocktest] case " + suite.name() + "/" + tc.name());
             tc.body().accept(ctx);
         }

@@ -37,7 +37,7 @@ public class ContainerSuite extends TestSuite {
         AtomicReference<BlockPos> pos = new AtomicReference<>();
         SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
         SuitesSupport.awaitChunkLoaded(ctx, 600);
-        ctx.run(() -> pos.set(ctx.bot.getLocalPlayer().blockPosition().offset(3, 0, 0)));
+        ctx.run(() -> pos.set(ctx.bot().getLocalPlayer().blockPosition().offset(3, 0, 0)));
         SuitesSupport.placeBlockServer(ctx, pos::get, Blocks.CHEST);
         SuitesSupport.awaitBlockVisible(ctx, pos::get, Blocks.CHEST, 600);
         ctx.await("server player interactable", () -> {
@@ -45,17 +45,17 @@ public class ContainerSuite extends TestSuite {
             return sp != null && !isAwaitingPosition(sp);
         }, 200);
         ctx.run(() -> SuitesSupport.openBlock(ctx, pos.get()));
-        ctx.await("chest menu open", () -> ctx.bot.getContainer().isPresent(), 200);
-        ctx.check("getContainer present", () -> ctx.bot.getContainer().isPresent());
-        ctx.check("menuType is chest", () -> ctx.bot.getContainer()
+        ctx.await("chest menu open", () -> ctx.bot().getContainer().isPresent(), 200);
+        ctx.check("getContainer present", () -> ctx.bot().getContainer().isPresent());
+        ctx.check("menuType is chest", () -> ctx.bot().getContainer()
                 .map(c -> c.getMenuType() == MenuType.GENERIC_9x3).orElse(false));
-        ctx.check("container total slots == 63", () -> ctx.bot.getContainer()
+        ctx.check("container total slots == 63", () -> ctx.bot().getContainer()
                 .map(c -> c.getSize() == 63).orElse(false));
-        ctx.check("containerId > 0", () -> ctx.bot.getContainer()
+        ctx.check("containerId > 0", () -> ctx.bot().getContainer()
                 .map(c -> c.getContainerId() > 0).orElse(false));
-        ctx.run(() -> ctx.bot.getContainer().ifPresent(c -> c.close()));
-        ctx.await("container closed", () -> ctx.bot.getContainer().isEmpty(), 200);
-        ctx.check("container closed", () -> ctx.bot.getContainer().isEmpty());
+        ctx.run(() -> ctx.bot().getContainer().ifPresent(c -> c.close()));
+        ctx.await("container closed", () -> ctx.bot().getContainer().isEmpty(), 200);
+        ctx.check("container closed", () -> ctx.bot().getContainer().isEmpty());
     }
 
     private void putAndTake(TestContext ctx) {
@@ -65,13 +65,13 @@ public class ContainerSuite extends TestSuite {
         AtomicBoolean chestEmpty = new AtomicBoolean();
         SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
         SuitesSupport.awaitChunkLoaded(ctx, 600);
-        ctx.run(() -> pos.set(ctx.bot.getLocalPlayer().blockPosition().offset(3, 0, 0)));
+        ctx.run(() -> pos.set(ctx.bot().getLocalPlayer().blockPosition().offset(3, 0, 0)));
         SuitesSupport.placeBlockServer(ctx, pos::get, Blocks.CHEST);
         SuitesSupport.awaitBlockVisible(ctx, pos::get, Blocks.CHEST, 600);
         SuitesSupport.give(ctx, BOT, "minecraft:stone 1");
-        ctx.await("client has stone", () -> ctx.bot.getLocalPlayer().getInventory()
+        ctx.await("client has stone", () -> ctx.bot().getLocalPlayer().getInventory()
                 .countItem(Items.STONE) > 0, 400);
-        ctx.check("client has stone", () -> ctx.bot.getLocalPlayer().getInventory()
+        ctx.check("client has stone", () -> ctx.bot().getLocalPlayer().getInventory()
                 .countItem(Items.STONE) > 0);
         ctx.run(() -> {
             if (!open.get()) {
@@ -79,8 +79,8 @@ public class ContainerSuite extends TestSuite {
                 SuitesSupport.openBlock(ctx, pos.get());
             }
         });
-        ctx.await("chest menu open", () -> ctx.bot.getContainer().isPresent(), 200);
-        ctx.run(() -> ctx.bot.getContainer().ifPresent(c -> {
+        ctx.await("chest menu open", () -> ctx.bot().getContainer().isPresent(), 200);
+        ctx.run(() -> ctx.bot().getContainer().ifPresent(c -> {
             c.click(54, 0, ContainerInput.PICKUP);
             c.click(0, 0, ContainerInput.PICKUP);
         }));
@@ -93,7 +93,7 @@ public class ContainerSuite extends TestSuite {
             return stoneInChest.get();
         }, 100);
         ctx.check("chest slot0 has stone (server)", stoneInChest::get);
-        ctx.run(() -> ctx.bot.getContainer().ifPresent(c ->
+        ctx.run(() -> ctx.bot().getContainer().ifPresent(c ->
                 c.click(0, 0, ContainerInput.PICKUP)));
         ctx.await("chest empty after pickup (server)", () -> {
             ctx.server().execute(() -> {
@@ -112,7 +112,7 @@ public class ContainerSuite extends TestSuite {
         AtomicBoolean screenOk = new AtomicBoolean(true);
         SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
         SuitesSupport.awaitChunkLoaded(ctx, 600);
-        ctx.run(() -> pos.set(ctx.bot.getLocalPlayer().blockPosition().offset(3, 0, 0)));
+        ctx.run(() -> pos.set(ctx.bot().getLocalPlayer().blockPosition().offset(3, 0, 0)));
         SuitesSupport.placeBlockServer(ctx, pos::get, Blocks.CHEST);
         SuitesSupport.awaitBlockVisible(ctx, pos::get, Blocks.CHEST, 600);
         ctx.run(() -> {
@@ -121,7 +121,7 @@ public class ContainerSuite extends TestSuite {
                 SuitesSupport.openBlock(ctx, pos.get());
             }
         });
-        ctx.await("chest menu open", () -> ctx.bot.getContainer().isPresent(), 200);
+        ctx.await("chest menu open", () -> ctx.bot().getContainer().isPresent(), 200);
         ctx.run(() -> {
             Minecraft mc = Minecraft.getInstance();
             if (mc.gui.screen() == null) {
@@ -130,7 +130,7 @@ public class ContainerSuite extends TestSuite {
         });
         ctx.check("pause screen open", () -> Minecraft.getInstance().gui.screen()
                 instanceof PauseScreen);
-        ctx.run(() -> ctx.bot.getContainer().ifPresent(c -> {
+        ctx.run(() -> ctx.bot().getContainer().ifPresent(c -> {
             c.click(0, 0, ContainerInput.PICKUP);
             c.close();
         }));
@@ -138,11 +138,11 @@ public class ContainerSuite extends TestSuite {
             if (!(Minecraft.getInstance().gui.screen() instanceof PauseScreen)) {
                 screenOk.set(false);
             }
-            return ctx.bot.getContainer().isEmpty();
+            return ctx.bot().getContainer().isEmpty();
         }, 100);
         ctx.check("pause screen not interrupted", screenOk::get);
         ctx.check("container closed after pause isolation",
-                () -> ctx.bot.getContainer().isEmpty());
+                () -> ctx.bot().getContainer().isEmpty());
         ctx.run(() -> {
             Minecraft.getInstance().gui.setScreen(null);
             MockplayerApi.bots().removeBot(BOT, "command");

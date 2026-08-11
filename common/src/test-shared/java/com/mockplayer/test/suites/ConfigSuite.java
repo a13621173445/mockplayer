@@ -112,7 +112,7 @@ public class ConfigSuite extends TestSuite {
                 yaclPresent = false;
             }
             ctx.checkNow("yacl available in test env", yaclPresent);
-            ctx.checkNow("yacl mod id loaded", ctx.platform.isModLoaded("yet_another_config_lib_v3"));
+            ctx.checkNow("yacl mod id loaded", ctx.platform().isModLoaded("yet_another_config_lib_v3"));
             MockplayerConfig.reload();
             Minecraft mc = Minecraft.getInstance();
             ModConfigScreen screen = new ModConfigScreen(null);
@@ -163,27 +163,27 @@ public class ConfigSuite extends TestSuite {
                         && !saved.isDebugOverlayEnabled()
                         && Float.compare(saved.getGuiOpacity(), 0.5F) == 0
                         && saved.getGuiBlur() == 7);
-                ctx.checkNow("hot reload old root removed (active)", !ctx.platform.hasActiveRoot("query"));
-                ctx.checkNow("hot reload new root registered (active)", ctx.platform.hasActiveRoot("qry"));
+                ctx.checkNow("hot reload old root removed (active)", !ctx.platform().hasActiveRoot("query"));
+                ctx.checkNow("hot reload new root registered (active)", ctx.platform().hasActiveRoot("qry"));
                 ctx.checkNow("hot reload exec layer updated",
-                        !ctx.platform.hasExecRoot("query") && ctx.platform.hasExecRoot("qry"));
-                ctx.checkNow("new command executable", ctx.platform.executeClientCommand("qry list"));
-                ctx.checkNow("old command not executable", !ctx.platform.executeClientCommand("query list"));
+                        !ctx.platform().hasExecRoot("query") && ctx.platform().hasExecRoot("qry"));
+                ctx.checkNow("new command executable", ctx.platform().executeClientCommand("qry list"));
+                ctx.checkNow("old command not executable", !ctx.platform().executeClientCommand("query list"));
                 controlOption.requestSet("");
                 screen.finishOrSave();
-                ctx.checkNow("disable control root removed (active)", !ctx.platform.hasActiveRoot("control"));
-                ctx.checkNow("disable control exec layer updated", !ctx.platform.hasExecRoot("control"));
-                ctx.checkNow("disable control other command intact", ctx.platform.hasActiveRoot("qry"));
+                ctx.checkNow("disable control root removed (active)", !ctx.platform().hasActiveRoot("control"));
+                ctx.checkNow("disable control exec layer updated", !ctx.platform().hasExecRoot("control"));
+                ctx.checkNow("disable control other command intact", ctx.platform().hasActiveRoot("qry"));
                 MockplayerConfig.save(new ModConfig());
                 ctx.checkNow("restore config file",
                         ModConfigIO.load(MockplayerConfig.path()).getChatHistoryLimit()
                                 == ModConfig.DEFAULT_CHAT_HISTORY_LIMIT
                                 && ModConfigIO.load(MockplayerConfig.path()).getCommandName("query").equals("query"));
                 ctx.checkNow("restore control root back",
-                        ctx.platform.hasActiveRoot("control") && ctx.platform.hasActiveRoot("query"));
-                ctx.checkNow("restore renamed root gone", !ctx.platform.hasActiveRoot("qry"));
+                        ctx.platform().hasActiveRoot("control") && ctx.platform().hasActiveRoot("query"));
+                ctx.checkNow("restore renamed root gone", !ctx.platform().hasActiveRoot("qry"));
                 ctx.checkNow("restore exec layer back",
-                        ctx.platform.hasExecRoot("control") && ctx.platform.hasExecRoot("query"));
+                        ctx.platform().hasExecRoot("control") && ctx.platform().hasExecRoot("query"));
             }
         });
     }
@@ -202,8 +202,8 @@ public class ConfigSuite extends TestSuite {
                             == ModConfig.DEFAULT_CHAT_HISTORY_LIMIT
                             && ModConfigIO.load(MockplayerConfig.path()).getCommandName(ModCommands.QUERY)
                             .equals("query"));
-            ctx.checkNow("reset all dispatcher restored", ctx.platform.hasActiveRoot("query")
-                    && ctx.platform.hasActiveRoot("control") && !ctx.platform.hasActiveRoot("qq"));
+            ctx.checkNow("reset all dispatcher restored", ctx.platform().hasActiveRoot("query")
+                    && ctx.platform().hasActiveRoot("control") && !ctx.platform().hasActiveRoot("qq"));
             MockplayerConfig.get().setChatHistoryLimit(10);
             FakePlayerState state = new FakePlayerState();
             for (int i = 0; i < 15; i++) {

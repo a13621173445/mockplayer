@@ -32,8 +32,8 @@ public class ApiSmokeSuite extends TestSuite {
     private static void createBot(TestContext ctx) {
         MockplayerApi.bots().removeBot(BOT, "command");
         FakePlayerCommands.newPlayer(BOT);
-        ctx.bot = MockplayerApi.bots().getBot(BOT).orElse(null);
-        ctx.botName = BOT;
+        ctx.setBot(MockplayerApi.bots().getBot(BOT).orElse(null));
+        ctx.setBotName(BOT);
     }
 
     private static void readServerPos(TestContext ctx, AtomicReference<double[]> out) {
@@ -48,15 +48,15 @@ public class ApiSmokeSuite extends TestSuite {
 
     private void createAndLifecycle(TestContext ctx) {
         ctx.run(() -> createBot(ctx));
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 300);
-        ctx.check("createBot non-null", () -> ctx.bot != null);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
+        ctx.check("createBot non-null", () -> ctx.bot() != null);
         ctx.check("lifecycle PLAYING",
-                () -> ctx.bot != null && ctx.bot.getLifecycle() == BotLifecycle.PLAYING);
-        ctx.check("getLocalPlayer != null", () -> ctx.bot != null && ctx.bot.getLocalPlayer() != null);
-        ctx.check("getLevel != null", () -> ctx.bot != null && ctx.bot.getLevel() != null);
-        ctx.check("getGameMode != null", () -> ctx.bot != null && ctx.bot.getGameMode() != null);
-        ctx.check("getOwner == command", () -> ctx.bot != null && "command".equals(ctx.bot.getOwner()));
+                () -> ctx.bot() != null && ctx.bot().getLifecycle() == BotLifecycle.PLAYING);
+        ctx.check("getLocalPlayer != null", () -> ctx.bot() != null && ctx.bot().getLocalPlayer() != null);
+        ctx.check("getLevel != null", () -> ctx.bot() != null && ctx.bot().getLevel() != null);
+        ctx.check("getGameMode != null", () -> ctx.bot() != null && ctx.bot().getGameMode() != null);
+        ctx.check("getOwner == command", () -> ctx.bot() != null && "command".equals(ctx.bot().getOwner()));
         ctx.run(() -> MockplayerApi.bots().removeBot(BOT, "command"));
     }
 
@@ -65,24 +65,24 @@ public class ApiSmokeSuite extends TestSuite {
         AtomicReference<double[]> cur = new AtomicReference<>();
         double[] jumpStartY = {0.0};
         ctx.run(() -> createBot(ctx));
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 300);
-        ctx.run(() -> ctx.bot.actions().look(0.0F, 0.0F));
-        ctx.check("look yRot", () -> Math.abs(ctx.bot.getLocalPlayer().getYRot() - 0.0F) < 1.0F);
-        ctx.run(() -> ctx.bot.actions().turn(90.0F, 30.0F));
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
+        ctx.run(() -> ctx.bot().actions().look(0.0F, 0.0F));
+        ctx.check("look yRot", () -> Math.abs(ctx.bot().getLocalPlayer().getYRot() - 0.0F) < 1.0F);
+        ctx.run(() -> ctx.bot().actions().turn(90.0F, 30.0F));
         ctx.check("turn yRot+90",
-                () -> Math.abs(((ctx.bot.getLocalPlayer().getYRot() % 360) + 360) % 360 - 90.0F) < 1.0F);
-        ctx.check("turn xRot+30", () -> Math.abs(ctx.bot.getLocalPlayer().getXRot() - 30.0F) < 1.0F);
+                () -> Math.abs(((ctx.bot().getLocalPlayer().getYRot() % 360) + 360) % 360 - 90.0F) < 1.0F);
+        ctx.check("turn xRot+30", () -> Math.abs(ctx.bot().getLocalPlayer().getXRot() - 30.0F) < 1.0F);
         ctx.run(() -> {
-            ctx.bot.actions().setForward(1.0F);
-            ctx.bot.actions().setSneak(true);
+            ctx.bot().actions().setForward(1.0F);
+            ctx.bot().actions().setSneak(true);
         });
         ctx.await("forward moveVector", () -> {
             var mv = ((com.mockplayer.session.accessor.MockplayerClientInputAccessor)
-                    ctx.bot.getLocalPlayer().input).mockplayer$getMoveVector();
+                    ctx.bot().getLocalPlayer().input).mockplayer$getMoveVector();
             return mv.y > 0;
         }, 20);
-        ctx.await("sneak keyPresses", () -> ctx.bot.getLocalPlayer().input.keyPresses.shift(), 20);
+        ctx.await("sneak keyPresses", () -> ctx.bot().getLocalPlayer().input.keyPresses.shift(), 20);
         ctx.server(() -> readServerPos(ctx, start));
         ctx.await("服务端移动", () -> {
             readServerPos(ctx, cur);
@@ -93,9 +93,9 @@ public class ApiSmokeSuite extends TestSuite {
         ctx.run(() -> {
             double[] b = cur.get();
             jumpStartY[0] = b != null ? b[2] : 0.0;
-            ctx.bot.actions().stop();
-            ctx.bot.actions().setForward(1.0F);
-            ctx.bot.actions().jump();
+            ctx.bot().actions().stop();
+            ctx.bot().actions().setForward(1.0F);
+            ctx.bot().actions().jump();
         });
         ctx.await("服务端跳跃", () -> {
             readServerPos(ctx, cur);
@@ -104,24 +104,24 @@ public class ApiSmokeSuite extends TestSuite {
         }, 100);
         ctx.check("fake jumped on server", () -> true,
                 () -> "y +" + String.format("%.2f", (cur.get() == null ? 0.0 : cur.get()[2]) - jumpStartY[0]));
-        ctx.run(() -> ctx.bot.actions().stop());
-        ctx.check("stop resets input", () -> !ctx.bot.getLocalPlayer().input.keyPresses.forward()
-                && !ctx.bot.getLocalPlayer().input.keyPresses.shift());
+        ctx.run(() -> ctx.bot().actions().stop());
+        ctx.check("stop resets input", () -> !ctx.bot().getLocalPlayer().input.keyPresses.forward()
+                && !ctx.bot().getLocalPlayer().input.keyPresses.shift());
         ctx.run(() -> MockplayerApi.bots().removeBot(BOT, "command"));
     }
 
     private void worldAndBoundary(TestContext ctx) {
         ctx.run(() -> createBot(ctx));
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 300);
-        ctx.await("区块与实体同步", () -> ctx.bot != null
-                && ctx.bot.isBlockLoaded(ctx.bot.getLocalPlayer().blockPosition())
-                && !ctx.bot.getEntitiesNear(64).isEmpty(), 300);
-        ctx.check("getEntitiesNear", () -> !ctx.bot.getEntitiesNear(64).isEmpty());
-        ctx.check("isBlockLoaded", () -> ctx.bot.isBlockLoaded(ctx.bot.getLocalPlayer().blockPosition()));
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
+        ctx.await("区块与实体同步", () -> ctx.bot() != null
+                && ctx.bot().isBlockLoaded(ctx.bot().getLocalPlayer().blockPosition())
+                && !ctx.bot().getEntitiesNear(64).isEmpty(), 300);
+        ctx.check("getEntitiesNear", () -> !ctx.bot().getEntitiesNear(64).isEmpty());
+        ctx.check("isBlockLoaded", () -> ctx.bot().isBlockLoaded(ctx.bot().getLocalPlayer().blockPosition()));
         ctx.check("getBlockState air check",
-                () -> ctx.bot.getBlockState(ctx.bot.getLocalPlayer().blockPosition()) != null);
-        ctx.check("getContainer empty (no menu open)", () -> ctx.bot.getContainer().isEmpty());
+                () -> ctx.bot().getBlockState(ctx.bot().getLocalPlayer().blockPosition()) != null);
+        ctx.check("getContainer empty (no menu open)", () -> ctx.bot().getContainer().isEmpty());
         ctx.run(() -> {
             var boundaryApiBot = MockplayerApi.bots().createBot(
                     BotProfile.of("tbot-api-b", "command"));
@@ -137,12 +137,12 @@ public class ApiSmokeSuite extends TestSuite {
             ctx.checkNow("boundary core bot in query list",
                     boundaryList.contains(BOT), "list=" + boundaryList);
             MockplayerApi.bots().removeBot("tbot-api-b", "command");
-            ctx.bot.actions().drop(0, false);
-            ctx.bot.actions().mount(true);
-            ctx.bot.actions().dismount();
-            ctx.bot.actions().sustainedAttack(null);
-            ctx.bot.actions().sustainedUse(null);
-            ctx.bot.actions().stopSustained();
+            ctx.bot().actions().drop(0, false);
+            ctx.bot().actions().mount(true);
+            ctx.bot().actions().dismount();
+            ctx.bot().actions().sustainedAttack(null);
+            ctx.bot().actions().sustainedUse(null);
+            ctx.bot().actions().stopSustained();
         });
         ctx.check("new primitives no-crash", () -> true);
         ctx.check("removeBot own owner",

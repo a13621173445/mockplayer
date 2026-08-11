@@ -32,23 +32,23 @@ public class CraftingSuite extends TestSuite {
         AtomicInteger sticks = new AtomicInteger();
         SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
         SuitesSupport.awaitChunkLoaded(ctx, 600);
-        ctx.run(() -> table[0] = ctx.bot.getLocalPlayer().blockPosition().offset(3, 0, 0));
+        ctx.run(() -> table[0] = ctx.bot().getLocalPlayer().blockPosition().offset(3, 0, 0));
         SuitesSupport.placeBlockServer(ctx, () -> table[0], Blocks.CRAFTING_TABLE);
         SuitesSupport.awaitBlockVisible(ctx, () -> table[0], Blocks.CRAFTING_TABLE, 600);
-        ctx.check("client sees crafting table", () -> ctx.bot.getBlockState(table[0]).is(Blocks.CRAFTING_TABLE));
+        ctx.check("client sees crafting table", () -> ctx.bot().getBlockState(table[0]).is(Blocks.CRAFTING_TABLE));
         ctx.run(() -> SuitesSupport.openBlock(ctx, table[0]));
-        ctx.await("crafting menu open", () -> ctx.bot.getContainer().isPresent()
-                && ctx.bot.getContainer().get().getMenuType() == MenuType.CRAFTING, 600);
-        ctx.check("getContainer present", () -> ctx.bot.getContainer().isPresent());
-        ctx.check("menuType is crafting", () -> ctx.bot.getContainer()
+        ctx.await("crafting menu open", () -> ctx.bot().getContainer().isPresent()
+                && ctx.bot().getContainer().get().getMenuType() == MenuType.CRAFTING, 600);
+        ctx.check("getContainer present", () -> ctx.bot().getContainer().isPresent());
+        ctx.check("menuType is crafting", () -> ctx.bot().getContainer()
                 .map(c -> c.getMenuType() == MenuType.CRAFTING).orElse(false));
         SuitesSupport.give(ctx, BOT, "minecraft:oak_planks 2");
         ctx.await("client has 2 planks",
-                () -> ctx.bot.getLocalPlayer().getInventory().countItem(Items.OAK_PLANKS) >= 2, 400);
+                () -> ctx.bot().getLocalPlayer().getInventory().countItem(Items.OAK_PLANKS) >= 2, 400);
         ctx.run(() -> {
             if (!clicksIssued.get()) {
                 clicksIssued.set(true);
-                ctx.bot.getContainer().ifPresent(c -> {
+                ctx.bot().getContainer().ifPresent(c -> {
                     c.click(37, 0, ContainerInput.PICKUP);
                     c.click(1, 1, ContainerInput.PICKUP);
                     c.click(4, 1, ContainerInput.PICKUP);
@@ -65,7 +65,7 @@ public class CraftingSuite extends TestSuite {
             });
             return resultReady.get();
         }, 200);
-        ctx.run(() -> ctx.bot.getContainer().ifPresent(c -> {
+        ctx.run(() -> ctx.bot().getContainer().ifPresent(c -> {
             c.click(0, 0, ContainerInput.PICKUP);
             c.click(37, 0, ContainerInput.PICKUP);
         }));

@@ -86,15 +86,15 @@ public class ContainersAllSuite extends TestSuite {
         AtomicBoolean serverEmpty = new AtomicBoolean();
         SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
         SuitesSupport.awaitChunkLoaded(ctx, 600);
-        ctx.run(() -> pos.set(ctx.bot.getLocalPlayer().blockPosition().offset(3, 0, 0)));
+        ctx.run(() -> pos.set(ctx.bot().getLocalPlayer().blockPosition().offset(3, 0, 0)));
         if ("horse".equals(c.name())) {
             horseCase(ctx, c, pos, opened);
         } else {
             blockCase(ctx, c, pos, opened);
         }
-        ctx.await("open " + c.name(), () -> ctx.bot.getContainer().isPresent(), 600);
-        ctx.check("open " + c.name(), () -> ctx.bot.getContainer().isPresent());
-        ctx.check("menuType " + c.name() + " correct", () -> ctx.bot.getContainer()
+        ctx.await("open " + c.name(), () -> ctx.bot().getContainer().isPresent(), 600);
+        ctx.check("open " + c.name(), () -> ctx.bot().getContainer().isPresent());
+        ctx.check("menuType " + c.name() + " correct", () -> ctx.bot().getContainer()
                 .map(cont -> cont.getMenuType() == c.menuType()).orElse(false));
         if ("lectern".equals(c.name())) {
             lecternCase(ctx, c, pos, serverPut);
@@ -102,7 +102,7 @@ public class ContainersAllSuite extends TestSuite {
             normalCase(ctx, c, put, serverPut, taken, serverEmpty);
         }
         ctx.run(() -> {
-            ctx.bot.getContainer().ifPresent(cont -> cont.close());
+            ctx.bot().getContainer().ifPresent(cont -> cont.close());
             if ("horse".equals(c.name())) {
                 ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
                         ctx.server().createCommandSourceStack(), "kill @e[type=minecraft:horse]"));
@@ -131,7 +131,7 @@ public class ContainersAllSuite extends TestSuite {
         if ("lectern".equals(c.name())) {
             // 讲台：服务端放书后再等客户端看到 HAS_BOOK
             ctx.await("lectern block visible", () -> pos.get() != null
-                    && ctx.bot.getBlockState(pos.get()).is(c.block()), 600);
+                    && ctx.bot().getBlockState(pos.get()).is(c.block()), 600);
             ctx.run(() -> ctx.server().execute(() -> {
                 BlockEntity be = ctx.server().getLevel(Level.OVERWORLD).getBlockEntity(pos.get());
                 if (be instanceof LecternBlockEntity le) {
@@ -142,14 +142,14 @@ public class ContainersAllSuite extends TestSuite {
                         bs.setValue(LecternBlock.HAS_BOOK, true), 3);
             }));
             ctx.await("lectern has book", () -> pos.get() != null
-                    && ctx.bot.getBlockState(pos.get()).hasProperty(LecternBlock.HAS_BOOK)
-                    && ctx.bot.getBlockState(pos.get()).getValue(LecternBlock.HAS_BOOK), 600);
+                    && ctx.bot().getBlockState(pos.get()).hasProperty(LecternBlock.HAS_BOOK)
+                    && ctx.bot().getBlockState(pos.get()).getValue(LecternBlock.HAS_BOOK), 600);
         } else {
             SuitesSupport.awaitBlockVisible(ctx, pos::get, c.block(), 600);
             if ("large_chest".equals(c.name())) {
                 ctx.await("large chest merged", () -> pos.get() != null
-                        && ctx.bot.getBlockState(pos.get()).hasProperty(ChestBlock.TYPE)
-                        && ctx.bot.getBlockState(pos.get()).getValue(ChestBlock.TYPE) != ChestType.SINGLE, 600);
+                        && ctx.bot().getBlockState(pos.get()).hasProperty(ChestBlock.TYPE)
+                        && ctx.bot().getBlockState(pos.get()).getValue(ChestBlock.TYPE) != ChestType.SINGLE, 600);
             }
         }
         ctx.run(() -> {
@@ -162,7 +162,7 @@ public class ContainersAllSuite extends TestSuite {
 
     private void horseCase(TestContext ctx, Case c, AtomicReference<BlockPos> pos, AtomicBoolean opened) {
         ctx.run(() -> ctx.server().execute(() -> {
-            Vec3 hp = ctx.bot.getLocalPlayer().position().add(1.0, 0.0, 0.0);
+            Vec3 hp = ctx.bot().getLocalPlayer().position().add(1.0, 0.0, 0.0);
             Horse horse = new Horse(EntityTypes.HORSE, ctx.server().getLevel(Level.OVERWORLD));
             horse.setPos(hp);
             horse.setTamed(true);
@@ -170,20 +170,20 @@ public class ContainersAllSuite extends TestSuite {
             ctx.server().getLevel(Level.OVERWORLD).addFreshEntity(horse);
         }));
         ctx.await("client sees horse", () -> {
-            var horses = ctx.bot.getLocalPlayer().level().getEntitiesOfClass(AbstractHorse.class,
-                    new AABB(ctx.bot.getLocalPlayer().position().add(-8.0, -8.0, -8.0),
-                            ctx.bot.getLocalPlayer().position().add(8.0, 12.0, 8.0)));
+            var horses = ctx.bot().getLocalPlayer().level().getEntitiesOfClass(AbstractHorse.class,
+                    new AABB(ctx.bot().getLocalPlayer().position().add(-8.0, -8.0, -8.0),
+                            ctx.bot().getLocalPlayer().position().add(8.0, 12.0, 8.0)));
             return !horses.isEmpty();
         }, 600);
         ctx.run(() -> {
             if (!opened.get()) {
                 opened.set(true);
-                var horses = ctx.bot.getLocalPlayer().level().getEntitiesOfClass(AbstractHorse.class,
-                        new AABB(ctx.bot.getLocalPlayer().position().add(-8.0, -8.0, -8.0),
-                                ctx.bot.getLocalPlayer().position().add(8.0, 12.0, 8.0)));
+                var horses = ctx.bot().getLocalPlayer().level().getEntitiesOfClass(AbstractHorse.class,
+                        new AABB(ctx.bot().getLocalPlayer().position().add(-8.0, -8.0, -8.0),
+                                ctx.bot().getLocalPlayer().position().add(8.0, 12.0, 8.0)));
                 horses.stream().min(java.util.Comparator.comparingDouble(
-                                h -> h.distanceToSqr(ctx.bot.getLocalPlayer())))
-                        .ifPresent(horse -> ctx.bot.getLocalPlayer().connection.send(
+                                h -> h.distanceToSqr(ctx.bot().getLocalPlayer())))
+                        .ifPresent(horse -> ctx.bot().getLocalPlayer().connection.send(
                                 new ServerboundInteractPacket(horse.getId(), InteractionHand.MAIN_HAND,
                                         Vec3.ZERO, true)));
             }
@@ -201,12 +201,12 @@ public class ContainersAllSuite extends TestSuite {
                     "give " + BOT + " " + c.itemId() + " 1");
         }));
         Item item = BuiltInRegistries.ITEM.get(Identifier.tryParse(c.itemId())).get().value();
-        ctx.await("client has " + c.name() + " item", () -> ctx.bot.getLocalPlayer()
+        ctx.await("client has " + c.name() + " item", () -> ctx.bot().getLocalPlayer()
                 .getInventory().countItem(item) > 0, 400);
         ctx.run(() -> {
             if (!put.get()) {
                 put.set(true);
-                ctx.bot.getContainer().ifPresent(cont -> {
+                ctx.bot().getContainer().ifPresent(cont -> {
                     cont.click(c.hotbarSlot(), 0, ContainerInput.PICKUP);
                     cont.click(c.containerSlot(), 0, ContainerInput.PICKUP);
                 });
@@ -226,7 +226,7 @@ public class ContainersAllSuite extends TestSuite {
         ctx.run(() -> {
             if (!taken.get()) {
                 taken.set(true);
-                ctx.bot.getContainer().ifPresent(cont -> {
+                ctx.bot().getContainer().ifPresent(cont -> {
                     if (!cont.getSlot(c.containerSlot()).isEmpty()) {
                         cont.click(c.containerSlot(), 0, ContainerInput.PICKUP);
                     }
@@ -253,7 +253,7 @@ public class ContainersAllSuite extends TestSuite {
 
     private void lecternCase(TestContext ctx, Case c, AtomicReference<BlockPos> pos,
                              AtomicBoolean serverPut) {
-        ctx.run(() -> ctx.bot.getContainer().ifPresent(cont -> cont.clickButton(3)));
+        ctx.run(() -> ctx.bot().getContainer().ifPresent(cont -> cont.clickButton(3)));
         ctx.await("put into lectern (server)", () -> {
             ctx.server().execute(() -> {
                 var state = ctx.server().getLevel(Level.OVERWORLD)
@@ -264,10 +264,10 @@ public class ContainersAllSuite extends TestSuite {
             return serverPut.get();
         }, 200);
         ctx.check("put into lectern (server)", serverPut::get);
-        ctx.run(() -> ctx.bot.getContainer().ifPresent(cont -> cont.clickButton(3)));
-        ctx.await("take back from lectern (server)", () -> ctx.bot.getLocalPlayer()
+        ctx.run(() -> ctx.bot().getContainer().ifPresent(cont -> cont.clickButton(3)));
+        ctx.await("take back from lectern (server)", () -> ctx.bot().getLocalPlayer()
                 .getInventory().countItem(Items.WRITABLE_BOOK) > 0, 200);
-        ctx.check("take back from lectern (server)", () -> ctx.bot.getLocalPlayer()
+        ctx.check("take back from lectern (server)", () -> ctx.bot().getLocalPlayer()
                 .getInventory().countItem(Items.WRITABLE_BOOK) > 0);
     }
 }

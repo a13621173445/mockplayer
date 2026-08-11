@@ -39,35 +39,35 @@ public class MerchantSuite extends TestSuite {
                 ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(), cmd);
             }
         });
-        ctx.await("client sees villager", () -> ctx.bot.getEntitiesNear(64).stream()
+        ctx.await("client sees villager", () -> ctx.bot().getEntitiesNear(64).stream()
                 .anyMatch(e -> e instanceof Villager), 600);
-        ctx.check("client sees villager", () -> ctx.bot.getEntitiesNear(64).stream()
+        ctx.check("client sees villager", () -> ctx.bot().getEntitiesNear(64).stream()
                 .anyMatch(e -> e instanceof Villager));
         ctx.run(() -> {
             if (!interacted.get()) {
                 interacted.set(true);
-                var villager = ctx.bot.getEntitiesNear(64).stream()
+                var villager = ctx.bot().getEntitiesNear(64).stream()
                         .filter(e -> e instanceof Villager)
                         .findFirst().orElse(null);
                 if (villager != null) {
-                    ctx.bot.actions().lookAt(villager);
-                    ctx.bot.actions().interact(villager);
+                    ctx.bot().actions().lookAt(villager);
+                    ctx.bot().actions().interact(villager);
                 }
             }
         });
-        ctx.await("merchant menu open", () -> ctx.bot.getContainer().isPresent()
-                && ctx.bot.getContainer().get().getMenuType() == MenuType.MERCHANT, 600);
+        ctx.await("merchant menu open", () -> ctx.bot().getContainer().isPresent()
+                && ctx.bot().getContainer().get().getMenuType() == MenuType.MERCHANT, 600);
         ctx.check("getContainer present (real villager merchant)",
-                () -> ctx.bot.getContainer().isPresent());
-        ctx.check("menuType is merchant", () -> ctx.bot.getContainer()
+                () -> ctx.bot().getContainer().isPresent());
+        ctx.check("menuType is merchant", () -> ctx.bot().getContainer()
                 .map(c -> c.getMenuType() == MenuType.MERCHANT).orElse(false));
         SuitesSupport.give(ctx, BOT, "minecraft:emerald 1");
-        ctx.await("client has emerald", () -> ctx.bot.getLocalPlayer().getInventory()
+        ctx.await("client has emerald", () -> ctx.bot().getLocalPlayer().getInventory()
                 .countItem(Items.EMERALD) > 0, 400);
         ctx.run(() -> {
             if (!traded.get()) {
                 traded.set(true);
-                ctx.bot.getContainer().ifPresent(c -> {
+                ctx.bot().getContainer().ifPresent(c -> {
                     c.click(30, 0, ContainerInput.PICKUP);
                     c.click(0, 0, ContainerInput.PICKUP);
                     c.selectTrade(0);

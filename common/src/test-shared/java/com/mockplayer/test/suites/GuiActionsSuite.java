@@ -46,8 +46,8 @@ public class GuiActionsSuite extends TestSuite {
     private static void createBot(TestContext ctx) {
         MockplayerApi.bots().removeBot(BOT, "command");
         com.mockplayer.session.FakePlayerCommands.newPlayer(BOT);
-        ctx.bot = MockplayerApi.bots().getBot(BOT).orElse(null);
-        ctx.botName = BOT;
+        ctx.setBot(MockplayerApi.bots().getBot(BOT).orElse(null));
+        ctx.setBotName(BOT);
     }
 
     private void chat(TestContext ctx) {
@@ -60,13 +60,13 @@ public class GuiActionsSuite extends TestSuite {
             }
         });
         ctx.run(() -> createBot(ctx));
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 300);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> {
             if (!done.get()) {
                 done.set(true);
                 msg.set("");
-                ctx.bot.actions().chat("mockplayer-gui-test");
+                ctx.bot().actions().chat("mockplayer-gui-test");
             }
         });
         ctx.await("chat message broadcast to fake",
@@ -86,13 +86,13 @@ public class GuiActionsSuite extends TestSuite {
             }
         });
         ctx.run(() -> createBot(ctx));
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 300);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> {
             if (!done.get()) {
                 done.set(true);
                 msg.set("");
-                ctx.bot.actions().sendCommand("me mockplayer-gui-cmd");
+                ctx.bot().actions().sendCommand("me mockplayer-gui-cmd");
             }
         });
         ctx.await("sendCommand me executed",
@@ -105,15 +105,15 @@ public class GuiActionsSuite extends TestSuite {
     private void editBook(TestContext ctx) {
         AtomicBoolean verified = new AtomicBoolean();
         ctx.run(() -> createBot(ctx));
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 300);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
                 ctx.server().createCommandSourceStack(),
                 "item replace entity " + BOT + " weapon.mainhand with minecraft:writable_book")));
-        ctx.await("book in hand", () -> ctx.bot.getLocalPlayer().getMainHandItem()
+        ctx.await("book in hand", () -> ctx.bot().getLocalPlayer().getMainHandItem()
                 .is(Items.WRITABLE_BOOK), 200);
-        ctx.run(() -> ctx.bot.actions().editBook(
-                ctx.bot.getLocalPlayer().getInventory().getSelectedSlot(),
+        ctx.run(() -> ctx.bot().actions().editBook(
+                ctx.bot().getLocalPlayer().getInventory().getSelectedSlot(),
                 List.of("mockplayer page one", "second line"),
                 Optional.of("Mockplayer Book")));
         ctx.await("editBook wrote written book", () -> {
@@ -133,8 +133,8 @@ public class GuiActionsSuite extends TestSuite {
         AtomicBoolean done = new AtomicBoolean();
         AtomicBoolean verified = new AtomicBoolean();
         ctx.run(() -> createBot(ctx));
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 300);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> ctx.server().execute(() -> {
             ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
             if (sp != null) {
@@ -145,7 +145,7 @@ public class GuiActionsSuite extends TestSuite {
             }
         }));
         ctx.await("sign visible", () -> pos.get() != null
-                && ctx.bot.getBlockState(pos.get()).is(
+                && ctx.bot().getBlockState(pos.get()).is(
                 net.minecraft.core.registries.BuiltInRegistries.BLOCK
                         .get(net.minecraft.resources.Identifier.tryParse("minecraft:oak_sign")).get().value()), 600);
         ctx.run(() -> {
@@ -153,7 +153,7 @@ public class GuiActionsSuite extends TestSuite {
                 rightClicked.set(true);
                 BlockHitResult hit = new BlockHitResult(
                         Vec3.atCenterOf(pos.get()), Direction.UP, pos.get(), false);
-                ctx.bot.getGameMode().useItemOn(ctx.bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
+                ctx.bot().getGameMode().useItemOn(ctx.bot().getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
             }
         });
         int[] signWait = {0};
@@ -161,7 +161,7 @@ public class GuiActionsSuite extends TestSuite {
         ctx.run(() -> {
             if (!done.get()) {
                 done.set(true);
-                ctx.bot.actions().editSign(pos.get(), true,
+                ctx.bot().actions().editSign(pos.get(), true,
                         new String[]{"mock", "player", "sign", "line4"});
             }
         });
@@ -185,8 +185,8 @@ public class GuiActionsSuite extends TestSuite {
         AtomicBoolean applied = new AtomicBoolean();
         AtomicBoolean verified = new AtomicBoolean();
         ctx.run(() -> createBot(ctx));
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 300);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> ctx.server().execute(() -> {
             ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
             if (sp != null) {
@@ -203,7 +203,7 @@ public class GuiActionsSuite extends TestSuite {
             }
         }));
         ctx.await("beacon visible", () -> pos.get() != null
-                && ctx.bot.getBlockState(pos.get()).is(
+                && ctx.bot().getBlockState(pos.get()).is(
                 net.minecraft.core.registries.BuiltInRegistries.BLOCK
                         .get(net.minecraft.resources.Identifier.tryParse("minecraft:beacon")).get().value()), 600);
         int[] beaconWait = {0};
@@ -213,10 +213,10 @@ public class GuiActionsSuite extends TestSuite {
                 opened.set(true);
                 BlockHitResult hit = new BlockHitResult(
                         Vec3.atCenterOf(pos.get()), Direction.UP, pos.get(), false);
-                ctx.bot.getGameMode().useItemOn(ctx.bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
+                ctx.bot().getGameMode().useItemOn(ctx.bot().getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
             }
         });
-        ctx.await("beacon menu open", () -> ctx.bot.getContainer().isPresent(), 200);
+        ctx.await("beacon menu open", () -> ctx.bot().getContainer().isPresent(), 200);
         ctx.await("beacon payment slot filled", () -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
@@ -227,7 +227,7 @@ public class GuiActionsSuite extends TestSuite {
             });
             return paid.get();
         }, 50);
-        ctx.run(() -> ctx.bot.actions().setBeacon(
+        ctx.run(() -> ctx.bot().actions().setBeacon(
                 Optional.of(MobEffects.SPEED), Optional.empty()));
         ctx.await("setBeacon applied speed", () -> {
             ctx.server().execute(() -> {
@@ -243,8 +243,8 @@ public class GuiActionsSuite extends TestSuite {
     private void pickItem(TestContext ctx) {
         AtomicBoolean verified = new AtomicBoolean();
         ctx.run(() -> createBot(ctx));
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 300);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
                 ctx.server().createCommandSourceStack(), "gamemode creative " + BOT)));
         ctx.await("creative mode", () -> {
@@ -254,8 +254,8 @@ public class GuiActionsSuite extends TestSuite {
             });
             return verified.get();
         }, 100);
-        ctx.run(() -> ctx.bot.actions().pickItemFromBlock(
-                ctx.bot.getLocalPlayer().blockPosition().below(), false));
+        ctx.run(() -> ctx.bot().actions().pickItemFromBlock(
+                ctx.bot().getLocalPlayer().blockPosition().below(), false));
         ctx.await("pickItemFromBlock changed held item", () -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
@@ -272,8 +272,8 @@ public class GuiActionsSuite extends TestSuite {
         AtomicBoolean revived = new AtomicBoolean();
         AtomicBoolean killed = new AtomicBoolean();
         ctx.run(() -> createBot(ctx));
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 300);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> {
             if (!killed.get()) {
                 killed.set(true);
@@ -290,7 +290,7 @@ public class GuiActionsSuite extends TestSuite {
         }, 200);
         ctx.run(() -> {
             if (dead.get()) {
-                ctx.bot.actions().respawn();
+                ctx.bot().actions().respawn();
             }
         });
         ctx.await("respawn revived", () -> {

@@ -38,11 +38,41 @@ public final class TestContext {
     private boolean failed;
 
     /** 当前用例的假人（用例自己创建后赋值；每用例独立，禁止跨用例共享）。 */
-    public Bot bot;
+    private Bot bot;
     /** 当前用例的假人名（sanitize 用）。 */
-    public String botName;
+    private String botName;
     /** 平台适配（由 SuiteRunner 注入）。 */
-    public TestPlatform platform;
+    private TestPlatform platform;
+
+    /** 当前用例假人（未创建/未赋值时 null）。 */
+    public Bot bot() {
+        return this.bot;
+    }
+
+    /** 赋值当前用例假人（用例创建后调用，禁止跨用例共享）。 */
+    public void setBot(Bot bot) {
+        this.bot = bot;
+    }
+
+    /** 当前用例假人名（sanitize 用）。 */
+    public String botName() {
+        return this.botName;
+    }
+
+    /** 赋值当前用例假人名。 */
+    public void setBotName(String botName) {
+        this.botName = botName;
+    }
+
+    /** 平台适配（SuiteRunner 注入）。 */
+    public TestPlatform platform() {
+        return this.platform;
+    }
+
+    /** 赋值平台适配（SuiteRunner 注入）。 */
+    public void setPlatform(TestPlatform platform) {
+        this.platform = platform;
+    }
 
     /** 注册一个立即执行步骤（客户端主线程）。 */
     public void run(Runnable action) {

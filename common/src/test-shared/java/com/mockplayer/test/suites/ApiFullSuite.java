@@ -40,13 +40,13 @@ public class ApiFullSuite extends TestSuite {
 
     private void infoInterfaces(TestContext ctx) {
         SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
-        ctx.check("getUUID non-null", () -> ctx.bot.getUUID() != null);
-        ctx.await("getOnlinePlayers non-empty", () -> !ctx.bot.getOnlinePlayers().isEmpty(), 200);
-        ctx.check("getOnlinePlayers non-empty", () -> !ctx.bot.getOnlinePlayers().isEmpty());
+        ctx.check("getUUID non-null", () -> ctx.bot().getUUID() != null);
+        ctx.await("getOnlinePlayers non-empty", () -> !ctx.bot().getOnlinePlayers().isEmpty(), 200);
+        ctx.check("getOnlinePlayers non-empty", () -> !ctx.bot().getOnlinePlayers().isEmpty());
         ctx.check("getEntitiesNear pred (villager filter no-crash)", () ->
-                ctx.bot.getEntitiesNear(64, e -> e instanceof net.minecraft.world.entity.npc.villager.Villager) != null);
+                ctx.bot().getEntitiesNear(64, e -> e instanceof net.minecraft.world.entity.npc.villager.Villager) != null);
         ctx.check("getScreen alias getContainer", () ->
-                ctx.bot.getScreen().isEmpty() == ctx.bot.getContainer().isEmpty());
+                ctx.bot().getScreen().isEmpty() == ctx.bot().getContainer().isEmpty());
         ctx.run(() -> MockplayerApi.bots().removeBot(BOT, "command"));
     }
 
@@ -65,8 +65,8 @@ public class ApiFullSuite extends TestSuite {
         ctx.run(() -> {
             if (!strafeMoved.get()) {
                 strafeMoved.set(true);
-                ctx.bot.actions().setForward(0.0F);
-                ctx.bot.actions().setStrafe(1.0F);
+                ctx.bot().actions().setForward(0.0F);
+                ctx.bot().actions().setStrafe(1.0F);
                 ctx.server().execute(() -> {
                     ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
                     if (sp != null) {
@@ -94,7 +94,7 @@ public class ApiFullSuite extends TestSuite {
                     && (Math.abs(c[0] - b[0]) > 0.3 || Math.abs(c[1] - b[1]) > 0.3);
         });
         ctx.run(() -> {
-            ctx.bot.actions().stop();
+            ctx.bot().actions().stop();
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
                 if (sp != null) {
@@ -107,7 +107,7 @@ public class ApiFullSuite extends TestSuite {
         ctx.run(() -> {
             if (!swapped.get()) {
                 swapped.set(true);
-                ctx.bot.actions().swapHands();
+                ctx.bot().actions().swapHands();
             }
         });
         ctx.await("swapHands moved item to offhand (server)", () -> {
@@ -130,12 +130,12 @@ public class ApiFullSuite extends TestSuite {
                 }
             });
         });
-        ctx.await("main hand planks ready", () -> ctx.bot.getLocalPlayer()
+        ctx.await("main hand planks ready", () -> ctx.bot().getLocalPlayer()
                 .getMainHandItem().is(Items.OAK_PLANKS), 200);
         ctx.run(() -> {
             if (!dropIssued.get()) {
                 dropIssued.set(true);
-                ctx.bot.actions().drop(0, false);
+                ctx.bot().actions().drop(0, false);
                 ctx.server().execute(() -> {
                     ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
                     if (sp != null) {
@@ -168,7 +168,7 @@ public class ApiFullSuite extends TestSuite {
         SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
         SuitesSupport.awaitChunkLoaded(ctx, 600);
         ctx.run(() -> {
-            pos.set(ctx.bot.getLocalPlayer().blockPosition().offset(2, 0, 0));
+            pos.set(ctx.bot().getLocalPlayer().blockPosition().offset(2, 0, 0));
             MockplayerApi.listen(new BotListener() {
                 @Override
                 public void onBreakBlock(Bot b, BlockPos p) {
@@ -188,13 +188,13 @@ public class ApiFullSuite extends TestSuite {
         ctx.await("main hand dirt ready", () -> {
             ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
             return sp != null && !SuitesSupport.isAwaitingPosition(sp)
-                    && ctx.bot.getLocalPlayer().getMainHandItem().is(Items.DIRT);
+                    && ctx.bot().getLocalPlayer().getMainHandItem().is(Items.DIRT);
         }, 400);
         ctx.run(() -> {
             if (!placed.get()) {
                 placed.set(true);
-                ctx.bot.actions().lookAt(Vec3.atCenterOf(pos.get()));
-                ctx.bot.actions().placeBlock(pos.get(), Direction.UP);
+                ctx.bot().actions().lookAt(Vec3.atCenterOf(pos.get()));
+                ctx.bot().actions().placeBlock(pos.get(), Direction.UP);
             }
         });
         ctx.await("placeBlock placed dirt (server)", () -> {
@@ -206,8 +206,8 @@ public class ApiFullSuite extends TestSuite {
         ctx.run(() -> {
             if (!mined.get()) {
                 mined.set(true);
-                ctx.bot.actions().lookAt(Vec3.atCenterOf(pos.get()));
-                ctx.bot.actions().mineBlock(pos.get());
+                ctx.bot().actions().lookAt(Vec3.atCenterOf(pos.get()));
+                ctx.bot().actions().mineBlock(pos.get());
             }
         });
         ctx.await("mineBlock broke dirt (server)", () -> {
@@ -229,7 +229,7 @@ public class ApiFullSuite extends TestSuite {
         AtomicBoolean opened = new AtomicBoolean();
         SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
         SuitesSupport.awaitChunkLoaded(ctx, 600);
-        ctx.run(() -> pos.set(ctx.bot.getLocalPlayer().blockPosition().offset(1, 0, 0)));
+        ctx.run(() -> pos.set(ctx.bot().getLocalPlayer().blockPosition().offset(1, 0, 0)));
         SuitesSupport.placeBlockServer(ctx, pos::get, Blocks.CHEST);
         SuitesSupport.awaitBlockVisible(ctx, pos::get, Blocks.CHEST, 600);
         ctx.await("server player interactable", () -> {
@@ -242,13 +242,13 @@ public class ApiFullSuite extends TestSuite {
                 SuitesSupport.openBlock(ctx, pos.get());
             }
         });
-        ctx.await("container open", () -> ctx.bot.getContainer().isPresent(), 200);
-        ctx.check("getTitle non-empty", () -> !ctx.bot.getContainer()
+        ctx.await("container open", () -> ctx.bot().getContainer().isPresent(), 200);
+        ctx.check("getTitle non-empty", () -> !ctx.bot().getContainer()
                 .get().getTitle().getString().isEmpty());
-        ctx.check("getSize > 0", () -> ctx.bot.getContainer().get().getSize() > 0);
-        ctx.run(() -> ctx.bot.getContainer().ifPresent(c ->
+        ctx.check("getSize > 0", () -> ctx.bot().getContainer().get().getSize() > 0);
+        ctx.run(() -> ctx.bot().getContainer().ifPresent(c ->
                 c.setSlot(0, new ItemStack(Items.STONE))));
-        ctx.check("setSlot slot0 stone (client)", () -> ctx.bot.getContainer()
+        ctx.check("setSlot slot0 stone (client)", () -> ctx.bot().getContainer()
                 .map(c -> c.getSlot(0).is(Items.STONE)).orElse(false));
         ctx.run(() -> MockplayerApi.bots().removeBot(BOT, "command"));
     }

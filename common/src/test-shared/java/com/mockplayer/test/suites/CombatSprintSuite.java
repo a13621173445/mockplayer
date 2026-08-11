@@ -42,9 +42,9 @@ public class CombatSprintSuite extends TestSuite {
         SuitesSupport.awaitChunkLoaded(ctx, 600);
         ctx.run(() -> CombatSupport.clearArea(ctx, BOT, 8));
         ctx.run(() -> CombatSupport.summonHusk(ctx, BOT, 6.0));
-        ctx.await("client sees husk", () -> ctx.bot.getEntitiesNear(64).stream()
+        ctx.await("client sees husk", () -> ctx.bot().getEntitiesNear(64).stream()
                 .anyMatch(e -> e instanceof Zombie), 600);
-        ctx.check("client sees husk", () -> ctx.bot.getEntitiesNear(64).stream()
+        ctx.check("client sees husk", () -> ctx.bot().getEntitiesNear(64).stream()
                 .anyMatch(e -> e instanceof Zombie));
         ctx.run(() -> CombatSupport.giveSpear(ctx, BOT));
         ctx.await("server holds spear", () -> {
@@ -58,15 +58,15 @@ public class CombatSprintSuite extends TestSuite {
         ctx.run(() -> {
             if (!issued.get()) {
                 issued.set(true);
-                Entity target = ctx.bot.getEntitiesNear(64).stream()
+                Entity target = ctx.bot().getEntitiesNear(64).stream()
                         .filter(e -> e instanceof Zombie).findFirst().orElse(null);
                 if (target != null) {
-                    ctx.bot.actions().lookAt(target);
+                    ctx.bot().actions().lookAt(target);
                 }
-                ctx.bot.getLocalPlayer().getInventory().setSelectedSlot(0);
-                ctx.bot.actions().setForward(1.0F);
-                ctx.bot.actions().setSprint(true);
-                ctx.bot.actions().useItem(InteractionHand.MAIN_HAND);
+                ctx.bot().getLocalPlayer().getInventory().setSelectedSlot(0);
+                ctx.bot().actions().setForward(1.0F);
+                ctx.bot().actions().setSprint(true);
+                ctx.bot().actions().useItem(InteractionHand.MAIN_HAND);
                 ctx.server().execute(() -> {
                     ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
                     if (sp != null) {
@@ -128,10 +128,10 @@ public class CombatSprintSuite extends TestSuite {
         ctx.check("husk hurt by SPEAR (sprint-thrust)",
                 () -> st.swingSampled && st.huskHp >= 0 && st.huskHp < 20);
         ctx.check("fake still PLAYING (no server crash)",
-                () -> ctx.bot.getLifecycle() == BotLifecycle.PLAYING);
+                () -> ctx.bot().getLifecycle() == BotLifecycle.PLAYING);
         ctx.run(() -> {
-            ctx.bot.actions().stop();
-            ctx.bot.actions().stopSustained();
+            ctx.bot().actions().stop();
+            ctx.bot().actions().stopSustained();
             CombatSupport.removeHusks(ctx);
         });
     }
@@ -145,26 +145,26 @@ public class CombatSprintSuite extends TestSuite {
         SuitesSupport.awaitChunkLoaded(ctx, 600);
         ctx.run(() -> CombatSupport.clearArea(ctx, BOT, 8));
         ctx.run(() -> {
-            ctx.bot.actions().stop();
-            ctx.bot.actions().stopSustained();
+            ctx.bot().actions().stop();
+            ctx.bot().actions().stopSustained();
             CombatSupport.removeHusks(ctx);
         });
         ctx.await("wait after kill", () -> ++wait[0] >= 10, 20);
         ctx.run(() -> CombatSupport.summonHusk(ctx, BOT, 6.0));
-        ctx.await("hold husk seen", () -> ctx.bot.getEntitiesNear(64).stream()
+        ctx.await("hold husk seen", () -> ctx.bot().getEntitiesNear(64).stream()
                 .anyMatch(e -> e instanceof Zombie), 200);
         wait[0] = 0;
         ctx.await("wait husk refresh", () -> ++wait[0] >= 20, 40);
         ctx.run(() -> {
-            Entity target = ctx.bot.getEntitiesNear(64).stream()
+            Entity target = ctx.bot().getEntitiesNear(64).stream()
                     .filter(e -> e instanceof Zombie).findFirst().orElse(null);
             if (target != null) {
-                ctx.bot.actions().lookAt(target);
+                ctx.bot().actions().lookAt(target);
             }
-            ctx.bot.getLocalPlayer().getInventory().setSelectedSlot(0);
-            ctx.bot.actions().sustainedUseLook();
-            ctx.bot.actions().setForward(1.0F);
-            ctx.bot.actions().setSprint(true);
+            ctx.bot().getLocalPlayer().getInventory().setSelectedSlot(0);
+            ctx.bot().actions().sustainedUseLook();
+            ctx.bot().actions().setForward(1.0F);
+            ctx.bot().actions().setSprint(true);
         });
         ctx.await("hold-thrust SPEAR damage", () -> {
             CombatSupport.readSpearDamage(ctx, BOT, st);
@@ -180,10 +180,10 @@ public class CombatSprintSuite extends TestSuite {
                 () -> st.huskHp >= 0 && st.huskHp < 20);
         ctx.check("hold right-click shows using pose", usingOk::get);
         ctx.check("fake still PLAYING (no server crash)",
-                () -> ctx.bot.getLifecycle() == BotLifecycle.PLAYING);
+                () -> ctx.bot().getLifecycle() == BotLifecycle.PLAYING);
         ctx.run(() -> {
-            ctx.bot.actions().stop();
-            ctx.bot.actions().stopSustained();
+            ctx.bot().actions().stop();
+            ctx.bot().actions().stopSustained();
             CombatSupport.removeHusks(ctx);
         });
     }
@@ -196,16 +196,16 @@ public class CombatSprintSuite extends TestSuite {
         SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
         SuitesSupport.awaitChunkLoaded(ctx, 600);
         ctx.run(() -> {
-            ctx.bot.actions().stop();
-            ctx.bot.actions().stopSustained();
+            ctx.bot().actions().stop();
+            ctx.bot().actions().stopSustained();
             CombatSupport.removeHusks(ctx);
         });
         ctx.await("wait after kill", () -> ++wait[0] >= 10, 20);
         ctx.run(() -> {
             if (!issued.get()) {
                 issued.set(true);
-                ctx.bot.actions().look(ctx.bot.getLocalPlayer().getYRot(), -45.0F);
-                ctx.bot.actions().sustainedUseLook();
+                ctx.bot().actions().look(ctx.bot().getLocalPlayer().getYRot(), -45.0F);
+                ctx.bot().actions().sustainedUseLook();
             }
         });
         wait[0] = 0;
@@ -222,8 +222,8 @@ public class CombatSprintSuite extends TestSuite {
                 () -> remaining[0] <= duration[0] - 20,
                 () -> "remaining=" + remaining[0] + " duration=" + duration[0]);
         ctx.run(() -> {
-            ctx.bot.actions().stop();
-            ctx.bot.actions().stopSustained();
+            ctx.bot().actions().stop();
+            ctx.bot().actions().stopSustained();
             CombatSupport.removeHusks(ctx);
             MockplayerApi.bots().removeBot(BOT, "command");
         });

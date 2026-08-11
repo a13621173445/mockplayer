@@ -31,23 +31,23 @@ public class FurnaceSuite extends TestSuite {
         AtomicBoolean charcoal = new AtomicBoolean();
         SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
         SuitesSupport.awaitChunkLoaded(ctx, 600);
-        ctx.run(() -> furnace[0] = ctx.bot.getLocalPlayer().blockPosition().offset(3, 0, 0));
+        ctx.run(() -> furnace[0] = ctx.bot().getLocalPlayer().blockPosition().offset(3, 0, 0));
         SuitesSupport.placeBlockServer(ctx, () -> furnace[0], Blocks.FURNACE);
         SuitesSupport.awaitBlockVisible(ctx, () -> furnace[0], Blocks.FURNACE, 600);
-        ctx.check("client sees furnace", () -> ctx.bot.getBlockState(furnace[0]).is(Blocks.FURNACE));
+        ctx.check("client sees furnace", () -> ctx.bot().getBlockState(furnace[0]).is(Blocks.FURNACE));
         ctx.run(() -> SuitesSupport.openBlock(ctx, furnace[0]));
-        ctx.await("furnace menu open", () -> ctx.bot.getContainer().isPresent()
-                && ctx.bot.getContainer().get().getMenuType() == MenuType.FURNACE, 600);
-        ctx.check("getContainer present", () -> ctx.bot.getContainer().isPresent());
-        ctx.check("menuType is furnace", () -> ctx.bot.getContainer()
+        ctx.await("furnace menu open", () -> ctx.bot().getContainer().isPresent()
+                && ctx.bot().getContainer().get().getMenuType() == MenuType.FURNACE, 600);
+        ctx.check("getContainer present", () -> ctx.bot().getContainer().isPresent());
+        ctx.check("menuType is furnace", () -> ctx.bot().getContainer()
                 .map(c -> c.getMenuType() == MenuType.FURNACE).orElse(false));
         SuitesSupport.give(ctx, BOT, "minecraft:oak_log 1", "minecraft:coal 1");
-        ctx.await("client has log + coal", () -> ctx.bot.getLocalPlayer().getInventory().countItem(Items.OAK_LOG) > 0
-                && ctx.bot.getLocalPlayer().getInventory().countItem(Items.COAL) > 0, 400);
+        ctx.await("client has log + coal", () -> ctx.bot().getLocalPlayer().getInventory().countItem(Items.OAK_LOG) > 0
+                && ctx.bot().getLocalPlayer().getInventory().countItem(Items.COAL) > 0, 400);
         ctx.run(() -> {
             if (!clicked.get()) {
                 clicked.set(true);
-                ctx.bot.getContainer().ifPresent(c -> {
+                ctx.bot().getContainer().ifPresent(c -> {
                     c.click(30, 0, ContainerInput.PICKUP);
                     c.click(0, 0, ContainerInput.PICKUP);
                     c.click(31, 0, ContainerInput.PICKUP);
