@@ -8,6 +8,7 @@ import com.mockplayer.test.suites.BatchSuite;
 import com.mockplayer.test.suites.CombatStabSuite;
 import com.mockplayer.test.suites.CombatSprintSuite;
 import com.mockplayer.test.suites.ContainerSuite;
+import com.mockplayer.test.suites.ContainersAllSuite;
 import com.mockplayer.test.suites.ConfigSuite;
 import com.mockplayer.test.suites.CraftingSuite;
 import com.mockplayer.test.suites.DebugNameTagSuite;
@@ -58,7 +59,8 @@ public final class SuiteRunner {
             new MerchantSuite(),
             new CombatStabSuite(),
             new CombatSprintSuite(),
-            new ContainerSuite());
+            new ContainerSuite(),
+            new ContainersAllSuite());
 
     private static Phase phase = Phase.WAIT_TITLE;
     private static volatile long phaseStart;
