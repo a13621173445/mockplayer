@@ -11,6 +11,7 @@ import com.mockplayer.test.framework.TestContext;
 import com.mockplayer.test.framework.TestSuite;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * batch：批量创建/重名跳过/dry-run/真删/管理边界。
@@ -66,6 +67,7 @@ public class BatchSuite extends TestSuite {
     }
 
     private void dryAndDelete(TestContext ctx) {
+        AtomicBoolean serverLeftFlag = new AtomicBoolean(true);
         ctx.run(() -> {
             long before = MockplayerApi.bots().getBots().stream()
                     .filter(b -> b.getName().startsWith("tbotb_")).count();
@@ -82,24 +84,23 @@ public class BatchSuite extends TestSuite {
         ctx.await("batch delete removed all", () -> {
             long left = MockplayerApi.bots().getBots().stream()
                     .filter(b -> b.getName().startsWith("tbotb_")).count();
-            boolean serverLeft = false;
-            for (int i = 1; i <= 5; i++) {
-                if (ctx.server().getPlayerList().getPlayerByName("tbotb_" + i) != null) {
-                    serverLeft = true;
+            // 服务端玩家列表必须在服务端线程读（NeoForge 的 getPlayerByName 补丁非线程安全）
+            ctx.server().execute(() -> {
+                boolean anyLeft = false;
+                for (int i = 1; i <= 5; i++) {
+                    if (ctx.server().getPlayerList().getPlayerByName("tbotb_" + i) != null) {
+                        anyLeft = true;
+                        break;
+                    }
                 }
-            }
-            return left == 0 && !serverLeft;
+                serverLeftFlag.set(anyLeft);
+            });
+            return left == 0 && !serverLeftFlag.get();
         }, 3400);
         ctx.check("batch delete removed all", () -> {
             long left = MockplayerApi.bots().getBots().stream()
                     .filter(b -> b.getName().startsWith("tbotb_")).count();
-            boolean serverLeft = false;
-            for (int i = 1; i <= 5; i++) {
-                if (ctx.server().getPlayerList().getPlayerByName("tbotb_" + i) != null) {
-                    serverLeft = true;
-                }
-            }
-            return left == 0 && !serverLeft;
+            return left == 0 && !serverLeftFlag.get();
         });
     }
 

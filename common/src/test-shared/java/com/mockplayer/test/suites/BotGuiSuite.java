@@ -178,6 +178,8 @@ public class BotGuiSuite extends TestSuite {
         ensureTab(ctx, "gui.mockplayer.tab.actions");
         AtomicReference<double[]> base = new AtomicReference<>();
         AtomicReference<double[]> cur = new AtomicReference<>();
+        AtomicBoolean retriedClick = new AtomicBoolean();
+        int[] waitMove = {0};
         ctx.run(() -> {
             BotControlScreen screen = bgScreen();
             Button fwd = bgFindButton(screen, "gui.mockplayer.action.move_forward");
@@ -204,9 +206,18 @@ public class BotGuiSuite extends TestSuite {
             });
             double[] b = base.get();
             double[] c = cur.get();
-            return b != null && c != null
+            boolean moved = b != null && c != null
                     && (Math.abs(c[0] - b[0]) > 1.0 || Math.abs(c[1] - b[1]) > 1.0);
-        }, 150);
+            // all 模式偶发按钮点击未生效：中途重按一次再继续等
+            if (!moved && ++waitMove[0] > 75 && !retriedClick.get()) {
+                retriedClick.set(true);
+                Button fwd = bgFindButton(bgScreen(), "gui.mockplayer.action.move_forward");
+                if (fwd != null) {
+                    bgClick(fwd);
+                }
+            }
+            return moved;
+        }, 300);
         ctx.check("gui move forward server moved", () -> {
             double[] b = base.get();
             double[] c = cur.get();

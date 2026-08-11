@@ -281,7 +281,9 @@ public class GuiActionsSuite extends TestSuite {
         ctx.await("fake dead", () -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
-                dead.set(sp != null && sp.isDeadOrDying());
+                // 与 ControlCommandsSuite.respawn 同口径：死亡后 isAlive()==false 最稳定
+                // （isDeadOrDying 在某些死亡/移除状态下会返回 false）
+                dead.set(sp != null && !sp.isAlive());
             });
             return dead.get();
         }, 200);
@@ -293,7 +295,7 @@ public class GuiActionsSuite extends TestSuite {
         ctx.await("respawn revived", () -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
-                revived.set(sp != null && !sp.isDeadOrDying());
+                revived.set(sp != null && sp.isAlive());
             });
             return revived.get();
         }, 200);
