@@ -74,7 +74,9 @@ public abstract class MixinEntityRenderer {
                 ? java.util.List.of()
                 : state.scoreText.getSiblings();
         // 假人注入的 scoreText 第一行必是 ❤；只要 ≥2 行就按多行布局（信息在名字上方）
-        if (rows.size() < 2 || !rows.get(0).getString().startsWith("❤")) {
+        if (rows.size() < 2
+                || !rows.get(0).getString().startsWith(
+                        com.mockplayer.session.DebugNameTagInfo.FIRST_ROW_PREFIX)) {
             return;
         }
         float lineHeight = 9.0F * 1.15F * 0.025F;

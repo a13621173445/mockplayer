@@ -22,6 +22,9 @@ import java.util.Locale;
  */
 public final class DebugNameTagInfo {
 
+    /** 首行固定前缀（渲染层用它识别 mockplayer 注入的 scoreText，勿随意改）。 */
+    public static final String FIRST_ROW_PREFIX = "❤";
+
     /** 渲染路径验证计数（仅测试属性 mockplayer.debugRenderProbe=true 时记录；私有+反射读取）。 */
     private static volatile int renderCount;
     /** 最近注入的 scoreText（仅测试属性开启时记录）。 */
@@ -69,7 +72,7 @@ public final class DebugNameTagInfo {
         MutableComponent line = Component.literal("");
         // 血量 + 饥饿度(饱和度) 同一行：❤20 🍗20(14)
         MutableComponent stats = Component.literal(
-                "❤" + Math.round(bot.getLocalPlayer().getHealth()))
+                FIRST_ROW_PREFIX + Math.round(bot.getLocalPlayer().getHealth()))
                 .withStyle(ChatFormatting.RED);
         stats.append(Component.literal(" 🍗"
                 + bot.getLocalPlayer().getFoodData().getFoodLevel()

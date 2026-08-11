@@ -51,7 +51,9 @@ public final class SuiteRunner {
 
     private enum Phase { WAIT_TITLE, WAIT_WORLD, RUN, DONE }
 
-    private static final long TIMEOUT_MS = 180_000;
+    private static final long PHASE_TIMEOUT_MS = 180_000;
+    /** 全流程总预算（双上限：单阶段 180s + 全流程 20min，防止 all 模式无限拖）。 */
+    private static final long TOTAL_TIMEOUT_MS = 20 * 60_000L;
 
     /** 已迁移套件注册表：迁移一个套件就加进这里，同时从旧 TestRunner 删除对应 case。 */
     private static final List<TestSuite> SUITES = List.of(
@@ -90,6 +92,7 @@ public final class SuiteRunner {
     private static long suiteStart;
     private static volatile boolean finished;
     private static boolean sanitized;
+    private static long totalStart;
 
     private SuiteRunner() {
     }
@@ -114,11 +117,15 @@ public final class SuiteRunner {
             suite = queue.get(0);
             suiteStart = System.currentTimeMillis();
             phaseStart = suiteStart;
+            totalStart = suiteStart;
         }
         long now = System.currentTimeMillis();
         advance(mc);
-        if (phase != Phase.DONE && now - phaseStart > TIMEOUT_MS) {
+        if (phase != Phase.DONE && now - phaseStart > PHASE_TIMEOUT_MS) {
             records.add(new TestContext.Record("timeout @" + phase, false, "global timeout"));
+            finishAll();
+        } else if (phase != Phase.DONE && now - totalStart > TOTAL_TIMEOUT_MS) {
+            records.add(new TestContext.Record("timeout @total", false, "total timeout"));
             finishAll();
         }
     }
@@ -135,7 +142,7 @@ public final class SuiteRunner {
                 } catch (InterruptedException e) {
                     return;
                 }
-                if (System.currentTimeMillis() - phaseStart > TIMEOUT_MS) {
+                if (System.currentTimeMillis() - phaseStart > PHASE_TIMEOUT_MS) {
                     System.err.println("[mocktest] FATAL: global timeout exceeded, forcing exit");
                     Runtime.getRuntime().halt(1);
                 }
@@ -253,8 +260,23 @@ public final class SuiteRunner {
             MockplayerApi.bots().removeBot(b.getName(), "command");
         }
         MockplayerConfig.save(new ModConfig());
-        server.execute(() -> server.getCommands().performPrefixedCommand(
-                server.createCommandSourceStack(), "kill @e[type=!minecraft:player]"));
+        // kill 必须等执行完再进套件 before（否则首用例可能先跑，清理竞态）
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        server.execute(() -> {
+            try {
+                server.getCommands().performPrefixedCommand(
+                        server.createCommandSourceStack(), "kill @e[type=!minecraft:player]");
+            } finally {
+                latch.countDown();
+            }
+        });
+        try {
+            if (!latch.await(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                System.out.println("[mocktest] sanitize kill timed out");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static void finishSuite() {
@@ -290,9 +312,9 @@ public final class SuiteRunner {
         json.append("  \"results\": [\n");
         for (int i = 0; i < records.size(); i++) {
             TestContext.Record r = records.get(i);
-            json.append("    {\"name\": \"").append(r.name().replace("\"", "\\\""))
+            json.append("    {\"name\": \"").append(jsonEscape(r.name()))
                     .append("\", \"status\": \"").append(r.passed() ? "PASS" : "FAIL")
-                    .append("\", \"detail\": \"").append(r.detail().replace("\"", "\\\""))
+                    .append("\", \"detail\": \"").append(jsonEscape(r.detail()))
                     .append("\"}");
             if (i < records.size() - 1) {
                 json.append(",");
@@ -313,6 +335,29 @@ public final class SuiteRunner {
         } catch (Exception e) {
             System.out.println("[mocktest] failed to write result: " + e);
         }
+    }
+
+    /** JSON 字符串转义（引号/反斜杠/换行/控制字符，保证结果文件永远是合法 JSON）。 */
+    private static String jsonEscape(String s) {
+        StringBuilder sb = new StringBuilder(s.length() + 16);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '\\' -> sb.append("\\\\");
+                case '"' -> sb.append("\\\"");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> {
+                    if (c < 0x20) {
+                        sb.append(String.format(java.util.Locale.ROOT, "\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+                }
+            }
+        }
+        return sb.toString();
     }
 
     private static int findFreeTestPort() {

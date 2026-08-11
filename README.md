@@ -122,6 +122,15 @@
 使用本模组请遵守 Minecraft 最终用户许可协议（EULA）。
 本模组不包含任何 Minecraft 原版代码或资源。
 
+## 维护约定
+
+- **不简化区**：`FakePlayListener` 的逐包 handler（零丢数据铁律）、`BotActionsImpl` 的原版等价输入链路、
+  测试强断言——这三块禁止为减行砍逻辑；只能拆类/抽常量，任何「看起来能省」的改动先列等价性说明。
+- **逃生舱纪律**：公共 API 的逃生舱（`Bot.getLocalPlayer/getGameMode/getLevel`、`BotContainer.raw()`）
+  只加不改；新增能力优先走 `BotActions`/`BotContainer` 特化；新增逃生舱需在提交说明登记理由。
+- **批量默认并发 1**：Fabric 客户端全局配置 addon 是单例，高并发批量创建假人可能触发竞态；
+  `concurrency` 参数保留，自行评估后使用。
+
 ## 协议
 
 MIT License

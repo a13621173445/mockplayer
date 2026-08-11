@@ -1,7 +1,8 @@
 package com.mockplayer.session;
 
 /**
- * 精确字节记账（HotSpot 64-bit 压缩对象指针布局，JDK 17+ 默认开启）。
+ * Mod 侧字节记账估算（HotSpot 64-bit 压缩对象指针布局，JDK 17+ 默认开启；
+ * 不含 Map 桶、对象头外引用与容器/数组槽位开销）。
  *
  * 布局依据（OpenJDK HotSpot）：
  * - 普通对象头 12 字节（mark 8 + klass 4），字段按 4 字节引用，整体 8 字节对齐；
