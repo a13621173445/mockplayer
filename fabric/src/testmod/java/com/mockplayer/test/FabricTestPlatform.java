@@ -26,4 +26,16 @@ public final class FabricTestPlatform implements TestPlatform {
             return false;
         }
     }
+
+    @Override
+    public boolean hasActiveRoot(String commandName) {
+        var dispatcher = net.fabricmc.fabric.impl.command.client.ClientCommandInternals.getActiveDispatcher();
+        return dispatcher != null && dispatcher.getRoot().getChild(commandName) != null;
+    }
+
+    @Override
+    public boolean hasExecRoot(String commandName) {
+        var connection = Minecraft.getInstance().getConnection();
+        return connection != null && connection.getCommands().getRoot().getChild(commandName) != null;
+    }
 }

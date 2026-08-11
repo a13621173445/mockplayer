@@ -4,6 +4,7 @@ import com.mockplayer.api.Bot;
 import com.mockplayer.api.MockplayerApi;
 import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.MockplayerConfig;
+import com.mockplayer.test.suites.ConfigSuite;
 import com.mockplayer.test.suites.ApiSmokeSuite;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
@@ -37,7 +38,9 @@ public final class SuiteRunner {
     private static final long TIMEOUT_MS = 180_000;
 
     /** 已迁移套件注册表：迁移一个套件就加进这里，同时从旧 TestRunner 删除对应 case。 */
-    private static final List<TestSuite> SUITES = List.of(new ApiSmokeSuite());
+    private static final List<TestSuite> SUITES = List.of(
+            new ApiSmokeSuite(),
+            new ConfigSuite());
 
     private static Phase phase = Phase.WAIT_TITLE;
     private static long phaseStart;
@@ -140,6 +143,7 @@ public final class SuiteRunner {
             }
             var tc = cs.get(caseIndex);
             ctx = new TestContext();
+            ctx.platform = platform;
             System.out.println("[mocktest] case " + suite.name() + "/" + tc.name());
             tc.body().accept(ctx);
         }

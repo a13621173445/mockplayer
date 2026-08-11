@@ -23,4 +23,16 @@ public final class NeoForgeTestPlatform implements TestPlatform {
             return false;
         }
     }
+
+    @Override
+    public boolean hasActiveRoot(String commandName) {
+        var dispatcher = net.neoforged.neoforge.client.ClientCommandHandler.getDispatcher();
+        return dispatcher != null && dispatcher.getRoot().getChild(commandName) != null;
+    }
+
+    @Override
+    public boolean hasExecRoot(String commandName) {
+        var connection = net.minecraft.client.Minecraft.getInstance().getConnection();
+        return connection != null && connection.getCommands().getRoot().getChild(commandName) != null;
+    }
 }

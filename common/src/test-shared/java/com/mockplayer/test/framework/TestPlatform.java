@@ -13,4 +13,10 @@ public interface TestPlatform {
 
     /** 走平台客户端命令链路执行一条聊天命令（true = 执行成功）。 */
     boolean executeClientCommand(String command);
+
+    /** 注册层 dispatcher 是否含根命令（热重载断言，Fabric 与 NeoForge 实现不同）。 */
+    boolean hasActiveRoot(String commandName);
+
+    /** 执行层 dispatcher（ClientPacketListener.commands）是否含根命令。 */
+    boolean hasExecRoot(String commandName);
 }

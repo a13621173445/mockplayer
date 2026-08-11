@@ -39,6 +39,8 @@ public final class TestContext {
     public Bot bot;
     /** 当前用例的假人名（sanitize 用）。 */
     public String botName;
+    /** 平台适配（由 SuiteRunner 注入）。 */
+    public TestPlatform platform;
 
     /** 注册一个立即执行步骤（客户端主线程）。 */
     public void run(Runnable action) {
