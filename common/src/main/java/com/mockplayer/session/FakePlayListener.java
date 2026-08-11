@@ -137,7 +137,7 @@ public class FakePlayListener extends ClientPacketListener {
                 spawnInfo.seed(),
                 seaLevel
         ));
-        com.mockplayer.session.SessionManager.registerFakeLevel(self.mockplayer$getLevel());
+        com.mockplayer.session.FakeLevelRegistry.registerFakeLevel(self.mockplayer$getLevel());
         // 假人 chunk 缓存按配置默认半径（默认 2）：本地只保留更少区块，节约内存
         self.mockplayer$getLevel().getChunkSource().updateViewRadius(
                 com.mockplayer.config.MockplayerConfig.get().getFakePlayerChunkRadius());

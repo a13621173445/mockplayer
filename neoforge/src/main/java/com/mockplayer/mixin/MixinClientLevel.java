@@ -29,7 +29,7 @@ public abstract class MixinClientLevel {
                                                  boolean alwaysShow, double x, double y, double z,
                                                  double xd, double yd, double zd, CallbackInfo ci) {
         ClientLevel self = (ClientLevel) (Object) this;
-        if (SessionManager.isFakeLevel(self)) {
+        if (com.mockplayer.session.FakeLevelRegistry.isFakeLevel(self)) {
             SessionManager.recordFakeParticle(self, particle, x, y, z);
             ci.cancel();
         }
@@ -43,7 +43,7 @@ public abstract class MixinClientLevel {
     @Inject(method = "addDestroyBlockEffect", at = @At("HEAD"), cancellable = true)
     private void mockplayer$redirectFakeDestroyEffect(BlockPos pos, BlockState blockState, CallbackInfo ci) {
         ClientLevel self = (ClientLevel) (Object) this;
-        if (SessionManager.isFakeLevel(self)) {
+        if (com.mockplayer.session.FakeLevelRegistry.isFakeLevel(self)) {
             SessionManager.recordFakeParticle(self, new BlockParticleOption(ParticleTypes.BLOCK, blockState),
                     pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
             ci.cancel();
@@ -58,7 +58,7 @@ public abstract class MixinClientLevel {
                                                    float volume, float pitch, boolean distanceDelay,
                                                    CallbackInfo ci) {
         ClientLevel self = (ClientLevel) (Object) this;
-        if (SessionManager.isFakeLevel(self)) {
+        if (com.mockplayer.session.FakeLevelRegistry.isFakeLevel(self)) {
             SessionManager.recordFakeSound(self, sound.location().toString(), x, y, z);
             ci.cancel();
         }
