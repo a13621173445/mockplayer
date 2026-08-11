@@ -46,7 +46,6 @@ public class ContainerSuite extends TestSuite {
         }, 200);
         ctx.run(() -> SuitesSupport.openBlock(ctx, pos.get()));
         ctx.await("chest menu open", () -> ctx.bot().getContainer().isPresent(), 200);
-        ctx.check("getContainer present", () -> ctx.bot().getContainer().isPresent());
         ctx.check("menuType is chest", () -> ctx.bot().getContainer()
                 .map(c -> c.getMenuType() == MenuType.GENERIC_9x3).orElse(false));
         ctx.check("container total slots == 63", () -> ctx.bot().getContainer()
@@ -55,7 +54,6 @@ public class ContainerSuite extends TestSuite {
                 .map(c -> c.getContainerId() > 0).orElse(false));
         ctx.run(() -> ctx.bot().getContainer().ifPresent(c -> c.close()));
         ctx.await("container closed", () -> ctx.bot().getContainer().isEmpty(), 200);
-        ctx.check("container closed", () -> ctx.bot().getContainer().isEmpty());
     }
 
     private void putAndTake(TestContext ctx) {
@@ -71,8 +69,6 @@ public class ContainerSuite extends TestSuite {
         SuitesSupport.give(ctx, BOT, "minecraft:stone 1");
         ctx.await("client has stone", () -> ctx.bot().getLocalPlayer().getInventory()
                 .countItem(Items.STONE) > 0, 400);
-        ctx.check("client has stone", () -> ctx.bot().getLocalPlayer().getInventory()
-                .countItem(Items.STONE) > 0);
         ctx.run(() -> {
             if (!open.get()) {
                 open.set(true);
@@ -141,8 +137,6 @@ public class ContainerSuite extends TestSuite {
             return ctx.bot().getContainer().isEmpty();
         }, 100);
         ctx.check("pause screen not interrupted", screenOk::get);
-        ctx.check("container closed after pause isolation",
-                () -> ctx.bot().getContainer().isEmpty());
         ctx.run(() -> {
             Minecraft.getInstance().gui.setScreen(null);
             MockplayerApi.bots().removeBot(BOT, "command");

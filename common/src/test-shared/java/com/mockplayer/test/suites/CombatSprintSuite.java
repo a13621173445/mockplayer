@@ -44,8 +44,6 @@ public class CombatSprintSuite extends TestSuite {
         ctx.run(() -> CombatSupport.summonHusk(ctx, BOT, 6.0));
         ctx.await("client sees husk", () -> ctx.bot().getEntitiesNear(64).stream()
                 .anyMatch(e -> e instanceof Zombie), 600);
-        ctx.check("client sees husk", () -> ctx.bot().getEntitiesNear(64).stream()
-                .anyMatch(e -> e instanceof Zombie));
         ctx.run(() -> CombatSupport.giveSpear(ctx, BOT));
         ctx.await("server holds spear", () -> {
             ctx.server().execute(() -> {
@@ -120,7 +118,6 @@ public class CombatSprintSuite extends TestSuite {
             return facingUsing.get();
         }, 200);
         ctx.check("fake facing husk", facingUsing::get);
-        ctx.check("fake using spear", facingUsing::get);
         ctx.await("sprint-thrust SPEAR damage", () -> {
             CombatSupport.readSpearDamage(ctx, BOT, st);
             return st.swingSampled && st.spearDamage && st.huskHp >= 0 && st.huskHp < 20;

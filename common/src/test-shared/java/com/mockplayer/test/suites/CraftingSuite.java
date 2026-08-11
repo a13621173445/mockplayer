@@ -35,13 +35,9 @@ public class CraftingSuite extends TestSuite {
         ctx.run(() -> table[0] = ctx.bot().getLocalPlayer().blockPosition().offset(3, 0, 0));
         SuitesSupport.placeBlockServer(ctx, () -> table[0], Blocks.CRAFTING_TABLE);
         SuitesSupport.awaitBlockVisible(ctx, () -> table[0], Blocks.CRAFTING_TABLE, 600);
-        ctx.check("client sees crafting table", () -> ctx.bot().getBlockState(table[0]).is(Blocks.CRAFTING_TABLE));
         ctx.run(() -> SuitesSupport.openBlock(ctx, table[0]));
         ctx.await("crafting menu open", () -> ctx.bot().getContainer().isPresent()
                 && ctx.bot().getContainer().get().getMenuType() == MenuType.CRAFTING, 600);
-        ctx.check("getContainer present", () -> ctx.bot().getContainer().isPresent());
-        ctx.check("menuType is crafting", () -> ctx.bot().getContainer()
-                .map(c -> c.getMenuType() == MenuType.CRAFTING).orElse(false));
         SuitesSupport.give(ctx, BOT, "minecraft:oak_planks 2");
         ctx.await("client has 2 planks",
                 () -> ctx.bot().getLocalPlayer().getInventory().countItem(Items.OAK_PLANKS) >= 2, 400);

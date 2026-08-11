@@ -36,8 +36,6 @@ public class CombatStabSuite extends TestSuite {
         ctx.server(() -> CombatSupport.summonHusk(ctx, BOT, 3.0));
         ctx.await("client sees husk", () -> ctx.bot().getEntitiesNear(64).stream()
                 .anyMatch(e -> e instanceof Zombie), 600);
-        ctx.check("client sees husk", () -> ctx.bot().getEntitiesNear(64).stream()
-                .anyMatch(e -> e instanceof Zombie));
         ctx.run(() -> CombatSupport.giveSpear(ctx, BOT));
         ctx.await("server holds spear", () -> {
             ctx.server().execute(() -> {
@@ -49,7 +47,6 @@ public class CombatStabSuite extends TestSuite {
             });
             return st.spearDamage;
         }, 400);
-        ctx.check("server holds spear", () -> st.spearDamage);
         ctx.await("stab damage", () -> {
             CombatSupport.readSpearDamage(ctx, BOT, st);
             if (st.spearDamage && st.huskHp >= 0 && st.huskHp < 20 && st.swingSampled) {

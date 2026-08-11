@@ -44,8 +44,6 @@ public class ApiSmokeSuite extends TestSuite {
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.check("createBot non-null", () -> ctx.bot() != null);
-        ctx.check("lifecycle PLAYING",
-                () -> ctx.bot() != null && ctx.bot().getLifecycle() == BotLifecycle.PLAYING);
         ctx.check("getLocalPlayer != null", () -> ctx.bot() != null && ctx.bot().getLocalPlayer() != null);
         ctx.check("getLevel != null", () -> ctx.bot() != null && ctx.bot().getLevel() != null);
         ctx.check("getGameMode != null", () -> ctx.bot() != null && ctx.bot().getGameMode() != null);
@@ -95,8 +93,6 @@ public class ApiSmokeSuite extends TestSuite {
             double[] c = cur.get();
             return c != null && c[2] > jumpStartY[0] + 0.3;
         }, 100);
-        ctx.check("fake jumped on server", () -> true,
-                () -> "y +" + String.format("%.2f", (cur.get() == null ? 0.0 : cur.get()[2]) - jumpStartY[0]));
         ctx.run(() -> ctx.bot().actions().stop());
         ctx.check("stop resets input", () -> !ctx.bot().getLocalPlayer().input.keyPresses.forward()
                 && !ctx.bot().getLocalPlayer().input.keyPresses.shift());
@@ -110,8 +106,6 @@ public class ApiSmokeSuite extends TestSuite {
         ctx.await("区块与实体同步", () -> ctx.bot() != null
                 && ctx.bot().isBlockLoaded(ctx.bot().getLocalPlayer().blockPosition())
                 && !ctx.bot().getEntitiesNear(64).isEmpty(), 300);
-        ctx.check("getEntitiesNear", () -> !ctx.bot().getEntitiesNear(64).isEmpty());
-        ctx.check("isBlockLoaded", () -> ctx.bot().isBlockLoaded(ctx.bot().getLocalPlayer().blockPosition()));
         ctx.check("getBlockState air check",
                 () -> ctx.bot().getBlockState(ctx.bot().getLocalPlayer().blockPosition()) != null);
         ctx.check("getContainer empty (no menu open)", () -> ctx.bot().getContainer().isEmpty());

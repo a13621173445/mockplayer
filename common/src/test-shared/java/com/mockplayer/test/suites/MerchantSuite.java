@@ -41,8 +41,6 @@ public class MerchantSuite extends TestSuite {
         });
         ctx.await("client sees villager", () -> ctx.bot().getEntitiesNear(64).stream()
                 .anyMatch(e -> e instanceof Villager), 600);
-        ctx.check("client sees villager", () -> ctx.bot().getEntitiesNear(64).stream()
-                .anyMatch(e -> e instanceof Villager));
         ctx.run(() -> {
             if (!interacted.get()) {
                 interacted.set(true);
@@ -57,10 +55,6 @@ public class MerchantSuite extends TestSuite {
         });
         ctx.await("merchant menu open", () -> ctx.bot().getContainer().isPresent()
                 && ctx.bot().getContainer().get().getMenuType() == MenuType.MERCHANT, 600);
-        ctx.check("getContainer present (real villager merchant)",
-                () -> ctx.bot().getContainer().isPresent());
-        ctx.check("menuType is merchant", () -> ctx.bot().getContainer()
-                .map(c -> c.getMenuType() == MenuType.MERCHANT).orElse(false));
         SuitesSupport.give(ctx, BOT, "minecraft:emerald 1");
         ctx.await("client has emerald", () -> ctx.bot().getLocalPlayer().getInventory()
                 .countItem(Items.EMERALD) > 0, 400);

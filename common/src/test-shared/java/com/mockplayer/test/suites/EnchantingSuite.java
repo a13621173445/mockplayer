@@ -38,15 +38,9 @@ public class EnchantingSuite extends TestSuite {
         ctx.run(() -> table[0] = ctx.bot().getLocalPlayer().blockPosition().offset(3, 0, 0));
         SuitesSupport.placeBlockServer(ctx, () -> table[0], Blocks.ENCHANTING_TABLE);
         SuitesSupport.awaitBlockVisible(ctx, () -> table[0], Blocks.ENCHANTING_TABLE, 600);
-        ctx.check("client sees enchanting table",
-                () -> ctx.bot().getBlockState(table[0]).is(Blocks.ENCHANTING_TABLE));
         ctx.run(() -> SuitesSupport.openBlock(ctx, table[0]));
         ctx.await("enchanting menu open", () -> ctx.bot().getContainer().isPresent()
                 && ctx.bot().getContainer().get().getMenuType() == MenuType.ENCHANTMENT, 600);
-        ctx.check("getContainer present", () -> ctx.bot().getContainer().isPresent());
-        ctx.check("getContainer present (enchanting)", () -> ctx.bot().getContainer().isPresent());
-        ctx.check("menuType is enchanting", () -> ctx.bot().getContainer()
-                .map(c -> c.getMenuType() == MenuType.ENCHANTMENT).orElse(false));
         SuitesSupport.give(ctx, BOT, "minecraft:diamond_sword 1",
                 "minecraft:lapis_lazuli 1");
         ctx.server(() -> ctx.server().getCommands().performPrefixedCommand(
