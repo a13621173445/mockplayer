@@ -40,32 +40,33 @@ public class DebugNameTagSuite extends TestSuite {
     private static void createBot(TestContext ctx) {
         MockplayerApi.bots().removeBot(BOT, "command");
         FakePlayerCommands.newPlayer(BOT);
-        ctx.bot = MockplayerApi.bots().getBot(BOT).orElse(null);
-        ctx.botName = BOT;
+        ctx.setBot(MockplayerApi.bots().getBot(BOT).orElse(null));
+        ctx.setBotName(BOT);
     }
 
     private void formatAndToggle(TestContext ctx) {
         ctx.run(() -> createBot(ctx));
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 300);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> {
             MockplayerConfig.save(new ModConfig());
             resetRender();
-            Component info = DebugNameTagInfo.format(ctx.bot);
+            Component info = DebugNameTagInfo.format(ctx.bot());
             ctx.checkNow("debug tag non-empty", info != null && !info.getString().isBlank());
             if (info != null) {
                 List<Component> rows = info.getSiblings();
-                int health = Math.round(ctx.bot.getLocalPlayer().getHealth());
-                int food = ctx.bot.getLocalPlayer().getFoodData().getFoodLevel();
-                int sat = Math.round(ctx.bot.getLocalPlayer().getFoodData().getSaturationLevel());
+                int health = Math.round(ctx.bot().getLocalPlayer().getHealth());
+                int food = ctx.bot().getLocalPlayer().getFoodData().getFoodLevel();
+                int sat = Math.round(ctx.bot().getLocalPlayer().getFoodData().getSaturationLevel());
                 ctx.checkNow("debug tag multi-line", rows.size() >= 3, "rows=" + rows.size());
                 ctx.checkNow("debug tag health+food row", rows.stream().anyMatch(r ->
                         r.getString().startsWith("❤" + health)
                                 && r.getString().contains("🍗" + food + "(" + sat + ")")));
                 ctx.checkNow("debug tag memory+chunk row", rows.stream().anyMatch(r ->
                         r.getString().startsWith("💾")
-                                && (r.getString().contains("KB") || r.getString().contains("MB"))
-                                && r.getString().contains("📡" + ctx.bot.getChunkRadius() + " chunk")));
+                                && (r.getString().contains("KB") || r.getString().contains("MB")
+                                || r.getString().contains(" B"))
+                                && r.getString().contains("📡" + ctx.bot().getChunkRadius() + " chunk")));
                 ctx.checkNow("debug tag speed row", rows.stream().anyMatch(r ->
                         r.getString().startsWith("🏃") && r.getString().contains("m/s")));
                 ctx.checkNow("debug tag colored health", rows.stream().anyMatch(r ->
@@ -90,13 +91,13 @@ public class DebugNameTagSuite extends TestSuite {
 
     private void renderAndContainer(TestContext ctx) {
         ctx.run(() -> createBot(ctx));
-        ctx.await("lifecycle PLAYING", () -> ctx.bot != null
-                && ctx.bot.getLifecycle() == BotLifecycle.PLAYING, 300);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
         ctx.run(() -> resetRender());
         ctx.await("debug render path executed", () -> {
             Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null && ctx.bot != null && ctx.bot.getLocalPlayer() != null) {
-                mc.player.lookAt(EntityAnchorArgument.Anchor.EYES, ctx.bot.getLocalPlayer().position());
+            if (mc.player != null && ctx.bot() != null && ctx.bot().getLocalPlayer() != null) {
+                mc.player.lookAt(EntityAnchorArgument.Anchor.EYES, ctx.bot().getLocalPlayer().position());
             }
             return renderCount() > 0;
         }, 100);
@@ -109,27 +110,27 @@ public class DebugNameTagSuite extends TestSuite {
         ctx.check("debug tag info above name", () -> infoOffsetY() > nameOffsetY(),
                 () -> "info=" + infoOffsetY() + " name=" + nameOffsetY());
         ctx.run(() -> {
-            BlockPos chestPos = ctx.bot.getLocalPlayer().blockPosition().offset(2, 0, 0);
+            BlockPos chestPos = ctx.bot().getLocalPlayer().blockPosition().offset(2, 0, 0);
             BlockPos p = chestPos;
             ctx.server().execute(() -> ctx.server().getLevel(Level.OVERWORLD)
                     .setBlock(p, Blocks.CHEST.defaultBlockState(), 3));
         });
         ctx.run(() -> {
-            BlockPos chestPos = ctx.bot.getLocalPlayer().blockPosition().offset(2, 0, 0);
-            ctx.bot.actions().lookAt(Vec3.atCenterOf(chestPos));
+            BlockPos chestPos = ctx.bot().getLocalPlayer().blockPosition().offset(2, 0, 0);
+            ctx.bot().actions().lookAt(Vec3.atCenterOf(chestPos));
             BlockHitResult hit = new BlockHitResult(
                     Vec3.atCenterOf(chestPos), Direction.WEST, chestPos, false);
-            ctx.bot.getGameMode().useItemOn(ctx.bot.getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
+            ctx.bot().getGameMode().useItemOn(ctx.bot().getLocalPlayer(), InteractionHand.MAIN_HAND, hit);
         });
-        ctx.await("debug tag container open", () -> ctx.bot.getContainer().isPresent(), 200);
+        ctx.await("debug tag container open", () -> ctx.bot().getContainer().isPresent(), 200);
         ctx.check("debug tag container same line", () -> {
-            List<Component> rows = DebugNameTagInfo.format(ctx.bot).getSiblings();
-            String title = ctx.bot.getContainer().get().getTitle().getString();
+            List<Component> rows = DebugNameTagInfo.format(ctx.bot()).getSiblings();
+            String title = ctx.bot().getContainer().get().getTitle().getString();
             return rows.stream().anyMatch(r ->
                     r.getString().startsWith("📦") && r.getString().contains(title));
-        }, () -> "title=" + ctx.bot.getContainer().map(c -> c.getTitle().getString()).orElse(""));
+        }, () -> "title=" + ctx.bot().getContainer().map(c -> c.getTitle().getString()).orElse(""));
         ctx.run(() -> {
-            ctx.bot.getContainer().ifPresent(c -> c.close());
+            ctx.bot().getContainer().ifPresent(c -> c.close());
             Minecraft mc = Minecraft.getInstance();
             mc.debugEntries.setOverlayVisible(false);
             MockplayerConfig.save(new ModConfig());

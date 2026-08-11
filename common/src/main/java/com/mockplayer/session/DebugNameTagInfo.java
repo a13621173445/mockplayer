@@ -15,7 +15,7 @@ import java.util.Locale;
  *
  * 输入：配置开关 debugOverlayEnabled + F3 调试信息可见（DebugScreenOverlay）
  * 输出：多行 Component（每行带颜色）：❤血量 🍗饱食度(饱和度) 同一行，
- * 💾内存(KB/MB)+📡区块半径(chunk) 同一行，🏃速度(m/s)，📦+容器标题（同一行）
+ * 💾内存(B/KB/MB)+📡区块半径(chunk) 同一行，🏃速度(m/s)，📦+容器标题（同一行）
  *
  * 只读假人状态，零主玩家污染；无 player 时返回 null（渲染层不显示）。
  * emoji/数值/单位拼接为通用符号（语言无关），容器标题用原版翻译组件。
