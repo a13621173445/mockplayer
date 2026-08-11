@@ -6,6 +6,7 @@ import com.mockplayer.session.FakePlayerCommands;
 import com.mockplayer.test.framework.TestContext;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -73,5 +74,16 @@ public final class SuitesSupport {
                 ctx.server().getCommands().performPrefixedCommand(source, "give " + botName + " " + item);
             }
         });
+    }
+
+    /** 反射读服务端玩家连接是否仍在等待位置确认（26.2 awaitingPositionFromClient 是 Vec3，非 null = 等待中）。 */
+    public static boolean isAwaitingPosition(ServerPlayer sp) {
+        try {
+            java.lang.reflect.Field f = sp.connection.getClass().getDeclaredField("awaitingPositionFromClient");
+            f.setAccessible(true);
+            return f.get(sp.connection) != null;
+        } catch (Exception ignored) {
+            return true;
+        }
     }
 }
