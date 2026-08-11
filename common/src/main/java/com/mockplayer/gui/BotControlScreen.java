@@ -17,11 +17,9 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerInput;
@@ -67,8 +65,8 @@ public class BotControlScreen extends Screen {
     private static final int TAB_Y = 24;
     static final int CONTENT_Y = 44;
     private static final int FEEDBACK_Y = BotGui.PANEL_H - 14;
-    private static final int CELL = 20;
-    private static final int SLOT = 18;
+    static final int CELL = 20;
+    static final int SLOT = 18;
     // ===== 半透明面板配色（alpha < 0xFF，透出游戏场景） =====
     public static final int PANEL_BG_TOP = 0xB0253047;
     public static final int PANEL_BG_BOTTOM = 0xB00A0D16;
@@ -1206,11 +1204,11 @@ public class BotControlScreen extends Screen {
         return this.font;
     }
 
-    private double localX(double screenX) {
+    double localX(double screenX) {
         return (screenX - this.panelX()) / this.scale();
     }
 
-    private double localY(double screenY) {
+    double localY(double screenY) {
         return (screenY - this.panelY()) / this.scale();
     }
 
@@ -1262,7 +1260,7 @@ public class BotControlScreen extends Screen {
                 }
             } else {
                 net.minecraft.client.player.LocalPlayer player = this.selected.getLocalPlayer();
-                int slot = this.inventorySlotAt(mx, my);
+                int slot = BotInventoryPanel.inventorySlotAt(mx, my);
                 if (slot == net.minecraft.world.inventory.AbstractContainerMenu.SLOT_CLICKED_OUTSIDE) {
                     this.discardClick(info);
                     return true;
@@ -1285,37 +1283,6 @@ public class BotControlScreen extends Screen {
             }
         }
         return false;
-    }
-
-    /** 假人背包格子（inventoryMenu 槽位布局：盔甲 5-8 / 主背包 9-35 / 快捷栏 36-44 / 副手 45）。 */
-    private int inventorySlotAt(double mx, double my) {
-        double bx = mx - CONTENT_X;
-        double by = my - CONTENT_Y;
-        int gx = (int) (bx / CELL);
-        int gy = (int) (by / CELL);
-        // 盔甲列（x=0）
-        if (gx == 0 && gy >= 0 && gy < 4) {
-            return 5 + gy;
-        }
-        // 主背包 3 行（x=24 起，y=0..2）
-        int gxMain = (int) ((bx - 24) / CELL);
-        if (gxMain >= 0 && gxMain < 9 && gy >= 0 && gy < 3) {
-            return 9 + gy * 9 + gxMain;
-        }
-        // 快捷栏 1 行（y=3）+ 副手（x=24+9*CELL）
-        if (gy == 3) {
-            if (gxMain >= 0 && gxMain < 9) {
-                return 36 + gxMain;
-            }
-            int gxOff = (int) ((bx - 24 - 9 * CELL) / CELL);
-            if (gxOff == 0) {
-                return 45;
-            }
-            if (gxOff == 1) {
-                return net.minecraft.world.inventory.AbstractContainerMenu.SLOT_CLICKED_OUTSIDE;
-            }
-        }
-        return -1;
     }
 
     /** 红色丢弃格子：原版点击菜单外（-999）——携带物品左键整组/右键 1 个丢弃；空手无害。 */
@@ -1514,81 +1481,11 @@ public class BotControlScreen extends Screen {
                 if (this.selected.getContainer().isPresent()) {
                     this.drawContainer(graphics, mouseX, mouseY);
                 } else {
-                    this.drawInventory(graphics, mouseX, mouseY);
+                    BotInventoryPanel.render(this, graphics, mouseX, mouseY);
                 }
             }
             default -> this.drawActions(graphics);
         }
-    }
-
-
-
-    private void drawInventory(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-        net.minecraft.client.player.LocalPlayer player = this.selected.getLocalPlayer();
-        if (player == null) {
-            return;
-        }
-        double mx = this.localX(mouseX);
-        double my = this.localY(mouseY);
-        int hovered = this.inventorySlotAt(mx, my);
-        // 注意：显示与点击共用「菜单槽」语义（盔甲 5-8 / 主背包 9-35 / 快捷栏 36-44 / 副手 45），
-        // 不能直接拿菜单槽号去 Inventory.getItem（那里 0-8 才是快捷栏，36-40 是装备/副手）
-        // 盔甲列（槽 5-8）
-        for (int i = 0; i < 4; i++) {
-            this.drawSlot(graphics, CONTENT_X, CONTENT_Y + i * CELL,
-                    BotControlHud.inventoryItem(player, 5 + i), hovered == 5 + i, BotControlHud.slotIcon(player, 5 + i));
-        }
-        // 主背包 27 格（槽 9-35）
-        for (int i = 0; i < 27; i++) {
-            this.drawSlot(graphics, CONTENT_X + 24 + (i % 9) * CELL, CONTENT_Y + (i / 9) * CELL,
-                    BotControlHud.inventoryItem(player, 9 + i), hovered == 9 + i, BotControlHud.slotIcon(player, 9 + i));
-        }
-        // 快捷栏 9 格（槽 36-44）
-        for (int i = 0; i < 9; i++) {
-            this.drawSlot(graphics, CONTENT_X + 24 + i * CELL, CONTENT_Y + 3 * CELL,
-                    BotControlHud.inventoryItem(player, 36 + i), hovered == 36 + i, BotControlHud.slotIcon(player, 36 + i));
-        }
-        // 副手（槽 45）
-        this.drawSlot(graphics, CONTENT_X + 24 + 9 * CELL, CONTENT_Y + 3 * CELL,
-                BotControlHud.inventoryItem(player, 45), hovered == 45, BotControlHud.slotIcon(player, 45));
-        // 红色丢弃格子（副手右侧一格）：物品放进去 = 原版点击菜单外丢弃
-        this.drawDiscardSlot(graphics, CONTENT_X + 24 + 10 * CELL, CONTENT_Y + 3 * CELL,
-                hovered == net.minecraft.world.inventory.AbstractContainerMenu.SLOT_CLICKED_OUTSIDE);
-        // 选中槽高亮
-        int sel = player.getInventory().getSelectedSlot();
-        graphics.outline(this.sx(CONTENT_X + 24 + sel * CELL), this.sy(CONTENT_Y + 3 * CELL),
-                this.sw(SLOT + 2), this.sw(SLOT + 2), 0xFFFFFF00);
-        // 悬停物品信息（原版 tooltip + 数量行）
-        if (hovered >= 0) {
-            List<Component> lines = BotControlHud.slotTooltip(player, hovered);
-            if (lines != null) {
-                graphics.setTooltipForNextFrame(this.font,
-                        lines.stream().map(Component::getVisualOrderText).toList(), mouseX, mouseY);
-                com.mockplayer.gui.BotGui.recordTooltip();
-            }
-        } else if (hovered == net.minecraft.world.inventory.AbstractContainerMenu.SLOT_CLICKED_OUTSIDE) {
-            graphics.setTooltipForNextFrame(this.font,
-                    List.of(Component.translatable("gui.mockplayer.discard").getVisualOrderText()), mouseX, mouseY);
-            com.mockplayer.gui.BotGui.recordTooltip();
-        }
-    }
-
-    /** 红色丢弃格子（红色底 + 白色 ×；悬停变亮，hover 时提示「丢弃」）。 */
-    private void drawDiscardSlot(GuiGraphicsExtractor graphics, int lx, int ly, boolean hovered) {
-        int x = this.sx(lx);
-        int y = this.sy(ly);
-        int cell = this.sw(CELL);
-        float opacity = MockplayerConfig.get().getGuiOpacity();
-        graphics.fill(x, y, x + cell, y + cell,
-                hovered ? BotControlHud.withAlpha(0x8FDF6060, opacity) : BotControlHud.withAlpha(0x8FC04040, opacity));
-        graphics.outline(x, y, cell, cell,
-                hovered ? BotControlHud.withAlpha(0xBFE07070, opacity) : BotControlHud.withAlpha(0xBFB03030, opacity));
-        String mark = "×";
-        int tw = this.font.width(mark);
-        graphics.text(this.font, Component.literal(mark),
-                x + (cell - tw) / 2, y + (cell - this.font.lineHeight) / 2,
-                hovered ? 0xFFFFFFFF : 0xFFE8E8E8);
-        com.mockplayer.gui.BotGui.recordDiscardSlot();
     }
 
 
@@ -1611,7 +1508,7 @@ public class BotControlScreen extends Screen {
         double my = this.localY(mouseY);
         int hovered = this.containerSlotAt(mx, my, containerSize);
         for (int i = 0; i < containerSize; i++) {
-            this.drawSlot(graphics, CONTENT_X + (i % 9) * CELL,
+            BotInventoryPanel.drawSlot(this, graphics, CONTENT_X + (i % 9) * CELL,
                     CONTENT_Y + CONTAINER_HEADER_H + (i / 9) * CELL,
                     c.getSlot(i), hovered == i, menu.getSlot(i).getNoItemIcon());
         }
@@ -1621,7 +1518,7 @@ public class BotControlScreen extends Screen {
         for (int i = 0; i < playerCount; i++) {
             int idx = containerSize + i;
             if (idx < c.getSize()) {
-                this.drawSlot(graphics, CONTENT_X + (i % 9) * CELL,
+                BotInventoryPanel.drawSlot(this, graphics, CONTENT_X + (i % 9) * CELL,
                         CONTENT_Y + CONTAINER_HEADER_H + playerY + (i / 9) * CELL,
                         c.getSlot(idx), hovered == idx,
                         menu.getSlot(idx).getNoItemIcon());
@@ -1650,29 +1547,4 @@ public class BotControlScreen extends Screen {
                 this.sx(CONTENT_X), this.sy(this.systemTitleY), 0xFFA8C8FF);
     }
 
-    /** 画一个槽位（逻辑坐标入参，内部换算屏幕坐标；边框 + 空槽图标 + 物品图标 + 数量 + 悬停高亮）。 */
-    private void drawSlot(GuiGraphicsExtractor graphics, int lx, int ly, ItemStack stack,
-                          boolean hovered, Identifier emptyIcon) {
-        int x = this.sx(lx);
-        int y = this.sy(ly);
-        int cell = this.sw(CELL);
-        int slot = Math.max(1, cell - 2);
-        float opacity = MockplayerConfig.get().getGuiOpacity();
-        graphics.fill(x, y, x + cell, y + cell,
-                hovered ? BotControlHud.withAlpha(SLOT_BG_HOVER, opacity) : BotControlHud.withAlpha(SLOT_BG, opacity));
-        graphics.outline(x, y, cell, cell,
-                hovered ? BotControlHud.withAlpha(SLOT_BORDER_HOVER, opacity) : BotControlHud.withAlpha(SLOT_BORDER, opacity));
-        // 原版语义：槽位为空时画装备/副手背景图标（物品存在则不画）
-        if (stack.isEmpty() && emptyIcon != null) {
-            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, emptyIcon, x + 1, y + 1,
-                    this.sw(16), this.sw(16));
-            com.mockplayer.gui.BotGui.recordSlotIcon();
-        }
-        if (!stack.isEmpty()) {
-            graphics.item(stack, x + 1, y + 1);
-            // 数量/附魔角标走原版 itemDecorations（与物品渲染同一位置）
-            graphics.itemDecorations(this.font, stack, x + 1, y + 1);
-            com.mockplayer.gui.BotGui.recordItemDecoration();
-        }
-    }
 }
