@@ -11,7 +11,7 @@ import net.minecraft.network.chat.MutableComponent;
 import java.util.Locale;
 
 /**
- * 假人 F3 调试信息标签（名字标签下方一行）。
+ * 假人 F3 调试信息标签（名字标签上方多行）。
  *
  * 输入：配置开关 debugOverlayEnabled + F3 调试信息可见（DebugScreenOverlay）
  * 输出：多行 Component（每行带颜色）：❤血量 🍗饱食度(饱和度) 同一行，
@@ -59,7 +59,7 @@ public final class DebugNameTagInfo {
     }
 
     /**
-     * 多行信息（每行一项，\n 分隔；渲染层按行绘制在假人名字下方）。
+     * 多行信息（每行一项，\n 分隔；渲染层按行绘制在假人名字上方）。
      * bot 为空 / 未就绪返回 null（不显示）。
      */
     public static Component format(Bot bot) {
