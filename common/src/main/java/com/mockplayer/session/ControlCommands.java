@@ -8,6 +8,7 @@ import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
@@ -46,16 +47,312 @@ import java.util.Optional;
  */
 public class ControlCommands {
 
-    /** 全部动作命令（与 buildControlTree 的 player 子命令同步；/control help 与测试共用）。 */
-    public static final List<String> ACTIONS = List.of(
-            "move", "stop", "sneak", "unsneak", "sprint", "unsprint", "jump",
-            "look", "lookAt", "turn", "attack", "stab", "sustainedAttack", "sustainedUse",
-            "attackLook", "useLook", "sustainedAttackLook", "sustainedUseLook",
-            "stopSustained", "interact", "useItem", "releaseUsingItem", "useItemOn",
-            "placeBlock", "mineBlock", "attackBlock", "hotbar", "chunkRadius", "drop", "swapHands",
-            "mount", "dismount", "close", "click", "button", "trade", "setSlot",
-            "chat", "command", "wakeUp", "respawn", "editBook", "editSign", "setBeacon",
-            "renameItem", "pickItemFromBlock", "help");
+    // ===== 命令树数据化（P4-1）：SPECS 是唯一真相，ACTIONS/命令树都由它生成 =====
+
+    /** 参数描述：名字 + Brigadier 类型 + 可选 Tab 补全。 */
+    private record ArgSpec(String name, com.mojang.brigadier.arguments.ArgumentType<?> type,
+                           com.mojang.brigadier.suggestion.SuggestionProvider<?> suggests) {
+    }
+
+    /** 命令描述：名字 + 参数链变体（每个变体 = 一种参数组合）+ 执行器（返回反馈组件）。 */
+    private record CommandSpec(String name, List<List<ArgSpec>> variants,
+                               java.util.function.Function<CommandContext<?>, Component> executor) {
+    }
+
+    private static CommandSpec spec(String name, List<List<ArgSpec>> variants,
+                                    java.util.function.Function<CommandContext<?>, Component> executor) {
+        return new CommandSpec(name, variants, executor);
+    }
+
+    private static ArgSpec word(String name) {
+        return new ArgSpec(name, StringArgumentType.word(), null);
+    }
+
+    private static ArgSpec word(String name, SuggestionProvider<?> suggests) {
+        return new ArgSpec(name, StringArgumentType.word(), suggests);
+    }
+
+    private static ArgSpec greedy(String name) {
+        return new ArgSpec(name, StringArgumentType.greedyString(), null);
+    }
+
+    private static ArgSpec greedy(String name, SuggestionProvider<?> suggests) {
+        return new ArgSpec(name, StringArgumentType.greedyString(), suggests);
+    }
+
+    private static ArgSpec integer(String name) {
+        return new ArgSpec(name, IntegerArgumentType.integer(), null);
+    }
+
+    private static ArgSpec integer(String name, SuggestionProvider<?> suggests) {
+        return new ArgSpec(name, IntegerArgumentType.integer(), suggests);
+    }
+
+    private static ArgSpec integer(String name, int min) {
+        return new ArgSpec(name, IntegerArgumentType.integer(min), null);
+    }
+
+    private static ArgSpec integer(String name, int min, int max) {
+        return new ArgSpec(name, IntegerArgumentType.integer(min, max), null);
+    }
+
+    private static ArgSpec integer(String name, int min, int max, SuggestionProvider<?> suggests) {
+        return new ArgSpec(name, IntegerArgumentType.integer(min, max), suggests);
+    }
+
+    private static ArgSpec floatArg(String name) {
+        return new ArgSpec(name, FloatArgumentType.floatArg(), null);
+    }
+
+    private static ArgSpec floatArg(String name, SuggestionProvider<?> suggests) {
+        return new ArgSpec(name, FloatArgumentType.floatArg(), suggests);
+    }
+
+    private static ArgSpec floatArg(String name, float min, float max) {
+        return new ArgSpec(name, FloatArgumentType.floatArg(min, max), null);
+    }
+
+    private static ArgSpec floatArg(String name, float min, float max, SuggestionProvider<?> suggests) {
+        return new ArgSpec(name, FloatArgumentType.floatArg(min, max), suggests);
+    }
+
+    private static ArgSpec doubleArg(String name, SuggestionProvider<?> suggests) {
+        return new ArgSpec(name, DoubleArgumentType.doubleArg(), suggests);
+    }
+
+    /** 参数链变体集合（一个命令可有多种参数组合，如 drop/attack）。 */
+    @SafeVarargs
+    private static List<List<ArgSpec>> variants(List<ArgSpec>... vs) {
+        return List.of(vs);
+    }
+
+    /** 一组参数（空 = 无参数变体）。 */
+    private static List<ArgSpec> v(ArgSpec... args) {
+        return List.of(args);
+    }
+
+    // ===== 参数读取辅助（执行器内提取 ctx 参数；可选参数缺失返回 null/默认） =====
+
+    private static String name(CommandContext<?> ctx) {
+        return StringArgumentType.getString(ctx, "player");
+    }
+
+    private static String str(CommandContext<?> ctx, String key) {
+        return StringArgumentType.getString(ctx, key);
+    }
+
+    private static String strOrNull(CommandContext<?> ctx, String key) {
+        try {
+            return StringArgumentType.getString(ctx, key);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static int i(CommandContext<?> ctx, String key) {
+        return IntegerArgumentType.getInteger(ctx, key);
+    }
+
+    private static Integer iOrNull(CommandContext<?> ctx, String key) {
+        try {
+            return IntegerArgumentType.getInteger(ctx, key);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static float f(CommandContext<?> ctx, String key) {
+        return FloatArgumentType.getFloat(ctx, key);
+    }
+
+    private static double d(CommandContext<?> ctx, String key) {
+        return DoubleArgumentType.getDouble(ctx, key);
+    }
+
+    /** 全部动作命令声明（顺序 = help 展示顺序，也决定 ACTIONS 与命令树结构）。 */
+    private static final List<CommandSpec> SPECS = List.of(
+            spec("move", variants(v(word("dir", directions()))),
+                    ctx -> move(name(ctx), str(ctx, "dir"))),
+            spec("stop", variants(v()),
+                    ctx -> stop(name(ctx))),
+            spec("sneak", variants(v()),
+                    ctx -> setSneak(name(ctx), true)),
+            spec("unsneak", variants(v()),
+                    ctx -> setSneak(name(ctx), false)),
+            spec("sprint", variants(v()),
+                    ctx -> setSprint(name(ctx), true)),
+            spec("unsprint", variants(v()),
+                    ctx -> setSprint(name(ctx), false)),
+            spec("jump", variants(v()),
+                    ctx -> jump(name(ctx))),
+            spec("look", variants(v(
+                            floatArg("yaw", yawNow()),
+                            floatArg("pitch", -90.0F, 90.0F, pitchNow()))),
+                    ctx -> look(name(ctx), f(ctx, "yaw"), f(ctx, "pitch"))),
+            spec("lookAt", variants(v(
+                            doubleArg("x", CommandSupport.coordX("commands.mockplayer.control.suggest.x")),
+                            doubleArg("y", CommandSupport.coordY("commands.mockplayer.control.suggest.y")),
+                            doubleArg("z", CommandSupport.coordZ("commands.mockplayer.control.suggest.z")))),
+                    ctx -> lookAt(name(ctx), d(ctx, "x"), d(ctx, "y"), d(ctx, "z"))),
+            spec("turn", variants(v(
+                            floatArg("yaw"),
+                            floatArg("pitch", -90.0F, 90.0F))),
+                    ctx -> turn(name(ctx), f(ctx, "yaw"), f(ctx, "pitch"))),
+            spec("attack", variants(
+                            v(),
+                            v(word("target", entityTypes()))),
+                    ctx -> attack(name(ctx), strOrNull(ctx, "target"))),
+            spec("stab", variants(v()),
+                    ctx -> stab(name(ctx))),
+            spec("sustainedAttack", variants(
+                            v(),
+                            v(word("target", entityTypes()))),
+                    ctx -> sustainedAttack(name(ctx), strOrNull(ctx, "target"))),
+            spec("sustainedUse", variants(
+                            v(),
+                            v(word("target", entityTypes()))),
+                    ctx -> sustainedUse(name(ctx), strOrNull(ctx, "target"))),
+            spec("attackLook", variants(v()),
+                    ctx -> attackLook(name(ctx))),
+            spec("useLook", variants(v()),
+                    ctx -> useLook(name(ctx))),
+            spec("sustainedAttackLook", variants(v()),
+                    ctx -> sustainedAttackLook(name(ctx))),
+            spec("sustainedUseLook", variants(v()),
+                    ctx -> sustainedUseLook(name(ctx))),
+            spec("stopSustained", variants(v()),
+                    ctx -> stopSustained(name(ctx))),
+            spec("interact", variants(
+                            v(),
+                            v(word("target", entityTypes()))),
+                    ctx -> interact(name(ctx), strOrNull(ctx, "target"))),
+            spec("useItem", variants(
+                            v(),
+                            v(word("hand", hands()))),
+                    ctx -> useItem(name(ctx), strOrNull(ctx, "hand"))),
+            spec("releaseUsingItem", variants(v()),
+                    ctx -> releaseUsingItem(name(ctx))),
+            spec("useItemOn", variants(v(
+                            integer("x"),
+                            integer("y"),
+                            integer("z"),
+                            word("side", sides()))),
+                    ctx -> useItemOn(name(ctx), i(ctx, "x"), i(ctx, "y"), i(ctx, "z"), str(ctx, "side"))),
+            spec("placeBlock", variants(v(
+                            integer("x"),
+                            integer("y"),
+                            integer("z"),
+                            word("side", sides()))),
+                    ctx -> placeBlock(name(ctx), i(ctx, "x"), i(ctx, "y"), i(ctx, "z"), str(ctx, "side"))),
+            spec("mineBlock", variants(v(
+                            integer("x"),
+                            integer("y"),
+                            integer("z"))),
+                    ctx -> mineBlock(name(ctx), i(ctx, "x"), i(ctx, "y"), i(ctx, "z"))),
+            spec("attackBlock", variants(v(
+                            integer("x"),
+                            integer("y"),
+                            integer("z"))),
+                    ctx -> attackBlock(name(ctx), i(ctx, "x"), i(ctx, "y"), i(ctx, "z"))),
+            spec("hotbar", variants(v(
+                            integer("slot", 1, 9,
+                                    CommandSupport.fixed("1", "2", "3", "4", "5", "6", "7", "8", "9")))),
+                    ctx -> hotbar(name(ctx), i(ctx, "slot"))),
+            spec("chunkRadius", variants(v(
+                            integer("radius",
+                                    com.mockplayer.config.ModConfig.MIN_FAKE_PLAYER_CHUNK_RADIUS,
+                                    com.mockplayer.config.ModConfig.MAX_FAKE_PLAYER_CHUNK_RADIUS))),
+                    ctx -> chunkRadius(name(ctx), i(ctx, "radius"))),
+            spec("drop", variants(
+                            v(),
+                            v(integer("slot", 0, 8,
+                                    CommandSupport.fixed("0", "1", "2", "3", "4", "5", "6", "7", "8"))),
+                            v(integer("slot", 0, 8,
+                                    CommandSupport.fixed("0", "1", "2", "3", "4", "5", "6", "7", "8")),
+                                    word("mode", oneAll()))),
+                    ctx -> drop(name(ctx), iOrNull(ctx, "slot"), "all".equals(strOrNull(ctx, "mode")))),
+            spec("swapHands", variants(v()),
+                    ctx -> swapHands(name(ctx))),
+            spec("mount", variants(
+                            v(),
+                            v(word("target", mountTargets()))),
+                    ctx -> {
+                        String target = strOrNull(ctx, "target");
+                        if (target == null) {
+                            return mount(name(ctx), null, null);
+                        }
+                        if ("rideables".equalsIgnoreCase(target) || "anything".equalsIgnoreCase(target)) {
+                            return mount(name(ctx), null, "rideables".equalsIgnoreCase(target));
+                        }
+                        return mount(name(ctx), target, null);
+                    }),
+            spec("dismount", variants(v()),
+                    ctx -> dismount(name(ctx))),
+            spec("close", variants(v()),
+                    ctx -> close(name(ctx))),
+            spec("click", variants(v(
+                            integer("slot", 0, Integer.MAX_VALUE, containerSlots()),
+                            integer("button", 0, 2),
+                            word("mode", clickModes()))),
+                    ctx -> click(name(ctx), i(ctx, "slot"), i(ctx, "button"), str(ctx, "mode"))),
+            spec("button", variants(v(
+                            integer("id", 0, 3, CommandSupport.fixed("0", "1", "2", "3")))),
+                    ctx -> button(name(ctx), i(ctx, "id"))),
+            spec("trade", variants(v(
+                            integer("index", 0, Integer.MAX_VALUE,
+                                    CommandSupport.fixed("0", "1", "2", "3", "4", "5")))),
+                    ctx -> trade(name(ctx), i(ctx, "index"))),
+            spec("setSlot", variants(v(
+                            integer("slot", 0, Integer.MAX_VALUE, containerSlots()))),
+                    ctx -> setSlot(name(ctx), i(ctx, "slot"))),
+            spec("chat", variants(v(greedy("message"))),
+                    ctx -> chat(name(ctx), str(ctx, "message"))),
+            spec("command", variants(v(greedy("command", nestedCommands()))),
+                    ctx -> command(name(ctx), str(ctx, "command"))),
+            spec("wakeUp", variants(v()),
+                    ctx -> wakeUp(name(ctx))),
+            spec("respawn", variants(v()),
+                    ctx -> respawn(name(ctx))),
+            spec("editBook", variants(
+                            v(integer("slot", 1, 9,
+                                            CommandSupport.fixed("1", "2", "3", "4", "5", "6", "7", "8", "9")),
+                                    word("page")),
+                            v(integer("slot", 1, 9,
+                                            CommandSupport.fixed("1", "2", "3", "4", "5", "6", "7", "8", "9")),
+                                    word("page"),
+                                    greedy("title"))),
+                    ctx -> editBook(name(ctx), i(ctx, "slot"), str(ctx, "page"), strOrNull(ctx, "title"))),
+            spec("editSign", variants(v(
+                            integer("x", CommandSupport.coordX("commands.mockplayer.control.suggest.x")),
+                            integer("y", CommandSupport.coordY("commands.mockplayer.control.suggest.y")),
+                            integer("z", CommandSupport.coordZ("commands.mockplayer.control.suggest.z")),
+                            word("side", CommandSupport.fixed("front", "back")),
+                            word("line1"),
+                            word("line2"),
+                            word("line3"),
+                            word("line4"))),
+                    ctx -> editSign(name(ctx), i(ctx, "x"), i(ctx, "y"), i(ctx, "z"),
+                            "front".equals(str(ctx, "side")),
+                            new String[]{str(ctx, "line1"), str(ctx, "line2"),
+                                    str(ctx, "line3"), str(ctx, "line4")})),
+            spec("setBeacon", variants(
+                            v(word("primary", effectIds())),
+                            v(word("primary", effectIds()), word("secondary", effectIds()))),
+                    ctx -> setBeacon(name(ctx), str(ctx, "primary"), strOrNull(ctx, "secondary"))),
+            spec("renameItem", variants(v(greedy("name"))),
+                    ctx -> renameItem(name(ctx), str(ctx, "name"))),
+            spec("pickItemFromBlock", variants(v(
+                            integer("x", CommandSupport.coordX("commands.mockplayer.control.suggest.x")),
+                            integer("y", CommandSupport.coordY("commands.mockplayer.control.suggest.y")),
+                            integer("z", CommandSupport.coordZ("commands.mockplayer.control.suggest.z")),
+                            word("includeData", CommandSupport.fixed("true", "false")))),
+                    ctx -> pickItemFromBlock(name(ctx), i(ctx, "x"), i(ctx, "y"), i(ctx, "z"),
+                            "true".equals(str(ctx, "includeData")))),
+            spec("help", variants(v()),
+                    ctx -> help(name(ctx))));
+
+    /** 全部动作命令（与命令树同一来源；/control help 与测试共用，防漂移）。 */
+    public static final List<String> ACTIONS = SPECS.stream().map(CommandSpec::name).toList();
 
     private ControlCommands() {
     }
@@ -895,470 +1192,53 @@ public class ControlCommands {
         RequiredArgumentBuilder<S, ?> player = f.argument("player", FakePlayerNameArgument.fakePlayerName())
                 .suggests(CommandSupport.botNames());
 
-        player.then(f.literal("move").then(f.argument("dir", StringArgumentType.word())
-                .suggests(directions())
-                .executes(ctx -> {
-                    f.sendFeedback(ctx.getSource(), move(StringArgumentType.getString(ctx, "player"),
-                            StringArgumentType.getString(ctx, "dir")));
-                    return 1;
-                })));
-        player.then(f.literal("stop").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), stop(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("sneak").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), setSneak(StringArgumentType.getString(ctx, "player"), true));
-            return 1;
-        }));
-        player.then(f.literal("unsneak").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), setSneak(StringArgumentType.getString(ctx, "player"), false));
-            return 1;
-        }));
-        player.then(f.literal("sprint").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), setSprint(StringArgumentType.getString(ctx, "player"), true));
-            return 1;
-        }));
-        player.then(f.literal("unsprint").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), setSprint(StringArgumentType.getString(ctx, "player"), false));
-            return 1;
-        }));
-        player.then(f.literal("jump").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), jump(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-
-        player.then(f.literal("look")
-                .then(f.argument("yaw", FloatArgumentType.floatArg())
-                        .suggests(yawNow())
-                        .then(f.argument("pitch", FloatArgumentType.floatArg(-90.0F, 90.0F))
-                                .suggests(pitchNow())
-                                .executes(ctx -> {
-                                    String name = StringArgumentType.getString(ctx, "player");
-                                    f.sendFeedback(ctx.getSource(), look(name,
-                                            FloatArgumentType.getFloat(ctx, "yaw"),
-                                            FloatArgumentType.getFloat(ctx, "pitch")));
-                                    return 1;
-                                }))));
-        player.then(f.literal("lookAt")
-                .then(f.argument("x", DoubleArgumentType.doubleArg())
-                        .suggests(CommandSupport.coordX("commands.mockplayer.control.suggest.x"))
-                        .then(f.argument("y", DoubleArgumentType.doubleArg())
-                                .suggests(CommandSupport.coordY("commands.mockplayer.control.suggest.y"))
-                                .then(f.argument("z", DoubleArgumentType.doubleArg())
-                                        .suggests(CommandSupport.coordZ("commands.mockplayer.control.suggest.z"))
-                                        .executes(ctx -> {
-                                            String name = StringArgumentType.getString(ctx, "player");
-                                            f.sendFeedback(ctx.getSource(), lookAt(name,
-                                                    DoubleArgumentType.getDouble(ctx, "x"),
-                                                    DoubleArgumentType.getDouble(ctx, "y"),
-                                                    DoubleArgumentType.getDouble(ctx, "z")));
-                                            return 1;
-                                        })))));
-        player.then(f.literal("turn")
-                .then(f.argument("yaw", FloatArgumentType.floatArg())
-                        .then(f.argument("pitch", FloatArgumentType.floatArg(-90.0F, 90.0F))
-                                .executes(ctx -> {
-                                    String name = StringArgumentType.getString(ctx, "player");
-                                    f.sendFeedback(ctx.getSource(), turn(name,
-                                            FloatArgumentType.getFloat(ctx, "yaw"),
-                                            FloatArgumentType.getFloat(ctx, "pitch")));
-                                    return 1;
-                                }))));
-
-        player.then(f.literal("attack")
-                .executes(ctx -> {
-                    f.sendFeedback(ctx.getSource(), attack(StringArgumentType.getString(ctx, "player"), null));
-                    return 1;
-                })
-                .then(f.argument("target", StringArgumentType.word())
-                        .suggests(entityTypes())
-                        .executes(ctx -> {
-                            f.sendFeedback(ctx.getSource(), attack(
-                                    StringArgumentType.getString(ctx, "player"),
-                                    StringArgumentType.getString(ctx, "target")));
-                            return 1;
-                        })));
-        player.then(f.literal("stab").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), stab(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("sustainedAttack")
-                .executes(ctx -> {
-                    f.sendFeedback(ctx.getSource(), sustainedAttack(StringArgumentType.getString(ctx, "player"), null));
-                    return 1;
-                })
-                .then(f.argument("target", StringArgumentType.word())
-                        .suggests(entityTypes())
-                        .executes(ctx -> {
-                            f.sendFeedback(ctx.getSource(), sustainedAttack(
-                                    StringArgumentType.getString(ctx, "player"),
-                                    StringArgumentType.getString(ctx, "target")));
-                            return 1;
-                        })));
-        player.then(f.literal("sustainedUse")
-                .executes(ctx -> {
-                    f.sendFeedback(ctx.getSource(), sustainedUse(StringArgumentType.getString(ctx, "player"), null));
-                    return 1;
-                })
-                .then(f.argument("target", StringArgumentType.word())
-                        .suggests(entityTypes())
-                        .executes(ctx -> {
-                            f.sendFeedback(ctx.getSource(), sustainedUse(
-                                    StringArgumentType.getString(ctx, "player"),
-                                    StringArgumentType.getString(ctx, "target")));
-                            return 1;
-                        })));
-        player.then(f.literal("attackLook").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), attackLook(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("useLook").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), useLook(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("sustainedAttackLook").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), sustainedAttackLook(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("sustainedUseLook").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), sustainedUseLook(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("stopSustained").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), stopSustained(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-
-        player.then(f.literal("interact")
-                .executes(ctx -> {
-                    f.sendFeedback(ctx.getSource(), interact(StringArgumentType.getString(ctx, "player"), null));
-                    return 1;
-                })
-                .then(f.argument("target", StringArgumentType.word())
-                        .suggests(entityTypes())
-                        .executes(ctx -> {
-                            f.sendFeedback(ctx.getSource(), interact(
-                                    StringArgumentType.getString(ctx, "player"),
-                                    StringArgumentType.getString(ctx, "target")));
-                            return 1;
-                        })));
-        player.then(f.literal("useItem")
-                .executes(ctx -> {
-                    f.sendFeedback(ctx.getSource(), useItem(StringArgumentType.getString(ctx, "player"), null));
-                    return 1;
-                })
-                .then(f.argument("hand", StringArgumentType.word())
-                        .suggests(hands())
-                        .executes(ctx -> {
-                            f.sendFeedback(ctx.getSource(), useItem(
-                                    StringArgumentType.getString(ctx, "player"),
-                                    StringArgumentType.getString(ctx, "hand")));
-                            return 1;
-                        })));
-        player.then(f.literal("releaseUsingItem").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), releaseUsingItem(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("useItemOn")
-                .then(f.argument("x", IntegerArgumentType.integer())
-                        .then(f.argument("y", IntegerArgumentType.integer())
-                                .then(f.argument("z", IntegerArgumentType.integer())
-                                        .then(f.argument("side", StringArgumentType.word())
-                                                .suggests(sides())
-                                                .executes(ctx -> {
-                                                    String name = StringArgumentType.getString(ctx, "player");
-                                                    f.sendFeedback(ctx.getSource(), useItemOn(name,
-                                                            IntegerArgumentType.getInteger(ctx, "x"),
-                                                            IntegerArgumentType.getInteger(ctx, "y"),
-                                                            IntegerArgumentType.getInteger(ctx, "z"),
-                                                            StringArgumentType.getString(ctx, "side")));
-                                                    return 1;
-                                                }))))));
-        player.then(f.literal("placeBlock")
-                .then(f.argument("x", IntegerArgumentType.integer())
-                        .then(f.argument("y", IntegerArgumentType.integer())
-                                .then(f.argument("z", IntegerArgumentType.integer())
-                                        .then(f.argument("side", StringArgumentType.word())
-                                                .suggests(sides())
-                                                .executes(ctx -> {
-                                                    String name = StringArgumentType.getString(ctx, "player");
-                                                    f.sendFeedback(ctx.getSource(), placeBlock(name,
-                                                            IntegerArgumentType.getInteger(ctx, "x"),
-                                                            IntegerArgumentType.getInteger(ctx, "y"),
-                                                            IntegerArgumentType.getInteger(ctx, "z"),
-                                                            StringArgumentType.getString(ctx, "side")));
-                                                    return 1;
-                                                }))))));
-        player.then(f.literal("mineBlock")
-                .then(f.argument("x", IntegerArgumentType.integer())
-                        .then(f.argument("y", IntegerArgumentType.integer())
-                                .then(f.argument("z", IntegerArgumentType.integer())
-                                        .executes(ctx -> {
-                                            String name = StringArgumentType.getString(ctx, "player");
-                                            f.sendFeedback(ctx.getSource(), mineBlock(name,
-                                                    IntegerArgumentType.getInteger(ctx, "x"),
-                                                    IntegerArgumentType.getInteger(ctx, "y"),
-                                                    IntegerArgumentType.getInteger(ctx, "z")));
-                                            return 1;
-                                        })))));
-        player.then(f.literal("attackBlock")
-                .then(f.argument("x", IntegerArgumentType.integer())
-                        .then(f.argument("y", IntegerArgumentType.integer())
-                                .then(f.argument("z", IntegerArgumentType.integer())
-                                        .executes(ctx -> {
-                                            String name = StringArgumentType.getString(ctx, "player");
-                                            f.sendFeedback(ctx.getSource(), attackBlock(name,
-                                                    IntegerArgumentType.getInteger(ctx, "x"),
-                                                    IntegerArgumentType.getInteger(ctx, "y"),
-                                                    IntegerArgumentType.getInteger(ctx, "z")));
-                                            return 1;
-                                        })))));
-
-        player.then(f.literal("hotbar")
-                .then(f.argument("slot", IntegerArgumentType.integer(1, 9))
-                        .suggests(CommandSupport.fixed("1", "2", "3", "4", "5", "6", "7", "8", "9"))
-                        .executes(ctx -> {
-                            f.sendFeedback(ctx.getSource(), hotbar(
-                                    StringArgumentType.getString(ctx, "player"),
-                                    IntegerArgumentType.getInteger(ctx, "slot")));
-                            return 1;
-                        })));
-        player.then(f.literal("chunkRadius")
-                .then(f.argument("radius", IntegerArgumentType.integer(
-                                com.mockplayer.config.ModConfig.MIN_FAKE_PLAYER_CHUNK_RADIUS,
-                                com.mockplayer.config.ModConfig.MAX_FAKE_PLAYER_CHUNK_RADIUS))
-                        .executes(ctx -> {
-                            f.sendFeedback(ctx.getSource(), chunkRadius(
-                                    StringArgumentType.getString(ctx, "player"),
-                                    IntegerArgumentType.getInteger(ctx, "radius")));
-                            return 1;
-                        })));
-        player.then(f.literal("drop")
-                .executes(ctx -> {
-                    f.sendFeedback(ctx.getSource(), drop(StringArgumentType.getString(ctx, "player"), null, false));
-                    return 1;
-                })
-                .then(f.argument("slot", IntegerArgumentType.integer(0, 8))
-                        .suggests(CommandSupport.fixed("0", "1", "2", "3", "4", "5", "6", "7", "8"))
-                        .executes(ctx -> {
-                            f.sendFeedback(ctx.getSource(), drop(
-                                    StringArgumentType.getString(ctx, "player"),
-                                    IntegerArgumentType.getInteger(ctx, "slot"), false));
-                            return 1;
-                        })
-                        .then(f.argument("mode", StringArgumentType.word())
-                                .suggests(oneAll())
-                                .executes(ctx -> {
-                                    String name = StringArgumentType.getString(ctx, "player");
-                                    String mode = StringArgumentType.getString(ctx, "mode");
-                                    f.sendFeedback(ctx.getSource(), drop(name,
-                                            IntegerArgumentType.getInteger(ctx, "slot"),
-                                            "all".equals(mode)));
-                                    return 1;
-                                }))));
-        player.then(f.literal("swapHands").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), swapHands(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-
-        player.then(f.literal("mount")
-                .executes(ctx -> {
-                    f.sendFeedback(ctx.getSource(), mount(StringArgumentType.getString(ctx, "player"), null, null));
-                    return 1;
-                })
-                .then(f.argument("target", StringArgumentType.word())
-                        .suggests(mountTargets())
-                        .executes(ctx -> {
-                            String name = StringArgumentType.getString(ctx, "player");
-                            String target = StringArgumentType.getString(ctx, "target");
-                            // 关键字：rideables/anything = 自动模式；否则 = 指定实体
-                            if ("rideables".equalsIgnoreCase(target) || "anything".equalsIgnoreCase(target)) {
-                                f.sendFeedback(ctx.getSource(), mount(name, null,
-                                        "rideables".equalsIgnoreCase(target)));
-                            } else {
-                                f.sendFeedback(ctx.getSource(), mount(name, target, null));
-                            }
-                            return 1;
-                        })));
-        player.then(f.literal("dismount").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), dismount(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("close").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), close(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("click")
-                .then(f.argument("slot", IntegerArgumentType.integer(0))
-                        .suggests(containerSlots())
-                        .then(f.argument("button", IntegerArgumentType.integer(0, 2))
-                                .then(f.argument("mode", StringArgumentType.word())
-                                        .suggests(clickModes())
-                                        .executes(ctx -> {
-                                            String name = StringArgumentType.getString(ctx, "player");
-                                            f.sendFeedback(ctx.getSource(), click(name,
-                                                    IntegerArgumentType.getInteger(ctx, "slot"),
-                                                    IntegerArgumentType.getInteger(ctx, "button"),
-                                                    StringArgumentType.getString(ctx, "mode")));
-                                            return 1;
-                                        })))));
-        player.then(f.literal("button")
-                .then(f.argument("id", IntegerArgumentType.integer(0, 3))
-                        .suggests(CommandSupport.fixed("0", "1", "2", "3"))
-                        .executes(ctx -> {
-                            String name = StringArgumentType.getString(ctx, "player");
-                            f.sendFeedback(ctx.getSource(), button(name,
-                                    IntegerArgumentType.getInteger(ctx, "id")));
-                            return 1;
-                        })));
-        player.then(f.literal("trade")
-                .then(f.argument("index", IntegerArgumentType.integer(0))
-                        .suggests(CommandSupport.fixed("0", "1", "2", "3", "4", "5"))
-                        .executes(ctx -> {
-                            String name = StringArgumentType.getString(ctx, "player");
-                            f.sendFeedback(ctx.getSource(), trade(name,
-                                    IntegerArgumentType.getInteger(ctx, "index")));
-                            return 1;
-                        })));
-        player.then(f.literal("setSlot")
-                .then(f.argument("slot", IntegerArgumentType.integer(0))
-                        .suggests(containerSlots())
-                        .executes(ctx -> {
-                            String name = StringArgumentType.getString(ctx, "player");
-                            f.sendFeedback(ctx.getSource(), setSlot(name,
-                                    IntegerArgumentType.getInteger(ctx, "slot")));
-                            return 1;
-                        })));
-
-        player.then(f.literal("chat")
-                .then(f.argument("message", StringArgumentType.greedyString())
-                        .executes(ctx -> {
-                            f.sendFeedback(ctx.getSource(), chat(
-                                    StringArgumentType.getString(ctx, "player"),
-                                    StringArgumentType.getString(ctx, "message")));
-                            return 1;
-                        })));
-        player.then(f.literal("command")
-                .then(f.argument("command", StringArgumentType.greedyString())
-                        .suggests(nestedCommands())
-                        .executes(ctx -> {
-                            f.sendFeedback(ctx.getSource(), command(
-                                    StringArgumentType.getString(ctx, "player"),
-                                    StringArgumentType.getString(ctx, "command")));
-                            return 1;
-                        })));
-        player.then(f.literal("wakeUp").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), wakeUp(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("respawn").executes(ctx -> {
-            f.sendFeedback(ctx.getSource(), respawn(StringArgumentType.getString(ctx, "player")));
-            return 1;
-        }));
-        player.then(f.literal("editBook")
-                .then(f.argument("slot", IntegerArgumentType.integer(1, 9))
-                        .suggests(CommandSupport.fixed("1", "2", "3", "4", "5", "6", "7", "8", "9"))
-                        .then(f.argument("page", StringArgumentType.word())
-                                .executes(ctx -> {
-                                    String name = StringArgumentType.getString(ctx, "player");
-                                    f.sendFeedback(ctx.getSource(), editBook(name,
-                                            IntegerArgumentType.getInteger(ctx, "slot"),
-                                            StringArgumentType.getString(ctx, "page"), null));
-                                    return 1;
-                                })
-                                .then(f.argument("title", StringArgumentType.greedyString())
-                                        .executes(ctx -> {
-                                            String name = StringArgumentType.getString(ctx, "player");
-                                            f.sendFeedback(ctx.getSource(), editBook(name,
-                                                    IntegerArgumentType.getInteger(ctx, "slot"),
-                                                    StringArgumentType.getString(ctx, "page"),
-                                                    StringArgumentType.getString(ctx, "title")));
-                                            return 1;
-                                        })))));
-        player.then(f.literal("editSign")
-                .then(f.argument("x", IntegerArgumentType.integer())
-                        .suggests(CommandSupport.coordX("commands.mockplayer.control.suggest.x"))
-                        .then(f.argument("y", IntegerArgumentType.integer())
-                                .suggests(CommandSupport.coordY("commands.mockplayer.control.suggest.y"))
-                                .then(f.argument("z", IntegerArgumentType.integer())
-                                        .suggests(CommandSupport.coordZ("commands.mockplayer.control.suggest.z"))
-                                        .then(f.argument("side", StringArgumentType.word())
-                                                .suggests(CommandSupport.fixed("front", "back"))
-                                                .then(f.argument("line1", StringArgumentType.word())
-                                                        .then(f.argument("line2", StringArgumentType.word())
-                                                                .then(f.argument("line3", StringArgumentType.word())
-                                                                        .then(f.argument("line4", StringArgumentType.word())
-                                                                                .executes(ctx -> {
-                                                                                    String name = StringArgumentType.getString(ctx, "player");
-                                                                                    boolean front = "front".equals(
-                                                                                            StringArgumentType.getString(ctx, "side"));
-                                                                                    f.sendFeedback(ctx.getSource(), editSign(name,
-                                                                                            IntegerArgumentType.getInteger(ctx, "x"),
-                                                                                            IntegerArgumentType.getInteger(ctx, "y"),
-                                                                                            IntegerArgumentType.getInteger(ctx, "z"),
-                                                                                            front,
-                                                                                            new String[]{
-                                                                                                    StringArgumentType.getString(ctx, "line1"),
-                                                                                                    StringArgumentType.getString(ctx, "line2"),
-                                                                                                    StringArgumentType.getString(ctx, "line3"),
-                                                                                                    StringArgumentType.getString(ctx, "line4")
-                                                                                            }));
-                                                                                    return 1;
-                                                                                }))))))))));
-        player.then(f.literal("setBeacon")
-                .then(f.argument("primary", StringArgumentType.word())
-                        .suggests(effectIds())
-                        .executes(ctx -> {
-                            String name = StringArgumentType.getString(ctx, "player");
-                            f.sendFeedback(ctx.getSource(), setBeacon(name,
-                                    StringArgumentType.getString(ctx, "primary"), null));
-                            return 1;
-                        })
-                        .then(f.argument("secondary", StringArgumentType.word())
-                                .suggests(effectIds())
-                                .executes(ctx -> {
-                                    String name = StringArgumentType.getString(ctx, "player");
-                                    f.sendFeedback(ctx.getSource(), setBeacon(name,
-                                            StringArgumentType.getString(ctx, "primary"),
-                                            StringArgumentType.getString(ctx, "secondary")));
-                                    return 1;
-                                }))));
-        player.then(f.literal("renameItem")
-                .then(f.argument("name", StringArgumentType.greedyString())
-                        .executes(ctx -> {
-                            f.sendFeedback(ctx.getSource(), renameItem(
-                                    StringArgumentType.getString(ctx, "player"),
-                                    StringArgumentType.getString(ctx, "name")));
-                            return 1;
-                        })));
-        player.then(f.literal("pickItemFromBlock")
-                .then(f.argument("x", IntegerArgumentType.integer())
-                        .suggests(CommandSupport.coordX("commands.mockplayer.control.suggest.x"))
-                        .then(f.argument("y", IntegerArgumentType.integer())
-                                .suggests(CommandSupport.coordY("commands.mockplayer.control.suggest.y"))
-                                .then(f.argument("z", IntegerArgumentType.integer())
-                                        .suggests(CommandSupport.coordZ("commands.mockplayer.control.suggest.z"))
-                                        .then(f.argument("includeData", StringArgumentType.word())
-                                                .suggests(CommandSupport.fixed("true", "false"))
-                                                .executes(ctx -> {
-                                                    String name = StringArgumentType.getString(ctx, "player");
-                                                    f.sendFeedback(ctx.getSource(), pickItemFromBlock(name,
-                                                            IntegerArgumentType.getInteger(ctx, "x"),
-                                                            IntegerArgumentType.getInteger(ctx, "y"),
-                                                            IntegerArgumentType.getInteger(ctx, "z"),
-                                                            "true".equals(StringArgumentType.getString(ctx, "includeData"))));
-                                                    return 1;
-                                                }))))));
-
-        player.then(f.literal("help")
-                .executes(ctx -> {
-                    String name = StringArgumentType.getString(ctx, "player");
-                    f.sendFeedback(ctx.getSource(), help(name));
-                    return 1;
-                }));
+        for (CommandSpec spec : SPECS) {
+            registerSpec(player, f, spec);
+        }
 
         root.then(player);
         return root;
     }
 
+    /** 按 CommandSpec 注册一个动作命令（无参 executes + 每个参数链变体一棵子树）。 */
+    @SuppressWarnings("unchecked")
+    private static <S extends SharedSuggestionProvider> void registerSpec(
+            RequiredArgumentBuilder<S, ?> player, CommandSupport.CommandFactory<S> f, CommandSpec spec) {
+        LiteralArgumentBuilder<S> node = f.literal(spec.name());
+        for (List<ArgSpec> variant : spec.variants()) {
+            if (variant.isEmpty()) {
+                node = node.executes(executor(spec, f));
+            } else {
+                // 注意：Brigadier 的 then() 会立即 build 子节点快照（arguments 存 CommandNode），
+                // 自上而下折叠会丢失深层子节点（z 被 y 引用时还没挂上 side）。
+                // 必须自底向上构造：叶子先挂 executes/suggests，再逐层把已完成子树挂到新父节点。
+                ArgumentBuilder<S, ?> chain = null;
+                for (int i = variant.size() - 1; i >= 0; i--) {
+                    ArgSpec arg = variant.get(i);
+                    RequiredArgumentBuilder<S, ?> ra = f.argument(arg.name(), arg.type());
+                    if (arg.suggests() != null) {
+                        ra = ra.suggests((SuggestionProvider<S>) arg.suggests());
+                    }
+                    if (chain == null) {
+                        // 参数链叶子：与原版一致，executes 挂在这里
+                        ra = ra.executes(executor(spec, f));
+                    } else {
+                        ra.then(chain);
+                    }
+                    chain = ra;
+                }
+                node = node.then(chain);
+            }
+        }
+        player.then(node);
+    }
+
+    /** 统一 executes：执行器返回反馈组件，由平台工厂发送。 */
+    private static <S extends SharedSuggestionProvider> com.mojang.brigadier.Command<S> executor(
+            CommandSpec spec, CommandSupport.CommandFactory<S> f) {
+        return ctx -> {
+            f.sendFeedback(ctx.getSource(), spec.executor().apply(ctx));
+            return 1;
+        };
+    }
 }

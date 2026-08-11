@@ -161,7 +161,8 @@ public class ControlCommandsSuite extends TestSuite {
             sugg = completions(dispatcher, stack, "control " + ctx.botName() + " useItem ");
             ctx.checkNow("tab hands", sugg.containsAll(List.of("mainhand", "offhand")));
             sugg = completions(dispatcher, stack, "control " + ctx.botName() + " placeBlock 0 0 0 ");
-            ctx.checkNow("tab sides", sugg.containsAll(List.of("north", "south", "east", "west", "up", "down")));
+            ctx.checkNow("tab sides", sugg.containsAll(List.of("north", "south", "east", "west", "up", "down")),
+                    "sugg=" + sugg);
             sugg = completions(dispatcher, stack, "control " + ctx.botName() + " setBeacon ");
             ctx.checkNow("tab effects", sugg.contains("minecraft:speed"), "sugg=" + sugg);
             sugg = completions(dispatcher, stack, "control " + ctx.botName() + " drop 0 ");
