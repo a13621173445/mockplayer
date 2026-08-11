@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class ListenerEventsSuite extends TestSuite {
 
-    private static final String BOT = "tbot-le";
+        private int botSeq;
     private final Map<String, Integer> counts = new ConcurrentHashMap<>();
     private volatile Bot damageBot;
     private volatile Bot attackedBot;
@@ -104,7 +104,8 @@ public class ListenerEventsSuite extends TestSuite {
     }
 
     private void lifecycleInputs(TestContext ctx) {
-        SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
+        ctx.botName = "tbot-le" + (++botSeq);
+        SuitesSupport.createBotAndWaitPlaying(ctx, ctx.botName);
         ctx.await("lifecycle events", () -> count("onSpawned") >= 1 && count("onPlayReady") >= 1
                 && count("onPlayerJoined") >= 1, 100);
         ctx.check("onSpawned", () -> count("onSpawned") >= 1);
@@ -151,17 +152,18 @@ public class ListenerEventsSuite extends TestSuite {
             }
             return true;
         });
-        ctx.run(() -> MockplayerApi.bots().removeBot(BOT, "command"));
+        ctx.run(() -> MockplayerApi.bots().removeBot(ctx.botName, "command"));
     }
 
     private void interactChatBlock(TestContext ctx) {
         int[] wait = {0};
         AtomicBoolean placed = new AtomicBoolean();
-        SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
+        ctx.botName = "tbot-le" + (++botSeq);
+        SuitesSupport.createBotAndWaitPlaying(ctx, ctx.botName);
         ctx.run(() -> {
             ctx.server().execute(() -> {
                 ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
-                        "item replace entity " + BOT + " weapon.mainhand with minecraft:bread");
+                        "item replace entity " + ctx.botName + " weapon.mainhand with minecraft:bread");
                 ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
                         "setblock " + (int) (ctx.bot.getLocalPlayer().getX() + 3) + " "
                                 + (int) ctx.bot.getLocalPlayer().getY() + " "
@@ -183,7 +185,7 @@ public class ListenerEventsSuite extends TestSuite {
         ctx.run(() -> {
             ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
                     ctx.server().createCommandSourceStack(),
-                    "item replace entity " + BOT + " weapon.mainhand with minecraft:dirt"));
+                    "item replace entity " + ctx.botName + " weapon.mainhand with minecraft:dirt"));
         });
         ctx.await("dirt in hand", () -> ctx.bot.getLocalPlayer().getMainHandItem().is(Items.DIRT), 200);
         ctx.run(() -> ctx.bot.actions().placeBlock(
@@ -194,16 +196,17 @@ public class ListenerEventsSuite extends TestSuite {
         ctx.await("onBreakBlock", () -> count("onBreakBlock") >= 1, 200);
         ctx.check("onPlaceBlock", () -> count("onPlaceBlock") >= 1);
         ctx.check("onBreakBlock", () -> count("onBreakBlock") >= 1);
-        ctx.run(() -> MockplayerApi.bots().removeBot(BOT, "command"));
+        ctx.run(() -> MockplayerApi.bots().removeBot(ctx.botName, "command"));
     }
 
     private void combatDamage(TestContext ctx) {
         AtomicBoolean interacted = new AtomicBoolean();
         AtomicBoolean attacked = new AtomicBoolean();
         AtomicBoolean killed = new AtomicBoolean();
-        SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
+        ctx.botName = "tbot-le" + (++botSeq);
+        SuitesSupport.createBotAndWaitPlaying(ctx, ctx.botName);
         ctx.run(() -> ctx.server().execute(() -> {
-            ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
+            ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
             if (sp != null) {
                 ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
                         "time set midnight");
@@ -249,26 +252,27 @@ public class ListenerEventsSuite extends TestSuite {
                 && attackedBot.getLocalPlayer() != Minecraft.getInstance().player
                 && attackedSource != null && attackedAmount > 0.0F);
         ctx.check("health callback belongs to bot", () -> healthBot != null && healthNew < healthOld);
-        ctx.run(() -> MockplayerApi.bots().removeBot(BOT, "command"));
+        ctx.run(() -> MockplayerApi.bots().removeBot(ctx.botName, "command"));
     }
 
     private void containerEvents(TestContext ctx) {
         AtomicReference<BlockPos> pos = new AtomicReference<>();
         AtomicBoolean opened = new AtomicBoolean();
         int[] wait = {0};
-        SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
+        ctx.botName = "tbot-le" + (++botSeq);
+        SuitesSupport.createBotAndWaitPlaying(ctx, ctx.botName);
         ctx.run(() -> {
             pos.set(ctx.bot.getLocalPlayer().blockPosition().offset(2, 0, 0));
             ctx.server().execute(() -> {
                 ctx.server().getLevel(Level.OVERWORLD).setBlock(pos.get(),
                         Blocks.CHEST.defaultBlockState(), 3);
                 ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
-                        "item replace entity " + BOT + " weapon.mainhand with minecraft:stone");
+                        "item replace entity " + ctx.botName + " weapon.mainhand with minecraft:stone");
             });
         });
         ctx.await("container wait 30", () -> ++wait[0] >= 30, 60);
         ctx.run(() -> ctx.server().execute(() -> {
-            ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
+            ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
             if (sp != null) {
                 sp.openMenu(new net.minecraft.world.SimpleMenuProvider(
                         (id, inv, p) -> new ChestMenu(MenuType.GENERIC_9x3, id, inv,
@@ -282,7 +286,7 @@ public class ListenerEventsSuite extends TestSuite {
                 c.click(54, 0, ContainerInput.PICKUP)));
         ctx.await("container wait 90", () -> ++wait[0] >= 90, 40);
         ctx.run(() -> ctx.server().execute(() -> {
-            ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
+            ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
             if (sp != null && sp.containerMenu != sp.inventoryMenu) {
                 sp.closeContainer();
             }
@@ -293,7 +297,7 @@ public class ListenerEventsSuite extends TestSuite {
         ctx.check("onContainerOpened", () -> count("onContainerOpened") >= 1);
         ctx.check("onContainerSlotChanged", () -> count("onContainerSlotChanged") >= 1);
         ctx.check("onContainerClosed", () -> count("onContainerClosed") >= 1);
-        ctx.run(() -> MockplayerApi.bots().removeBot(BOT, "command"));
+        ctx.run(() -> MockplayerApi.bots().removeBot(ctx.botName, "command"));
     }
 
     private void itemEvents(TestContext ctx) {
@@ -301,10 +305,11 @@ public class ListenerEventsSuite extends TestSuite {
         AtomicBoolean cooldown = new AtomicBoolean();
         AtomicBoolean dropped = new AtomicBoolean();
         AtomicBoolean picked = new AtomicBoolean();
-        SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
+        ctx.botName = "tbot-le" + (++botSeq);
+        SuitesSupport.createBotAndWaitPlaying(ctx, ctx.botName);
         ctx.run(() -> ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
                 ctx.server().createCommandSourceStack(),
-                "item replace entity " + BOT + " weapon.mainhand with minecraft:ender_pearl")));
+                "item replace entity " + ctx.botName + " weapon.mainhand with minecraft:ender_pearl")));
         ctx.await("ender pearl in hand", () -> ctx.bot.getLocalPlayer()
                 .getMainHandItem().is(Items.ENDER_PEARL), 200);
         ctx.run(() -> {
@@ -323,7 +328,7 @@ public class ListenerEventsSuite extends TestSuite {
         ctx.check("onItemCooldown", () -> count("onItemCooldown") >= 1);
         ctx.check("onDropItem", () -> count("onDropItem") >= 1);
         ctx.run(() -> ctx.server().execute(() -> {
-            ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
+            ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
             if (sp != null) {
                 ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
                         String.format("summon minecraft:item %.2f %.2f %.2f {Item:{id:\"minecraft:diamond\",count:1}}",
@@ -340,7 +345,7 @@ public class ListenerEventsSuite extends TestSuite {
         }, 200);
         ctx.run(() -> ctx.bot.actions().setForward(0));
         ctx.check("onPickupItem", () -> picked.get());
-        ctx.run(() -> MockplayerApi.bots().removeBot(BOT, "command"));
+        ctx.run(() -> MockplayerApi.bots().removeBot(ctx.botName, "command"));
     }
 
     private void miscEvents(TestContext ctx) {
@@ -349,9 +354,10 @@ public class ListenerEventsSuite extends TestSuite {
         AtomicBoolean le2Removed = new AtomicBoolean();
         AtomicReference<Bot> bot2 = new AtomicReference<>();
         int[] wait = {0};
-        SuitesSupport.createBotAndWaitPlaying(ctx, BOT);
+        ctx.botName = "tbot-le" + (++botSeq);
+        SuitesSupport.createBotAndWaitPlaying(ctx, ctx.botName);
         ctx.run(() -> ctx.server().execute(() -> {
-            ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
+            ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName);
             if (sp != null) {
                 double x = sp.getX() + 5.0;
                 double y = sp.getY();
@@ -359,7 +365,7 @@ public class ListenerEventsSuite extends TestSuite {
                 ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
                         "kill @e[type=minecraft:villager]");
                 ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
-                        String.format("tp %s %.2f %.2f %.2f", BOT, x, y, z));
+                        String.format("tp %s %.2f %.2f %.2f", ctx.botName, x, y, z));
                 ctx.server().getCommands().performPrefixedCommand(ctx.server().createCommandSourceStack(),
                         String.format(
                                 "summon minecraft:villager %.2f %.2f %.2f {NoAI:1b,Offers:{Recipes:[{buy:{id:\"minecraft:emerald\",count:1},sell:{id:\"minecraft:diamond\",count:1},maxUses:99,xp:1}]}}",
@@ -381,14 +387,14 @@ public class ListenerEventsSuite extends TestSuite {
         ctx.check("onMerchantOffersUpdated", () -> count("onMerchantOffersUpdated") >= 1);
         ctx.run(() -> ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
                 ctx.server().createCommandSourceStack(),
-                "execute in minecraft:the_nether run tp " + BOT + " 0 64 0")));
+                "execute in minecraft:the_nether run tp " + ctx.botName + " 0 64 0")));
         ctx.await("onDimensionChange", () -> count("onDimensionChange") >= 1, 200);
         ctx.check("onDimensionChange", () -> count("onDimensionChange") >= 1);
         ctx.run(() -> {
             if (!killed.get()) {
                 killed.set(true);
                 ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
-                        ctx.server().createCommandSourceStack(), "kill " + BOT));
+                        ctx.server().createCommandSourceStack(), "kill " + ctx.botName));
             }
         });
         ctx.await("onDeath", () -> count("onDeath") >= 1, 200);
@@ -416,6 +422,8 @@ public class ListenerEventsSuite extends TestSuite {
         }, 600);
         ctx.check("onDisconnected", () -> count("onDisconnected") >= 1);
         ctx.check("onPlayerLeft", () -> count("onPlayerLeft") >= 1);
-        ctx.run(() -> MockplayerApi.bots().removeBot(BOT, "command"));
+        ctx.run(() -> MockplayerApi.bots().removeBot(ctx.botName, "command"));
     }
 }
+
+

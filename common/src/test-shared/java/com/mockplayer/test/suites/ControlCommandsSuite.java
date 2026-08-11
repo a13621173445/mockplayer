@@ -65,6 +65,10 @@ public class ControlCommandsSuite extends TestSuite {
     }
 
     private void createBot(TestContext ctx) {
+        // 与 BotGuiSuite 一致：先清残留，保证假人连接/区块加载不受旧会话影响
+        for (Bot b : MockplayerApi.bots().getBots()) {
+            MockplayerApi.bots().removeBot(b.getName(), "command");
+        }
         // 每个用例强制独立 bot：唯一名（不同 UUID，不继承玩家数据），绝不复用
         botSeq++;
         String name = "tbot-ctl" + botSeq;
