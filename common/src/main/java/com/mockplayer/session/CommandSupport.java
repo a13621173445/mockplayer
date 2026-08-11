@@ -121,6 +121,32 @@ public final class CommandSupport {
         };
     }
 
+    /** X 坐标补全（只建议当前 X，tooltip 标明语义；control/query 各传自己的 i18n key）。 */
+    static <S extends SharedSuggestionProvider> SuggestionProvider<S> coordX(String tooltipKey) {
+        return playerNumber(tooltipKey, p -> p.getX(), "%.0f");
+    }
+
+    /** Y 坐标补全（只建议当前 Y，tooltip 标明语义；control/query 各传自己的 i18n key）。 */
+    static <S extends SharedSuggestionProvider> SuggestionProvider<S> coordY(String tooltipKey) {
+        return playerNumber(tooltipKey, p -> p.getY(), "%.0f");
+    }
+
+    /** Z 坐标补全（只建议当前 Z，tooltip 标明语义；control/query 各传自己的 i18n key）。 */
+    static <S extends SharedSuggestionProvider> SuggestionProvider<S> coordZ(String tooltipKey) {
+        return playerNumber(tooltipKey, p -> p.getZ(), "%.0f");
+    }
+
+    /** 字节 → B/KB/MB（<1KB 显示 B，≥1MB 用 MB，保留 1 位小数；查询/批量/调试标签共用）。 */
+    static String formatBytes(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        }
+        if (bytes < 1024L * 1024) {
+            return String.format(java.util.Locale.ROOT, "%.1f KB", bytes / 1024.0);
+        }
+        return String.format(java.util.Locale.ROOT, "%.1f MB", bytes / 1024.0 / 1024.0);
+    }
+
     /** 双端命令树工厂：平台只提供 literal/argument/反馈函数。 */
     public interface CommandFactory<S> {
         LiteralArgumentBuilder<S> literal(String name);

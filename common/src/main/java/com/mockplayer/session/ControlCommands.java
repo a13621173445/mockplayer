@@ -750,10 +750,6 @@ public class ControlCommands {
 
     // ===== Tab 补全 =====
 
-    private static <S extends SharedSuggestionProvider> SuggestionProvider<S> fixed(String... values) {
-        return (ctx, builder) -> SharedSuggestionProvider.suggest(List.of(values), builder);
-    }
-
     private static Bot botFromContext(CommandContext<?> ctx) {
         try {
             String name = StringArgumentType.getString(ctx, "player");
@@ -782,60 +778,26 @@ public class ControlCommands {
         };
     }
 
-    /**
-     * 数字补全通用实现：只建议当前参数的一个值，并带 i18n tooltip 说明语义，
-     * 避免一个参数冒出多个候选（如 x 参数同时给 x/y/z）导致语义不清。
-     */
-    private static <S extends SharedSuggestionProvider> SuggestionProvider<S> playerNumber(
-            String tooltipKey, java.util.function.ToDoubleFunction<net.minecraft.world.entity.player.Player> getter,
-            String format) {
-        return (ctx, builder) -> {
-            Bot bot = botFromContext(ctx);
-            if (bot == null || bot.getLocalPlayer() == null) {
-                return builder.buildFuture();
-            }
-            builder.suggest(
-                    String.format(java.util.Locale.ROOT, format, getter.applyAsDouble(bot.getLocalPlayer())),
-                    Component.translatable(tooltipKey));
-            return builder.buildFuture();
-        };
-    }
-
-    /** X 坐标补全（只建议当前 X，tooltip 标明语义）。 */
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> coordX() {
-        return playerNumber("commands.mockplayer.control.suggest.x", p -> p.getX(), "%.0f");
-    }
-
-    /** Y 坐标补全（只建议当前 Y，tooltip 标明语义）。 */
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> coordY() {
-        return playerNumber("commands.mockplayer.control.suggest.y", p -> p.getY(), "%.0f");
-    }
-
-    /** Z 坐标补全（只建议当前 Z，tooltip 标明语义）。 */
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> coordZ() {
-        return playerNumber("commands.mockplayer.control.suggest.z", p -> p.getZ(), "%.0f");
-    }
-
     /** 偏航角补全（只建议当前 yaw，tooltip 标明语义）。 */
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> yawNow() {
-        return playerNumber("commands.mockplayer.control.suggest.yaw", p -> p.getYRot(), "%.1f");
+        return CommandSupport.playerNumber("commands.mockplayer.control.suggest.yaw", p -> p.getYRot(), "%.1f");
     }
 
     /** 俯仰角补全（只建议当前 pitch，tooltip 标明语义）。 */
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> pitchNow() {
-        return playerNumber("commands.mockplayer.control.suggest.pitch", p -> p.getXRot(), "%.1f");
+        return CommandSupport.playerNumber("commands.mockplayer.control.suggest.pitch", p -> p.getXRot(), "%.1f");
     }
 
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> directions() {
-        return fixed("forward", "backward", "left", "right");
+        return CommandSupport.fixed("forward", "backward", "left", "right");
     }
 
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> sides() {
-        return fixed("north", "south", "east", "west", "up", "down");
+        return CommandSupport.fixed("north", "south", "east", "west", "up", "down");
     }
 
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> hands() {
-        return fixed("mainhand", "offhand");
+        return CommandSupport.fixed("mainhand", "offhand");
     }
 
     /** mount 目标补全：附近实体类型 id + 自动模式关键字（真实候选）。 */
@@ -857,7 +819,7 @@ public class ControlCommands {
     }
 
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> oneAll() {
-        return fixed("one", "all");
+        return CommandSupport.fixed("one", "all");
     }
 
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> effectIds() {
@@ -886,7 +848,7 @@ public class ControlCommands {
 
     /** 点击模式补全：ContainerInput 枚举小写名。 */
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> clickModes() {
-        return fixed("pickup", "quick_move", "swap", "clone", "throw", "quick_craft", "pickup_all");
+        return CommandSupport.fixed("pickup", "quick_move", "swap", "clone", "throw", "quick_craft", "pickup_all");
     }
 
     /**
@@ -979,11 +941,11 @@ public class ControlCommands {
                                 }))));
         player.then(f.literal("lookAt")
                 .then(f.argument("x", DoubleArgumentType.doubleArg())
-                        .suggests(coordX())
+                        .suggests(CommandSupport.coordX("commands.mockplayer.control.suggest.x"))
                         .then(f.argument("y", DoubleArgumentType.doubleArg())
-                                .suggests(coordY())
+                                .suggests(CommandSupport.coordY("commands.mockplayer.control.suggest.y"))
                                 .then(f.argument("z", DoubleArgumentType.doubleArg())
-                                        .suggests(coordZ())
+                                        .suggests(CommandSupport.coordZ("commands.mockplayer.control.suggest.z"))
                                         .executes(ctx -> {
                                             String name = StringArgumentType.getString(ctx, "player");
                                             f.sendFeedback(ctx.getSource(), lookAt(name,
@@ -1154,7 +1116,7 @@ public class ControlCommands {
 
         player.then(f.literal("hotbar")
                 .then(f.argument("slot", IntegerArgumentType.integer(1, 9))
-                        .suggests(fixed("1", "2", "3", "4", "5", "6", "7", "8", "9"))
+                        .suggests(CommandSupport.fixed("1", "2", "3", "4", "5", "6", "7", "8", "9"))
                         .executes(ctx -> {
                             f.sendFeedback(ctx.getSource(), hotbar(
                                     StringArgumentType.getString(ctx, "player"),
@@ -1177,7 +1139,7 @@ public class ControlCommands {
                     return 1;
                 })
                 .then(f.argument("slot", IntegerArgumentType.integer(0, 8))
-                        .suggests(fixed("0", "1", "2", "3", "4", "5", "6", "7", "8"))
+                        .suggests(CommandSupport.fixed("0", "1", "2", "3", "4", "5", "6", "7", "8"))
                         .executes(ctx -> {
                             f.sendFeedback(ctx.getSource(), drop(
                                     StringArgumentType.getString(ctx, "player"),
@@ -1242,7 +1204,7 @@ public class ControlCommands {
                                         })))));
         player.then(f.literal("button")
                 .then(f.argument("id", IntegerArgumentType.integer(0, 3))
-                        .suggests(fixed("0", "1", "2", "3"))
+                        .suggests(CommandSupport.fixed("0", "1", "2", "3"))
                         .executes(ctx -> {
                             String name = StringArgumentType.getString(ctx, "player");
                             f.sendFeedback(ctx.getSource(), button(name,
@@ -1251,7 +1213,7 @@ public class ControlCommands {
                         })));
         player.then(f.literal("trade")
                 .then(f.argument("index", IntegerArgumentType.integer(0))
-                        .suggests(fixed("0", "1", "2", "3", "4", "5"))
+                        .suggests(CommandSupport.fixed("0", "1", "2", "3", "4", "5"))
                         .executes(ctx -> {
                             String name = StringArgumentType.getString(ctx, "player");
                             f.sendFeedback(ctx.getSource(), trade(name,
@@ -1295,7 +1257,7 @@ public class ControlCommands {
         }));
         player.then(f.literal("editBook")
                 .then(f.argument("slot", IntegerArgumentType.integer(1, 9))
-                        .suggests(fixed("1", "2", "3", "4", "5", "6", "7", "8", "9"))
+                        .suggests(CommandSupport.fixed("1", "2", "3", "4", "5", "6", "7", "8", "9"))
                         .then(f.argument("page", StringArgumentType.word())
                                 .executes(ctx -> {
                                     String name = StringArgumentType.getString(ctx, "player");
@@ -1315,13 +1277,13 @@ public class ControlCommands {
                                         })))));
         player.then(f.literal("editSign")
                 .then(f.argument("x", IntegerArgumentType.integer())
-                        .suggests(coordX())
+                        .suggests(CommandSupport.coordX("commands.mockplayer.control.suggest.x"))
                         .then(f.argument("y", IntegerArgumentType.integer())
-                                .suggests(coordY())
+                                .suggests(CommandSupport.coordY("commands.mockplayer.control.suggest.y"))
                                 .then(f.argument("z", IntegerArgumentType.integer())
-                                        .suggests(coordZ())
+                                        .suggests(CommandSupport.coordZ("commands.mockplayer.control.suggest.z"))
                                         .then(f.argument("side", StringArgumentType.word())
-                                                .suggests(fixed("front", "back"))
+                                                .suggests(CommandSupport.fixed("front", "back"))
                                                 .then(f.argument("line1", StringArgumentType.word())
                                                         .then(f.argument("line2", StringArgumentType.word())
                                                                 .then(f.argument("line3", StringArgumentType.word())
@@ -1371,13 +1333,13 @@ public class ControlCommands {
                         })));
         player.then(f.literal("pickItemFromBlock")
                 .then(f.argument("x", IntegerArgumentType.integer())
-                        .suggests(coordX())
+                        .suggests(CommandSupport.coordX("commands.mockplayer.control.suggest.x"))
                         .then(f.argument("y", IntegerArgumentType.integer())
-                                .suggests(coordY())
+                                .suggests(CommandSupport.coordY("commands.mockplayer.control.suggest.y"))
                                 .then(f.argument("z", IntegerArgumentType.integer())
-                                        .suggests(coordZ())
+                                        .suggests(CommandSupport.coordZ("commands.mockplayer.control.suggest.z"))
                                         .then(f.argument("includeData", StringArgumentType.word())
-                                                .suggests(fixed("true", "false"))
+                                                .suggests(CommandSupport.fixed("true", "false"))
                                                 .executes(ctx -> {
                                                     String name = StringArgumentType.getString(ctx, "player");
                                                     f.sendFeedback(ctx.getSource(), pickItemFromBlock(name,

@@ -77,7 +77,7 @@ public final class DebugNameTagInfo {
                 .withStyle(ChatFormatting.GOLD));
         line.append(stats);
         // 内存 + 区块加载半径同一行：💾1.2 MB 📡2 chunk（内存青色、半径蓝色）
-        MutableComponent memory = Component.literal("💾" + formatBytes(bot.memoryInfo().trackedBytes()))
+        MutableComponent memory = Component.literal("💾" + CommandSupport.formatBytes(bot.memoryInfo().trackedBytes()))
                 .withStyle(ChatFormatting.AQUA);
         memory.append(Component.literal(" 📡" + bot.getChunkRadius() + " chunk")
                 .withStyle(ChatFormatting.BLUE));
@@ -98,11 +98,4 @@ public final class DebugNameTagInfo {
         line.append(Component.literal(part).withStyle(color));
     }
 
-    /** 字节 → KB / MB（≥1MB 用 MB，保留 1 位小数；否则 KB）。 */
-    static String formatBytes(long bytes) {
-        if (bytes >= 1024L * 1024L) {
-            return String.format(Locale.ROOT, "%.1f MB", bytes / (1024.0 * 1024.0));
-        }
-        return String.format(Locale.ROOT, "%.1f KB", bytes / 1024.0);
-    }
 }

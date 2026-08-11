@@ -257,58 +257,33 @@ public class QueryCommands {
         BotMemoryInfo m = bot.memoryInfo();
         MutableComponent out = CommandSupport.info("commands.mockplayer.query.memory.header", CommandSupport.playerName(name));
         out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.jvm",
-                formatBytes(m.jvmUsedBytes()), formatBytes(m.jvmCommittedBytes()), formatBytes(m.jvmMaxBytes())));
+                CommandSupport.formatBytes(m.jvmUsedBytes()), CommandSupport.formatBytes(m.jvmCommittedBytes()), CommandSupport.formatBytes(m.jvmMaxBytes())));
         out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.bot_count", m.botCount()));
         out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.tracked",
-                formatBytes(m.trackedBytes())));
+                CommandSupport.formatBytes(m.trackedBytes())));
         out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.chat",
-                formatBytes(m.chatBytes())));
+                CommandSupport.formatBytes(m.chatBytes())));
         out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.sound",
-                formatBytes(m.soundBytes())));
+                CommandSupport.formatBytes(m.soundBytes())));
         out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.particle",
-                formatBytes(m.particleBytes())));
+                CommandSupport.formatBytes(m.particleBytes())));
         out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.packets",
                 m.packetCount()));
         out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.online",
-                formatBytes(m.onlinePlayersBytes())));
+                CommandSupport.formatBytes(m.onlinePlayersBytes())));
         out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.events",
-                formatBytes(m.eventCacheBytes())));
+                CommandSupport.formatBytes(m.eventCacheBytes())));
         out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.container",
-                formatBytes(m.containerBytes())));
+                CommandSupport.formatBytes(m.containerBytes())));
         out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.inventory",
-                formatBytes(m.inventoryBytes())));
+                CommandSupport.formatBytes(m.inventoryBytes())));
         out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.level",
                 m.entityCount(), m.chunkCount()));
         out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.note"));
         return out;
     }
 
-    private static String formatBytes(long bytes) {
-        if (bytes < 1024) {
-            return bytes + " B";
-        }
-        if (bytes < 1024L * 1024) {
-            return String.format(java.util.Locale.ROOT, "%.1f KB", bytes / 1024.0);
-        }
-        return String.format(java.util.Locale.ROOT, "%.1f MB", bytes / 1024.0 / 1024.0);
-    }
-
     // ===== Tab 补全 =====
-
-    /** X 坐标补全（只建议当前 X，tooltip 标明语义）。 */
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> coordX() {
-        return CommandSupport.playerNumber("commands.mockplayer.query.suggest.x", p -> p.getX(), "%.0f");
-    }
-
-    /** Y 坐标补全（只建议当前 Y，tooltip 标明语义）。 */
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> coordY() {
-        return CommandSupport.playerNumber("commands.mockplayer.query.suggest.y", p -> p.getY(), "%.0f");
-    }
-
-    /** Z 坐标补全（只建议当前 Z，tooltip 标明语义）。 */
-    public static <S extends SharedSuggestionProvider> SuggestionProvider<S> coordZ() {
-        return CommandSupport.playerNumber("commands.mockplayer.query.suggest.z", p -> p.getZ(), "%.0f");
-    }
 
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> onOff() {
         return CommandSupport.fixed("on", "off");
@@ -357,11 +332,11 @@ public class QueryCommands {
                         })));
         player.then(f.literal("block")
                 .then(f.argument("x", IntegerArgumentType.integer())
-                        .suggests(coordX())
+                        .suggests(CommandSupport.coordX("commands.mockplayer.query.suggest.x"))
                         .then(f.argument("y", IntegerArgumentType.integer())
-                                .suggests(coordY())
+                                .suggests(CommandSupport.coordY("commands.mockplayer.query.suggest.y"))
                                 .then(f.argument("z", IntegerArgumentType.integer())
-                                        .suggests(coordZ())
+                                        .suggests(CommandSupport.coordZ("commands.mockplayer.query.suggest.z"))
                                         .executes(ctx -> {
                                             String name = StringArgumentType.getString(ctx, "player");
                                             f.sendFeedback(ctx.getSource(), blockAt(name,

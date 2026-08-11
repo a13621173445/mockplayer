@@ -140,8 +140,8 @@ public final class BatchCommands {
                     durationMs,
                     spawnTotal == 0 ? 0 : durationMs / Math.max(1, spawnCreated + spawnFailed),
                     spawnMaxSingleNanos / 1_000_000L,
-                    formatBytes(jvmUsedBytes() - jvmBeforeBytes),
-                    formatBytes(spawnTrackedBytes)));
+                    CommandSupport.formatBytes(jvmUsedBytes() - jvmBeforeBytes),
+                    CommandSupport.formatBytes(spawnTrackedBytes)));
         }
     }
 
@@ -330,10 +330,4 @@ public final class BatchCommands {
         return rt.totalMemory() - rt.freeMemory();
     }
 
-    private static String formatBytes(long bytes) {
-        if (bytes >= 1024L * 1024L) {
-            return String.format(java.util.Locale.ROOT, "%.1f MB", bytes / (1024.0 * 1024.0));
-        }
-        return String.format(java.util.Locale.ROOT, "%.1f KB", bytes / 1024.0);
-    }
 }
