@@ -63,8 +63,8 @@ public class FakeSession {
     private BotImpl bot;
     /** 死亡后是否自动重生（默认 true = 产品行为不变；测试可关闭以验证 respawn 命令） */
     private volatile boolean autoRespawn = true;
-    /** 是否持有假人配置阶段串行锁（handleLoginFinished 获取，进 play/断线释放）。 */
-    private volatile boolean fakeConfigLockHeld;
+    /** 会话是否已被删除（BotManager 移除后置位；in-flight 登录据此放弃，防孤儿 level 泄漏）。 */
+    private volatile boolean disposed;
 
     public FakeSession(String name) {
         this.name = name;
@@ -127,6 +127,11 @@ public class FakeSession {
         this.onConnectFail = onConnectFail;
     }
 
+    /** 会话是否已被删除（删除后 in-flight 登录/配置必须放弃）。 */
+    public boolean isDisposed() {
+        return this.disposed;
+    }
+
     /** 设置重连中标志（FakePlayListener.handleTransfer 置 true，重连成功/失败复位） */
     public void setReconnecting(boolean reconnecting) {
         this.reconnecting = reconnecting;
@@ -149,22 +154,6 @@ public class FakeSession {
     private void notifyConnectFail(String key) {
         if (this.onConnectFail != null) {
             this.onConnectFail.accept(key);
-        }
-    }
-
-    /** 获取假人配置阶段串行锁（FakeLoginListener.handleLoginFinished 调用，幂等）。 */
-    public void acquireFakeConfigLock() {
-        if (!this.fakeConfigLockHeld) {
-            com.mockplayer.session.FakeConnectionRegistry.lockFakeConfig();
-            this.fakeConfigLockHeld = true;
-        }
-    }
-
-    /** 释放假人配置阶段串行锁（进 play/断线/tick 兜底调用；幂等）。 */
-    public void releaseFakeConfigLock() {
-        if (this.fakeConfigLockHeld) {
-            this.fakeConfigLockHeld = false;
-            com.mockplayer.session.FakeConnectionRegistry.unlockFakeConfig();
         }
     }
 
@@ -293,6 +282,8 @@ public class FakeSession {
      * @param transferState 跟随传送时的 cookies（原版一致），普通连接传 null
      */
     public void connectTo(String host, int port, net.minecraft.client.multiplayer.TransferState transferState) {
+        // 新连接开始时清除删除标记（transfer 跟随重连等合法路径）
+        this.disposed = false;
         this.pendingTransfer = transferState;
         Thread thread = new Thread(() -> doConnectTcp(host, port), "Mockplayer Connector #" + name);
         thread.setDaemon(true);
@@ -307,6 +298,14 @@ public class FakeSession {
                     .map(ResolvedServerAddress::asInetSocketAddress);
             if (resolved.isEmpty()) {
                 LOG.warn("[{}] 无法解析服务器地址 {}", name, host);
+                // DNS 失败同样走完整失败清理（不留 DISCONNECTED 僵尸条目）
+                boolean wasReconnecting = this.reconnecting;
+                this.reconnecting = false;
+                if (wasReconnecting) {
+                    com.mockplayer.session.SessionManager.getInstance().removeFakePlayer(name);
+                } else {
+                    notifyConnectFail("commands.mockplayer.newplayer.connection_failed");
+                }
                 return;
             }
 
@@ -376,11 +375,6 @@ public class FakeSession {
             }
         }
 
-        // 配置锁兜底：已进 play 或连接已断但锁未释放时补释放（防异常路径泄漏死锁）
-        if (this.fakeConfigLockHeld
-                && (this.playListener != null || !this.isConnected())) {
-            this.releaseFakeConfigLock();
-        }
 
         // 驱动假人 level 实体 tick（复用原版 ClientLevel.tickEntities）：
         // 假人 LocalPlayer 物理 + RemotePlayer/生物插值全部按原版推进，不手写位置同步
@@ -414,8 +408,13 @@ public class FakeSession {
      * 注意：reconnecting 时只断连接，session 由重连成功/失败决定去留（transfer 跟随场景）。
      */
     public void disconnect() {
+        // 删除标记：非重连断开 = 会话终结，in-flight 登录/配置必须放弃
+        if (!this.reconnecting) {
+            this.disposed = true;
+        }
         if (connection != null) {
-            com.mockplayer.session.FakeLevelRegistry.unregisterFakeLevel(this.getFakeLevel());
+            net.minecraft.client.multiplayer.ClientLevel lvl = this.getFakeLevel();
+            com.mockplayer.session.FakeLevelRegistry.unregisterFakeLevel(lvl);
             FakeConnectionRegistry.unmarkFake(connection);
             connection.disconnect(net.minecraft.network.chat.Component.translatable("disconnect.mockplayer.fake_player_removed"));
             // 注意：不再手动调 connection.handleDisconnection()。

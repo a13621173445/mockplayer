@@ -45,22 +45,6 @@ public class FakeConnectionRegistry {
         return FakeConnectionRegistry.configuringFake;
     }
 
-    /**
-     * 假人配置阶段串行锁：Fabric 的 ClientNetworkingImpl.getClientConfigurationAddon()
-     * 是全局单例，多个假人并发进配置阶段会互相覆盖/清空，导致 c:version 回调 NPE 被踢。
-     * 锁在整个假人配置阶段持有（handleLoginFinished 获取，进 play/断线释放），
-     * 使同一时刻只有一个假人处于配置阶段；主玩家不受影响（假人创建时主玩家早已 PLAYING）。
-     */
-    private static final java.util.concurrent.locks.ReentrantLock CONFIG_LOCK =
-            new java.util.concurrent.locks.ReentrantLock();
-
-    public static void lockFakeConfig() {
-        CONFIG_LOCK.lock();
-    }
-
-    public static void unlockFakeConfig() {
-        CONFIG_LOCK.unlock();
-    }
 
     /** 主玩家 transfer 置位（双端 Mixin 调用） */
     public static void setTransferring(boolean transferring) {

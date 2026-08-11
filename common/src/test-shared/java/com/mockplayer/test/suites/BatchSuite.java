@@ -36,7 +36,7 @@ public class BatchSuite extends TestSuite {
             ctx.checkNow("batch invalid prefix rejected",
                     !badPrefix.contains("commands.") && MockplayerApi.bots().getBots().stream()
                             .noneMatch(b -> b.getName().startsWith("xxxxxxxx")), "out=" + badPrefix);
-            String started = FakePlayerCommands.newPlayerBatch("tbotb", 5, 0, 2).getString();
+            String started = FakePlayerCommands.newPlayerBatch("tbotb", 5, 0, 1).getString();
             ctx.checkNow("batch create started", !started.contains("commands."), "out=" + started);
         });
         ctx.await("batch created 5 playing", () -> {
@@ -52,7 +52,7 @@ public class BatchSuite extends TestSuite {
 
     private void duplicateSkip(TestContext ctx) {
         ctx.run(() -> {
-            String out = FakePlayerCommands.newPlayerBatch("tbotb", 2, 0, 2).getString();
+            String out = FakePlayerCommands.newPlayerBatch("tbotb", 2, 0, 1).getString();
             ctx.checkNow("batch duplicate started", !out.contains("commands."), "out=" + out);
         });
         ctx.await("batch duplicate skip summary", () -> {

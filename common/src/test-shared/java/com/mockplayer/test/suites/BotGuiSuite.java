@@ -99,7 +99,10 @@ public class BotGuiSuite extends TestSuite {
         SuitesSupport.awaitChunkLoaded(ctx);
         ctx.run(() -> {
             Minecraft mc = Minecraft.getInstance();
+            int blurBefore = mc.options.menuBackgroundBlurriness().get();
             ctx.checkNow("bot gui opened", BotGui.open(mc));
+            ctx.checkNow("blur option untouched while open",
+                    mc.options.menuBackgroundBlurriness().get() == blurBefore);
             ctx.checkNow("selected bot label",
                     BotControlScreen.selectedText(ctx.bot()).getString().contains(ctx.botName()));
             int pw = mc.getWindow().getGuiScaledWidth();
@@ -141,6 +144,13 @@ public class BotGuiSuite extends TestSuite {
                     || l.getString().contains("🍗"));
         });
         ctx.check("health food bars rendered", () -> BotGui.probeHealthFoodCount() > 0);
+        ctx.run(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            int blurBefore = mc.options.menuBackgroundBlurriness().get();
+            mc.gui.setScreen(null);
+            ctx.checkNow("blur option untouched after close",
+                    mc.options.menuBackgroundBlurriness().get() == blurBefore);
+        });
     }
 
     private void layout(TestContext ctx) {

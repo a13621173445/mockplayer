@@ -29,6 +29,19 @@ public class BotEventBus {
     }
 
     /**
+     * 若未挂载过则挂载（重复挂载防护，/query listen on 幂等）。
+     *
+     * @return true 本次挂载成功；false 已挂载（或 listener 为 null）
+     */
+    public boolean addListenerIfAbsent(BotListener listener) {
+        if (listener != null && !this.listeners.contains(listener)) {
+            this.listeners.add(listener);
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * 移除监听器。
      *
      * @param listener BotListener

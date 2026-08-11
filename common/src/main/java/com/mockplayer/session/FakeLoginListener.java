@@ -89,15 +89,19 @@ public class FakeLoginListener implements ClientLoginPacketListener {
     @Override
     public void handleLoginFinished(ClientboundLoginFinishedPacket packet) {
         PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
+        // 会话可能已在连接完成前被删除：放弃登录，不进入配置阶段（防孤儿 level 泄漏）
+        if (session.isDisposed()) {
+            FakeSession.LOG.warn("[{}] 会话已删除，放弃登录", name);
+            this.connection.disconnect(
+                    Component.translatable("disconnect.mockplayer.fake_player_removed"));
+            return;
+        }
         GameProfile profile = packet.gameProfile();
         session.setProfile(profile);
         FakeSession.LOG.info("[{}] 登录完成，profile={}", name, profile.name());
         // 进入配置阶段：neoforge RegistryManager.applySnapshot 会覆盖 BuiltInRegistries.BLOCK，
         // 配置阶段置位让 neoforge Mixin 跳过假人的 registry snapshot（见 FakeConnectionRegistry.configuringFake）
         FakeConnectionRegistry.setConfiguringFake(true);
-        // Fabric 全局配置 addon 单例：假人配置阶段串行化，防并发互相覆盖（见 FakeConnectionRegistry）
-        session.acquireFakeConfigLock();
-        try {
 
         // 切到配置阶段（复用 MC 自带 listener）
         Minecraft mc = Minecraft.getInstance();
@@ -152,20 +156,17 @@ public class FakeLoginListener implements ClientLoginPacketListener {
                 base.language(), chunkRadius, base.chatVisibility(), base.chatColors(),
                 base.modelCustomisation(), base.mainHand(),
                 base.textFilteringEnabled(), base.allowsListing(), base.particleStatus());
-            session.setClientInformation(info);
-            this.connection.send(new ServerboundClientInformationPacket(info));
-        } catch (RuntimeException e) {
-            // 配置入口异常：释放串行锁再抛（连接会走失败路径，锁不能泄漏）
-            session.releaseFakeConfigLock();
-            throw e;
-        }
+        session.setClientInformation(info);
+        this.connection.send(new ServerboundClientInformationPacket(info));
     }
 
     @Override
     public void handleDisconnect(ClientboundLoginDisconnectPacket packet) {
         FakeSession.LOG.warn("[{}] 登录被拒绝: {}", name, packet.reason().getString());
-        session.releaseFakeConfigLock();
         session.disconnect();
+        if (!session.isReconnecting()) {
+            com.mockplayer.session.SessionManager.getInstance().removeFakePlayer(name);
+        }
     }
 
     @Override
@@ -197,8 +198,10 @@ public class FakeLoginListener implements ClientLoginPacketListener {
     @Override
     public void onDisconnect(DisconnectionDetails details) {
         FakeSession.LOG.warn("[{}] 连接断开: {}", name, details.reason().getString());
-        session.releaseFakeConfigLock();
         session.disconnect();
+        if (!session.isReconnecting()) {
+            com.mockplayer.session.SessionManager.getInstance().removeFakePlayer(name);
+        }
     }
 
     @Override

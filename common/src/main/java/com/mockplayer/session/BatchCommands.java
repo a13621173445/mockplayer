@@ -225,14 +225,14 @@ public final class BatchCommands {
                         .then(f.argument("count", IntegerArgumentType.integer(1))
                                 .executes(ctx -> {
                                     f.sendFeedback(ctx.getSource(), newPlayerBatch(
-                                            getString(ctx, "prefix"), getInt(ctx, "count"), 0, 4));
+                                            getString(ctx, "prefix"), getInt(ctx, "count"), 0, 1));
                                     return 1;
                                 })
                                 .then(f.argument("interval", IntegerArgumentType.integer(0, 1200))
                                         .executes(ctx -> {
                                             f.sendFeedback(ctx.getSource(), newPlayerBatch(
                                                     getString(ctx, "prefix"), getInt(ctx, "count"),
-                                                    getInt(ctx, "interval"), 4));
+                                                    getInt(ctx, "interval"), 1));
                                             return 1;
                                         })
                                         .then(f.argument("concurrency", IntegerArgumentType.integer(1, 64))

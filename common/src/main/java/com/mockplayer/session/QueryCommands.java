@@ -220,7 +220,7 @@ public class QueryCommands {
         }
         if (on) {
             EventRecorder recorder = EventRecorderRegistry.computeIfAbsent(name, EventRecorder::new);
-            impl.events().addListener(recorder);
+            impl.events().addListenerIfAbsent(recorder);
             return CommandSupport.info("commands.mockplayer.query.listen.on", CommandSupport.playerName(name));
         }
         EventRecorder recorder = EventRecorderRegistry.remove(name);

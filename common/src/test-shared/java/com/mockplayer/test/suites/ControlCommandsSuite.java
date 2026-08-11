@@ -63,6 +63,7 @@ public class ControlCommandsSuite extends TestSuite {
         test("错误路径/全动作 i18n/转义", this::errorsAndI18n);
         test("挖掘时间与距离", this::mineTime);
         test("chunkRadius", this::chunkRadius);
+        test("换维隔离注册表", this::dimensionIsolation);
         test("射线交互", this::raycast);
     }
 
@@ -886,11 +887,15 @@ public class ControlCommandsSuite extends TestSuite {
                 on.set(true);
                 String onText = QueryCommands.listen(ctx.botName(), true).getString();
                 ctx.checkNow("listen on feedback", onText.contains(ctx.botName()), "text=" + onText);
+                // 重复 listen on 必须幂等（旧实现会重复挂载导致事件双触发）
+                QueryCommands.listen(ctx.botName(), true);
             }
         });
         ctx.run(() -> {
             if (!damaged.get()) {
                 damaged.set(true);
+                ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
+                        ctx.server().createCommandSourceStack(), "gamemode survival " + ctx.botName()));
                 ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
                         ctx.server().createCommandSourceStack(), "damage " + ctx.botName() + " 4"));
             }
@@ -902,6 +907,11 @@ public class ControlCommandsSuite extends TestSuite {
             return hasDamage.get();
         }, 200);
         ctx.check("listen recorded+push damage event", hasDamage::get);
+        ctx.check("listen no duplicate damage event", () -> {
+            EventRecorder recorder = QueryCommands.getRecorder(ctx.botName());
+            return recorder != null && recorder.snapshot().stream()
+                    .filter(s -> s.startsWith("onDamage|")).count() == 1;
+        });
         ctx.check("memory event cache exact after damage",
                 () -> ctx.bot().memoryInfo().eventCacheBytes() > 0);
         ctx.run(() -> {
@@ -1203,6 +1213,7 @@ public class ControlCommandsSuite extends TestSuite {
         AtomicReference<Integer> serverRequested = new AtomicReference<>(-1);
         AtomicReference<Integer> serverView = new AtomicReference<>(-1);
         AtomicReference<Integer> mainOptionsBefore = new AtomicReference<>(-1);
+        AtomicReference<Integer> mainServerRenderBefore = new AtomicReference<>(-1);
         AtomicBoolean defaultChecked = new AtomicBoolean();
         AtomicBoolean serverChecked = new AtomicBoolean();
         AtomicBoolean afterChecked = new AtomicBoolean();
@@ -1215,6 +1226,7 @@ public class ControlCommandsSuite extends TestSuite {
             if (!teleported.get()) {
                 teleported.set(true);
                 mainOptionsBefore.set(Minecraft.getInstance().options.renderDistance().get());
+                mainServerRenderBefore.set(readServerRenderDistance());
                 mainChunkSource.set(Minecraft.getInstance().level == null
                         || Minecraft.getInstance().level.getChunkSource() != null);
                 ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
@@ -1286,6 +1298,10 @@ public class ControlCommandsSuite extends TestSuite {
                 ctx.checkNow("chunk set +6 not loaded", !ctx.bot().isBlockLoaded(probe.get().offset(96, 0, 0)));
                 ctx.checkNow("chunk main player isolated",
                         Minecraft.getInstance().options.renderDistance().get() == mainOptionsBefore.get());
+                ctx.checkNow("chunk main serverRenderDistance isolated",
+                        readServerRenderDistance() == mainServerRenderBefore.get(),
+                        "before=" + mainServerRenderBefore.get()
+                                + " now=" + readServerRenderDistance());
                 String q = QueryCommands.chunk(ctx.botName()).getString();
                 ctx.checkNow("chunk query readback", q.contains("4"), "q=" + q);
                 String bad = ControlCommands.chunkRadius(ctx.botName(), 0).getString();
@@ -1306,6 +1322,71 @@ public class ControlCommandsSuite extends TestSuite {
                         MockplayerConfig.get().getFakePlayerChunkRadius() == 2);
             }
         });
+    }
+
+    /** 换维（tp 到地狱）后：FakeLevelRegistry 只保留新 level，不泄漏旧 level。 */
+    private void dimensionIsolation(TestContext ctx) {
+        AtomicBoolean teleported = new AtomicBoolean();
+        AtomicBoolean changed = new AtomicBoolean();
+        createBot(ctx);
+        SuitesSupport.awaitChunkLoaded(ctx);
+        ctx.run(() -> {
+            if (!teleported.get()) {
+                teleported.set(true);
+                ctx.server().execute(() -> ctx.server().getCommands().performPrefixedCommand(
+                        ctx.server().createCommandSourceStack(),
+                        "execute in minecraft:the_nether run tp " + ctx.botName() + " 0 64 0"));
+            }
+        });
+        ctx.await("bot dimension changed", () -> {
+            if (ctx.bot().getLevel() != null) {
+                changed.set(ctx.bot().getLevel().dimension() == net.minecraft.world.level.Level.NETHER);
+            }
+            return changed.get();
+        }, 400);
+        ctx.check("bot dimension changed", changed::get);
+        ctx.check("fake level registry not leaked", () -> fakeLevelCount() == 1,
+                () -> "count=" + fakeLevelCount() + " contents=" + fakeLevelContents());
+        ctx.run(() -> MockplayerApi.bots().removeBot(ctx.botName(), "command"));
+    }
+
+    /** 反射读主玩家 Options.serverRenderDistance（无公共 getter，P0-2 隔离断言用）。 */
+    private static int readServerRenderDistance() {
+        try {
+            java.lang.reflect.Field f =
+                    Minecraft.getInstance().options.getClass().getDeclaredField("serverRenderDistance");
+            f.setAccessible(true);
+            return f.getInt(Minecraft.getInstance().options);
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /** 反射读 FakeLevelRegistry.FAKE_LEVELS 数量（P0-3 换维泄漏断言用）。 */
+    private static int fakeLevelCount() {
+        try {
+            java.lang.reflect.Field f =
+                    com.mockplayer.session.FakeLevelRegistry.class.getDeclaredField("FAKE_LEVELS");
+            f.setAccessible(true);
+            return ((java.util.Set<?>) f.get(null)).size();
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /** 临时诊断：注册表内容（P0-3 排查用，修完删除）。 */
+    private static String fakeLevelContents() {
+        try {
+            java.lang.reflect.Field f =
+                    com.mockplayer.session.FakeLevelRegistry.class.getDeclaredField("FAKE_LEVELS");
+            f.setAccessible(true);
+            java.util.Set<?> set = (java.util.Set<?>) f.get(null);
+            return set.stream()
+                    .map(o -> ((net.minecraft.client.multiplayer.ClientLevel) o).dimension().toString())
+                    .toList().toString();
+        } catch (Exception e) {
+            return "err:" + e;
+        }
     }
 
     private void raycast(TestContext ctx) {

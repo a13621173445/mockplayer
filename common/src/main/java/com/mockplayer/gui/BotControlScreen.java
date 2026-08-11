@@ -191,8 +191,6 @@ public class BotControlScreen extends Screen {
     private int lastHealth = -1;
     private long healthBlinkTime;
     private final java.util.Random heartRandom = new java.util.Random();
-    /** 打开 GUI 前主玩家菜单模糊值（关闭时恢复，不污染设置）。 */
-    private static int lastMainBlurBefore = -1;
     private Button tabStatus;
     private Button tabInventory;
     private Button tabActions;
@@ -253,12 +251,6 @@ public class BotControlScreen extends Screen {
     @Override
     public void removed() {
         // 关闭 GUI 不停锁存的长按/连点动作（类似疾跑的开关状态，由停止按钮 stop() 全停）
-        // 恢复打开前的主玩家菜单模糊值（不污染设置）
-        if (BotControlScreen.lastMainBlurBefore >= 0) {
-            Minecraft.getInstance().options.menuBackgroundBlurriness()
-                    .set(BotControlScreen.lastMainBlurBefore);
-            BotControlScreen.lastMainBlurBefore = -1;
-        }
         super.removed();
     }
 
@@ -429,13 +421,6 @@ public class BotControlScreen extends Screen {
         }
         // 初始可见性立即生效（防止打开 GUI 第一帧闪出全部按钮）
         this.refreshActionTabVisibility();
-        // 模糊强度：打开期间临时把主玩家菜单模糊度设为配置值（关闭时恢复）
-        if (BotControlScreen.lastMainBlurBefore < 0) {
-            BotControlScreen.lastMainBlurBefore =
-                    Minecraft.getInstance().options.getMenuBackgroundBlurriness();
-        }
-        Minecraft.getInstance().options.menuBackgroundBlurriness()
-                .set(MockplayerConfig.get().getGuiBlur());
     }
 
     // ===== 控件工厂 =====

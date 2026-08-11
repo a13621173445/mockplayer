@@ -130,6 +130,7 @@ public class BotManagerImpl implements BotManager {
             return RemoveResult.NOT_OWNER;
         }
         this.sessions.remove(name);
+        EventRecorderRegistry.remove(name);
         session.disconnect();
         BotImpl bot = session.getBot();
         if (bot != null) {
@@ -164,6 +165,7 @@ public class BotManagerImpl implements BotManager {
     /** 内部：全部假人下线（主玩家退出服务器时调用） */
     public void clearAll() {
         for (FakeSession session : this.sessions.values()) {
+            EventRecorderRegistry.remove(session.getName());
             session.disconnect();
             BotImpl bot = session.getBot();
             if (bot != null) {

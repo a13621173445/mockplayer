@@ -6,6 +6,7 @@
   "refmap": "mockplayer.accessor.refmap.json",
   "mixins": [],
   "client": [
+    "MixinOptions",
     "MockplayerClientPacketListenerAccessor",
     "MockplayerClientCommonListenerAccessor",
     "MockplayerClientLevelAccessor",

@@ -97,6 +97,19 @@ public class FakePlayListener extends ClientPacketListener {
     }
 
     /**
+     * 假人收到区块缓存半径包：只更新假人自己的 level 与 serverChunkRadius。
+     * 原版会写主玩家 {@code options.setServerRenderDistance}，假人绝不能碰（隔离铁律）。
+     */
+    @Override
+    public void handleSetChunkCacheRadius(
+            net.minecraft.network.protocol.game.ClientboundSetChunkCacheRadiusPacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, this.minecraft.packetProcessor());
+        MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
+        self.mockplayer$setServerChunkRadius(packet.getRadius());
+        self.mockplayer$getLevel().getChunkSource().updateViewRadius(packet.getRadius());
+    }
+
+    /**
      * 假人分支 handleLogin：只建假人自己的 world/player，不写主玩家全局。
      * 不调 minecraft.setLevel / setCameraEntity / startWaitingForNewLevel（不污染主玩家、不弹加载界面）。
      */
@@ -105,6 +118,13 @@ public class FakePlayListener extends ClientPacketListener {
         // 显式转渲染线程：假人 level/player 必须在渲染线程创建，否则 neoforge ModelDataManager
         // 绑定 Netty 线程，后续渲染线程操作 level（如 setBlock 移除 BlockEntity → requestModelData）崩
         PacketUtils.ensureRunningOnSameThread(packet, this, this.minecraft.packetProcessor());
+        // 会话可能已在登录完成前被删除：放弃创建 level/player（防孤儿 level 泄漏）
+        if (this.session.isDisposed()) {
+            this.connection.disconnect(
+                    net.minecraft.network.chat.Component.translatable(
+                            "disconnect.mockplayer.fake_player_removed"));
+            return;
+        }
         Minecraft mc = Minecraft.getInstance();
         MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
 
@@ -184,8 +204,6 @@ public class FakePlayListener extends ClientPacketListener {
         // 4. 存进 session（供 tick 驱动物理）
         this.session.setFakePlayer(this.fakePlayer);
         this.session.setPlayListener(this);
-        // 配置阶段结束：释放 Fabric 配置 addon 串行锁（下一个假人才能进配置）
-        this.session.releaseFakeConfigLock();
         // 重置登录后首包血量检查标志（服务端若认为假人已死，登录后第一个 setHealth 包血量 <= 0）
         this.checkDeathOnLogin = true;
         // 标记已连接（消除 connected 与 PLAYING 的跨线程竞态，见 FakeSession.doConnectTcp 注释）
@@ -816,7 +834,10 @@ public class FakePlayListener extends ClientPacketListener {
                     spawnInfo.seed(),
                     seaLevel);
             ((com.mockplayer.session.accessor.MockplayerClientLevelAccessor) newLevel).mockplayer$addMapData(mapData);
+            // 换维后隔离注册表必须同步：注销旧 level、注册新 level（防泄漏 + 新 level 粒子/音效漏拦截）
+            com.mockplayer.session.FakeLevelRegistry.unregisterFakeLevel(self.mockplayer$getLevel());
             self.mockplayer$setLevel(newLevel);
+            com.mockplayer.session.FakeLevelRegistry.registerFakeLevel(newLevel);
         }
         if (oldPlayer.hasContainerOpen()) {
             oldPlayer.closeContainer();
