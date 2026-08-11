@@ -127,6 +127,15 @@ public class ApiFullSuite extends TestSuite {
             return b != null && c != null
                     && (Math.abs(c[0] - b[0]) > 0.3 || Math.abs(c[1] - b[1]) > 0.3);
         });
+        ctx.check("state pos matches local player", () -> {
+            com.mockplayer.session.FakePlayerState st =
+                    ((BotImpl) ctx.bot()).session().getState();
+            net.minecraft.client.player.LocalPlayer lp = ctx.bot().getLocalPlayer();
+            return Math.abs(st.getX() - lp.getX()) < 1.0e-3
+                    && Math.abs(st.getY() - lp.getY()) < 1.0e-3
+                    && Math.abs(st.getZ() - lp.getZ()) < 1.0e-3
+                    && st.isOnGround() == lp.onGround();
+        });
         ctx.run(() -> {
             ctx.bot().actions().stop();
             ctx.server().execute(() -> {

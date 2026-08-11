@@ -368,6 +368,13 @@ public class FakeSession {
             }
         }
 
+        // 同步假人位置/着地状态到 FakePlayerState（铁律：假人状态不丢位置信息；
+        // 本地预测位置与服务端权威一致，覆盖移动/传送/重生后的最新值）
+        if (this.fakePlayer != null) {
+            this.state.setPosition(this.fakePlayer.getX(), this.fakePlayer.getY(), this.fakePlayer.getZ());
+            this.state.setOnGround(this.fakePlayer.onGround());
+        }
+
         // 驱动 Bot：应用持续动作输入 + 派发 onTick/onMove 事件
         if (this.bot != null) {
             try {
