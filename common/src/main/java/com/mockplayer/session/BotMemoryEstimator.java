@@ -1,6 +1,8 @@
 package com.mockplayer.session;
 
 import com.mockplayer.api.BotMemoryInfo;
+import com.mockplayer.api.BotWorldMemory;
+import com.mockplayer.api.BotWorldMemoryRegistry;
 import com.mockplayer.api.MockplayerApi;
 import com.mockplayer.api.container.BotContainer;
 
@@ -64,6 +66,10 @@ public final class BotMemoryEstimator {
             }
         }
 
+        long world = BotWorldMemoryRegistry.get(bot.getName())
+                .map(BotWorldMemory::estimatedBytes)
+                .orElse(0L);
+
         Runtime rt = Runtime.getRuntime();
         long used = rt.totalMemory() - rt.freeMemory();
         long committed = rt.totalMemory();
@@ -80,7 +86,7 @@ public final class BotMemoryEstimator {
 
         return new BotMemoryInfo(used, committed, max, botCount,
                 chat, sound, particle, packets, online, events, container, inventory,
-                entityCount, chunkCount);
+                world, entityCount, chunkCount);
     }
 
     /** ItemStack 的精确序列化数据字节（Mojang CODEC → NBT sizeInBytes）。 */

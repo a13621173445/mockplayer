@@ -16,6 +16,8 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -338,5 +340,31 @@ public class BotImpl implements Bot {
 
     void fireOnSprintToggle(boolean sprinting) {
         this.events.fire(this, l -> l.onSprintToggle(this, sprinting));
+    }
+
+    void fireOnChunkLoaded(LevelChunk chunk) {
+        this.events.fire(this, l -> l.onChunkLoaded(this, chunk));
+    }
+
+    void fireOnChunkUnloaded(ChunkPos pos) {
+        this.events.fire(this, l -> l.onChunkUnloaded(this, pos));
+    }
+
+    void fireOnEntityAdded(Entity entity) {
+        this.events.fire(this, l -> l.onEntityAdded(this, entity));
+    }
+
+    void fireOnEntityRemoved(int entityId) {
+        this.events.fire(this, l -> l.onEntityRemoved(this, entityId));
+    }
+
+    void fireOnSectionDataChanged(ChunkPos pos, int sectionIndex,
+                                  long oldSerializedBytes, long newSerializedBytes) {
+        this.events.fire(this, l -> l.onSectionDataChanged(this, pos, sectionIndex,
+                oldSerializedBytes, newSerializedBytes));
+    }
+
+    void fireOnBlockEntityData(BlockPos pos, long newDataBytes) {
+        this.events.fire(this, l -> l.onBlockEntityData(this, pos, newDataBytes));
     }
 }

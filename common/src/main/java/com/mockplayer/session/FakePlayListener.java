@@ -92,8 +92,66 @@ public class FakePlayListener extends ClientPacketListener {
     @Override
     public void handleBlockUpdate(net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket packet) {
         PacketUtils.ensureRunningOnSameThread(packet, this, this.minecraft.packetProcessor());
-        ((MockplayerClientPacketListenerAccessor) this).mockplayer$getLevel()
-                .setServerVerifiedBlockState(packet.getPos(), packet.getBlockState(), 19);
+        MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
+        net.minecraft.client.multiplayer.ClientLevel level = self.mockplayer$getLevel();
+        net.minecraft.core.BlockPos pos = packet.getPos();
+        net.minecraft.world.level.chunk.LevelChunk chunk = level.getChunk(
+                net.minecraft.core.SectionPos.blockToSectionCoord(pos.getX()),
+                net.minecraft.core.SectionPos.blockToSectionCoord(pos.getZ()));
+        int sectionIndex = chunk.getSectionIndex(pos.getY());
+        long before = sectionSerializedBytes(chunk, sectionIndex);
+        level.setServerVerifiedBlockState(pos, packet.getBlockState(), 19);
+        long after = sectionSerializedBytes(chunk, sectionIndex);
+        if (before != after) {
+            fire(b -> b.fireOnSectionDataChanged(chunk.getPos(), sectionIndex, before, after));
+        }
+    }
+
+    /**
+     * 假人分支 handleChunkBlocksUpdate：批量方块变化包（爆炸/结构等）。
+     * 先记 section 序列化尺寸前后差值，再走原版应用路径（写假人 level）。
+     */
+    @Override
+    public void handleChunkBlocksUpdate(
+            net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, this.minecraft.packetProcessor());
+        final long[] before = {0};
+        final net.minecraft.world.level.ChunkPos[] chunkPos = {null};
+        final int[] sectionIndex = {0};
+        packet.runUpdates((pos, state) -> {
+            if (chunkPos[0] == null) {
+                MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
+                net.minecraft.client.multiplayer.ClientLevel level = self.mockplayer$getLevel();
+                net.minecraft.world.level.chunk.LevelChunk chunk = level.getChunk(
+                        net.minecraft.core.SectionPos.blockToSectionCoord(pos.getX()),
+                        net.minecraft.core.SectionPos.blockToSectionCoord(pos.getZ()));
+                chunkPos[0] = chunk.getPos();
+                sectionIndex[0] = chunk.getSectionIndex(pos.getY());
+                before[0] = sectionSerializedBytes(chunk, sectionIndex[0]);
+            }
+        });
+        super.handleChunkBlocksUpdate(packet);
+        if (chunkPos[0] != null) {
+            MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
+            net.minecraft.world.level.chunk.LevelChunk chunk =
+                    self.mockplayer$getLevel().getChunk(chunkPos[0].x(), chunkPos[0].z());
+            long after = sectionSerializedBytes(chunk, sectionIndex[0]);
+            if (before[0] != after) {
+                fire(b -> b.fireOnSectionDataChanged(chunkPos[0], sectionIndex[0], before[0], after));
+            }
+        }
+    }
+
+    /** 某 section 的序列化存储字节（空 section 记 0）。 */
+    private long sectionSerializedBytes(net.minecraft.world.level.chunk.LevelChunk chunk, int sectionIndex) {
+        if (sectionIndex < 0 || sectionIndex >= chunk.getSections().length) {
+            return 0;
+        }
+        net.minecraft.world.level.chunk.LevelChunkSection section = chunk.getSection(sectionIndex);
+        if (section == null || section.hasOnlyAir()) {
+            return 0;
+        }
+        return section.getStates().getSerializedSize();
     }
 
     /**
@@ -931,6 +989,17 @@ public class FakePlayListener extends ClientPacketListener {
         if (!this.hasClientLoaded()) {
             self.mockplayer$notifyPlayerLoaded();
         }
+        net.minecraft.world.level.chunk.LevelChunk chunk =
+                self.mockplayer$getLevel().getChunk(packet.getX(), packet.getZ());
+        fire(b -> b.fireOnChunkLoaded(chunk));
+    }
+
+    /** 假人分支 handleForgetLevelChunk：区块卸载（原版逻辑写假人 level，再派发事件）。 */
+    @Override
+    public void handleForgetLevelChunk(net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, this.minecraft.packetProcessor());
+        super.handleForgetLevelChunk(packet);
+        fire(b -> b.fireOnChunkUnloaded(packet.pos()));
     }
 
     @Override
@@ -941,6 +1010,7 @@ public class FakePlayListener extends ClientPacketListener {
         if (entity != null) {
             entity.recreateFromPacket(packet);
             self.mockplayer$getLevel().addEntity(entity);
+            fire(b -> b.fireOnEntityAdded(entity));
             // 矿车/蜜蜂音效：假人无头不播主玩家音效，记录到 state
             if (entity instanceof net.minecraft.world.entity.vehicle.minecart.AbstractMinecart) {
                 this.session.getState().recordSound("minecart_ambient", entity.getX(), entity.getY(), entity.getZ());
@@ -1068,6 +1138,7 @@ public class FakePlayListener extends ClientPacketListener {
                     self.mockplayer$setRemovedPlayerVehicleId(java.util.OptionalInt.of(entityId));
                 }
                 self.mockplayer$getLevel().removeEntity(entityId, net.minecraft.world.entity.Entity.RemovalReason.DISCARDED);
+                fire(b -> b.fireOnEntityRemoved(entityId));
             }
         });
     }
@@ -1092,6 +1163,7 @@ public class FakePlayListener extends ClientPacketListener {
             this.session.getState().recordParticle("item_pickup", from.getX(), from.getY(), from.getZ());
             // 实体被拾取移除（数据保留到假人 level）
             self.mockplayer$getLevel().removeEntity(from.getId(), net.minecraft.world.entity.Entity.RemovalReason.DISCARDED);
+            fire(b -> b.fireOnEntityRemoved(from.getId()));
             // Bot 事件：拾取物品（经验球不触发）
             if (from instanceof net.minecraft.world.entity.item.ItemEntity itemEntity) {
                 fire(b -> b.fireOnPickupItem(itemEntity.getItem()));
@@ -1108,6 +1180,8 @@ public class FakePlayListener extends ClientPacketListener {
             net.minecraft.world.level.storage.ValueInput input = net.minecraft.world.level.storage.TagValueInput.create(
                     net.minecraft.util.ProblemReporter.DISCARDING, self.mockplayer$getRegistryAccess(), packet.getTag());
             blockEntity.loadWithComponents(input);
+            long dataBytes = packet.getTag() != null ? packet.getTag().sizeInBytes() : 0;
+            fire(b -> b.fireOnBlockEntityData(pos, dataBytes));
         });
     }
 

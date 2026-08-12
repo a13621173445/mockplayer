@@ -108,13 +108,14 @@ public final class BotControlHud {
                         player.getX(), player.getY(), player.getZ()),
                 dir.getName()));
         double speed = player.getDeltaMovement().horizontalDistance() * 20.0;
+        long displayBytes = bot.memoryInfo().displayBytes();
         lines.add(Component.translatable("gui.mockplayer.status.speed",
                 String.format(Locale.ROOT, "%.1f", speed),
-                bot.memoryInfo().trackedBytes() >= 1024L * 1024L
+                displayBytes >= 1024L * 1024L
                         ? String.format(Locale.ROOT, "%.1f MB",
-                        bot.memoryInfo().trackedBytes() / (1024.0 * 1024.0))
+                        displayBytes / (1024.0 * 1024.0))
                         : String.format(Locale.ROOT, "%.1f KB",
-                        bot.memoryInfo().trackedBytes() / 1024.0),
+                        displayBytes / 1024.0),
                 bot.getChunkRadius()));
         ItemStack mainHand = player.getMainHandItem();
         lines.add(Component.translatable("gui.mockplayer.status.slot",

@@ -8,8 +8,9 @@ package com.mockplayer.api;
  * - Mod 侧字节字段为记账估算（不含 Map 桶、对象头外引用、容器/数组槽位等开销）：
  *   String/UUID/Map 节点按 HotSpot 64 位压缩指针布局公式，物品按 Mojang
  *   {@code Tag.sizeInBytes()} 序列化尺寸；
- * - 原版 ClientLevel 内部（区块/实体）的字节归属在无 Java agent 时物理上无法
- *   精确测量，因此只上报精确的 entityCount / chunkCount，不冒充字节数。
+ * - worldBytes 来自可插拔世界内存记账模块（结构级估算：区块/实体/方块实体，
+ *   查询 O(1)，口径见 com.mockplayer.memory.WorldMemoryAccountant）；未挂载为 0；
+ * - entityCount / chunkCount 为假人 level 原版精确计数。
  */
 public record BotMemoryInfo(
         long jvmUsedBytes,
@@ -24,6 +25,7 @@ public record BotMemoryInfo(
         long eventCacheBytes,
         long containerBytes,
         long inventoryBytes,
+        long worldBytes,
         int entityCount,
         int chunkCount
 ) {
@@ -32,5 +34,10 @@ public record BotMemoryInfo(
         return this.chatBytes + this.soundBytes + this.particleBytes
                 + this.onlinePlayersBytes + this.eventCacheBytes
                 + this.containerBytes + this.inventoryBytes;
+    }
+
+    /** 显示用总字节：mod 侧精确记账 + 世界内存估算（名牌/GUI 共用）。 */
+    public long displayBytes() {
+        return this.trackedBytes() + this.worldBytes;
     }
 }

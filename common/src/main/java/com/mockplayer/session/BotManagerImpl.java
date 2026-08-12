@@ -61,9 +61,12 @@ public class BotManagerImpl implements BotManager {
         for (BotListener listener : this.globalListeners) {
             bot.events().addListener(listener);
         }
+        // 可插拔内存记账模块挂载点（模块只依赖事件与 API 注册表）
+        com.mockplayer.memory.MemoryModule.ensure(bot);
         // 连接失败：回收会话 + 通知主玩家（失败提示走语言文件 key）
         session.setOnConnectFail(key -> {
             this.sessions.remove(name);
+            com.mockplayer.memory.MemoryModule.remove(name);
             Minecraft.getInstance().execute(() -> {
                 if (Minecraft.getInstance().player != null) {
                     Minecraft.getInstance().player.sendSystemMessage(
@@ -131,6 +134,7 @@ public class BotManagerImpl implements BotManager {
         }
         this.sessions.remove(name);
         EventRecorderRegistry.remove(name);
+        com.mockplayer.memory.MemoryModule.remove(name);
         session.disconnect();
         BotImpl bot = session.getBot();
         if (bot != null) {
@@ -166,6 +170,7 @@ public class BotManagerImpl implements BotManager {
     public void clearAll() {
         for (FakeSession session : this.sessions.values()) {
             EventRecorderRegistry.remove(session.getName());
+            com.mockplayer.memory.MemoryModule.remove(session.getName());
             session.disconnect();
             BotImpl bot = session.getBot();
             if (bot != null) {

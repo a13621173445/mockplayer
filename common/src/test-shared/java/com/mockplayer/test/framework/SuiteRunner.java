@@ -21,6 +21,7 @@ import com.mockplayer.test.suites.ListenerEventsSuite;
 import com.mockplayer.test.suites.MerchantSuite;
 import com.mockplayer.test.suites.UseItemsSuite;
 import com.mockplayer.test.suites.ApiSmokeSuite;
+import com.mockplayer.test.suites.MemoryAccountingSuite;
 import com.mockplayer.test.suites.ApiFullSuite;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
@@ -74,7 +75,8 @@ public final class SuiteRunner {
             new GuiActionsSuite(),
             new ListenerEventsSuite(),
             new ControlCommandsSuite(),
-            new BotGuiSuite());
+            new BotGuiSuite(),
+            new MemoryAccountingSuite());
 
     private static Phase phase = Phase.WAIT_TITLE;
     private static volatile long phaseStart;

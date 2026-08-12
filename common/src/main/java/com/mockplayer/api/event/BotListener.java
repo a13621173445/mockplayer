@@ -15,6 +15,8 @@ import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.LevelChunk;
 import com.mojang.authlib.GameProfile;
 
 /**
@@ -152,6 +154,33 @@ public interface BotListener {
 
     /** 假人疾跑状态变化。 */
     default void onSprintToggle(Bot bot, boolean sprinting) {
+    }
+
+    // ===== 假人世界（区块/实体/方块数据；供内存记账等可插拔模块监听） =====
+
+    /** 假人 level 载入了一个区块（收到 chunk 包并写入假人 level 后触发）。 */
+    default void onChunkLoaded(Bot bot, LevelChunk chunk) {
+    }
+
+    /** 假人 level 卸载了一个区块（收到 forget chunk 包后触发）。 */
+    default void onChunkUnloaded(Bot bot, ChunkPos pos) {
+    }
+
+    /** 假人 level 新增了一个实体（收到 add entity 包并加入后触发）。 */
+    default void onEntityAdded(Bot bot, Entity entity) {
+    }
+
+    /** 假人 level 移除了一个实体（收到 remove/take item 包移除后触发）。 */
+    default void onEntityRemoved(Bot bot, int entityId) {
+    }
+
+    /** 假人 level 某个 section 的方块数据变化（序列化字节 old→new；old==new 时模块可跳过）。 */
+    default void onSectionDataChanged(Bot bot, ChunkPos pos, int sectionIndex,
+                                      long oldSerializedBytes, long newSerializedBytes) {
+    }
+
+    /** 假人 level 某个方块实体的 NBT 数据更新（newDataBytes 为新的序列化尺寸）。 */
+    default void onBlockEntityData(Bot bot, BlockPos pos, long newDataBytes) {
     }
 
     // ===== 高频（传参复用，不分配事件对象） =====
