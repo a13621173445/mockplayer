@@ -80,8 +80,8 @@ public class ModConfig {
     private float guiOpacity = DEFAULT_GUI_OPACITY;
     private int guiBlur = DEFAULT_GUI_BLUR;
 
-    /** 假人默认区块加载半径（节约性能：默认最低 2，范围 1-32）。 */
-    public static final int DEFAULT_FAKE_PLAYER_CHUNK_RADIUS = 2;
+    /** 假人默认区块加载半径（节约性能：默认 1，范围 1-32）。 */
+    public static final int DEFAULT_FAKE_PLAYER_CHUNK_RADIUS = 1;
     public static final int MIN_FAKE_PLAYER_CHUNK_RADIUS = 1;
     public static final int MAX_FAKE_PLAYER_CHUNK_RADIUS = 32;
 
