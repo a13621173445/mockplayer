@@ -71,6 +71,37 @@ public final class BatchCommands {
         return lastSummary;
     }
 
+    /** 批量创建是否进行中（测试与状态展示用）。 */
+    public static boolean isActive() {
+        return spawnActive;
+    }
+
+    /**
+     * 停止批量创建（主玩家退出服务器/游戏时由 SessionManager.clearAll 调用；幂等）。
+     *
+     * 复位全部状态；已创建/在途的假人由 clearAll 统一下线，本方法不碰假人本身。
+     */
+    public static void cancel() {
+        if (!spawnActive) {
+            return;
+        }
+        spawnActive = false;
+        spawnPrefix = null;
+        spawnTotal = 0;
+        spawnInterval = 0;
+        spawnConcurrency = 1;
+        spawnIndex = 0;
+        spawnCreated = 0;
+        spawnSkipped = 0;
+        spawnFailed = 0;
+        spawnInFlight = 0;
+        spawnBots.clear();
+        spawnStartNanos.clear();
+        spawnMaxSingleNanos = 0;
+        spawnTrackedBytes = 0;
+        lastSummary = null;
+    }
+
     /** 每 tick 驱动批量创建队列（SessionManager.tick 调用）。 */
     public static void tick() {
         if (!spawnActive) {

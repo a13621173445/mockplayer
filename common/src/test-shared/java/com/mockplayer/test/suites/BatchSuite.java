@@ -25,6 +25,22 @@ public class BatchSuite extends TestSuite {
         test("重名跳过", this::duplicateSkip);
         test("dry-run 与删除", this::dryAndDelete);
         test("管理边界", this::boundary);
+        test("退出取消批量任务", this::cancelOnExit);
+    }
+
+    /** 主玩家退出（clearAll）会取消进行中的批量创建：状态复位且不再产出新假人。 */
+    private void cancelOnExit(TestContext ctx) {
+        ctx.run(() -> {
+            String started = FakePlayerCommands.newPlayerBatch("tbotbx", 5, 100, 1).getString();
+            ctx.checkNow("batch cancel-start accepted", !started.contains("commands."), "out=" + started);
+            ctx.checkNow("batch active before cancel", BatchCommands.isActive());
+        });
+        // 模拟主玩家退出路径：clearAll 内部必须调用 BatchCommands.cancel()
+        ctx.run(() -> com.mockplayer.session.SessionManager.getInstance().clearAll());
+        ctx.check("batch inactive after clearAll", () -> !BatchCommands.isActive());
+        ctx.await("no new batch bots after clearAll", () ->
+                MockplayerApi.bots().getBots().stream()
+                        .noneMatch(b -> b.getName().startsWith("tbotbx")), 60);
     }
 
     private void createBatch(TestContext ctx) {

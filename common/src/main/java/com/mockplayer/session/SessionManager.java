@@ -46,6 +46,8 @@ public class SessionManager {
      * 全部假人下线（主玩家退出服务器时调用）。
      */
     public void clearAll() {
+        // 批量创建任务必须一并停止：否则回菜单后 tick 仍在驱动队列继续建假人
+        BatchCommands.cancel();
         this.manager.clearAll();
     }
 
