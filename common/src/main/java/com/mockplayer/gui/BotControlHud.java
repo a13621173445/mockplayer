@@ -112,9 +112,9 @@ public final class BotControlHud {
         lines.add(Component.translatable("gui.mockplayer.status.speed",
                 String.format(Locale.ROOT, "%.1f", speed),
                 displayBytes >= 1024L * 1024L
-                        ? String.format(Locale.ROOT, "%.1f MB",
+                        ? String.format(Locale.ROOT, "%.1f MB~",
                         displayBytes / (1024.0 * 1024.0))
-                        : String.format(Locale.ROOT, "%.1f KB",
+                        : String.format(Locale.ROOT, "%.1f KB~",
                         displayBytes / 1024.0),
                 bot.getChunkRadius()));
         ItemStack mainHand = player.getMainHandItem();

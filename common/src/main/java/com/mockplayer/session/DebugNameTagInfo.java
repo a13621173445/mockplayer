@@ -80,7 +80,7 @@ public final class DebugNameTagInfo {
                 .withStyle(ChatFormatting.GOLD));
         line.append(stats);
         // 内存 + 区块加载半径同一行：💾1.2 MB 📡2 chunk（内存青色、半径蓝色）
-        MutableComponent memory = Component.literal("💾" + CommandSupport.formatBytes(bot.memoryInfo().displayBytes()))
+        MutableComponent memory = Component.literal("💾" + CommandSupport.formatBytes(bot.memoryInfo().displayBytes()) + "~")
                 .withStyle(ChatFormatting.AQUA);
         memory.append(Component.literal(" 📡" + bot.getChunkRadius() + " chunk")
                 .withStyle(ChatFormatting.BLUE));

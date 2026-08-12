@@ -280,7 +280,7 @@ public final class StructureHeap {
                 + LayoutSizes.arraySize(capacity, 1);
     }
 
-    /** java.util.PriorityQueue 底层对象数组（JDK 增长：初值 11，<64 加 2，否则 1.5 倍）。 */
+    /** java.util.PriorityQueue 底层对象数组（JDK 增长：初值 11，容量小于 64 时加 2，否则 1.5 倍）。 */
     public static long priorityQueueHeap(int size) {
         if (size <= 0) {
             return LayoutSizes.shallowSize(java.util.PriorityQueue.class);
