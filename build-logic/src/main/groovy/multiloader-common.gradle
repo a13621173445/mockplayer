@@ -52,7 +52,8 @@ processResources {
             'credits'                      : credits,
             'java_version'                 : java_version,
             'yacl_version'                 : yacl_version,
-            'modmenu_version'              : modmenu_version
+            'modmenu_version'              : modmenu_version,
+            'jol_version'                  : jol_version
     ]
 
     var jsonExpandProps = expandProps.collectEntries {

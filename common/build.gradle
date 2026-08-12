@@ -37,6 +37,11 @@ sourceSets {
     }
 }
 
+dependencies {
+    // JOL 只进测试共享源集（校准快照用），绝不进生产 jar
+    testSharedImplementation("org.openjdk.jol:jol-core:${jol_version}")
+}
+
 configurations {
     commonJava {
         canBeResolved = false

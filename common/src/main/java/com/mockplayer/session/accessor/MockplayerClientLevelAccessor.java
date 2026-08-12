@@ -12,6 +12,22 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 @Mixin(net.minecraft.client.multiplayer.ClientLevel.class)
 public interface MockplayerClientLevelAccessor {
 
+    /** 假人 level 的实体分区管理（level 结构记账用）。 */
+    @org.spongepowered.asm.mixin.gen.Accessor("entityStorage")
+    net.minecraft.world.level.entity.TransientEntitySectionManager<?> mockplayer$getEntityStorage();
+
+    /** 假人 level 的 ticking 实体表。 */
+    @org.spongepowered.asm.mixin.gen.Accessor("tickingEntities")
+    net.minecraft.world.level.entity.EntityTickList mockplayer$getTickingEntities();
+
+    /** 假人 level 的光照更新队列（无头假人可能积压 Runnable 持有 DataLayer）。 */
+    @org.spongepowered.asm.mixin.gen.Accessor("lightUpdateQueue")
+    java.util.Deque<Runnable> mockplayer$getLightUpdateQueue();
+
+    /** 假人 level 的环境属性系统（采样器结构）。 */
+    @org.spongepowered.asm.mixin.gen.Accessor("environmentAttributes")
+    net.minecraft.world.attribute.EnvironmentAttributeSystem mockplayer$getEnvironmentAttributes();
+
     @Invoker("getAllMapData")
     java.util.Map<net.minecraft.world.level.saveddata.maps.MapId, net.minecraft.world.level.saveddata.maps.MapItemSavedData> mockplayer$getAllMapData();
 

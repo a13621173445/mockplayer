@@ -367,4 +367,8 @@ public class BotImpl implements Bot {
     void fireOnBlockEntityData(BlockPos pos, long newDataBytes) {
         this.events.fire(this, l -> l.onBlockEntityData(this, pos, newDataBytes));
     }
+
+    void fireOnChunkLightData(ChunkPos pos, int lightByteArrays) {
+        this.events.fire(this, l -> l.onChunkLightData(this, pos, lightByteArrays));
+    }
 }

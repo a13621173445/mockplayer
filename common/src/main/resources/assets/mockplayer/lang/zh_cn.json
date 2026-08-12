@@ -181,7 +181,6 @@
     "commands.mockplayer.query.memory.world": "  世界内存估算：%s",
     "commands.mockplayer.query.memory.display": "显示合计（Mod 侧 + 世界）：%s",
     "commands.mockplayer.query.memory.level": "假人世界：%s 实体，%s 区块",
-    "commands.mockplayer.query.memory.note": "JVM 堆与 Mod 侧字节为精确值；世界内存为结构级估算（区块/实体/方块实体，查询 O(1)）",
     "config.mockplayer.title": "Mockplayer 设置",
     "config.mockplayer.category.general": "通用",
     "config.mockplayer.category.general.tooltip": "Mockplayer 客户端设置",

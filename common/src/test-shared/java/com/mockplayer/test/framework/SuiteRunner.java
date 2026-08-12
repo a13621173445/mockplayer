@@ -40,6 +40,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * 新框架执行器：主菜单 → 清旧档+建超平坦世界 → 单机就绪+开局域网+锁 gamerules →
@@ -75,7 +76,13 @@ public final class SuiteRunner {
             new GuiActionsSuite(),
             new ListenerEventsSuite(),
             new ControlCommandsSuite(),
-            new BotGuiSuite(),
+            new BotGuiSuite());
+
+    /**
+     * 特殊套件：不随 all 运行（太特殊且校准太卡，如内存校准），
+     * 只允许显式 -Psuite=memory-accounting 单独运行。
+     */
+    private static final List<TestSuite> SPECIAL_SUITES = List.of(
             new MemoryAccountingSuite());
 
     private static Phase phase = Phase.WAIT_TITLE;
@@ -101,7 +108,8 @@ public final class SuiteRunner {
 
     /** 该套件是否已迁移到新框架（双端入口路由用：迁移的走新框架，未迁移的走旧 TestRunner）。 */
     public static boolean isMigrated(String suiteName) {
-        return SUITES.stream().anyMatch(s -> s.name().equals(suiteName));
+        return Stream.concat(SUITES.stream(), SPECIAL_SUITES.stream())
+                .anyMatch(s -> s.name().equals(suiteName));
     }
 
     /** 客户端 tick 入口：platform 由双端 testmod 传入，suiteName 与旧入口一致（all / 套件名）。 */
@@ -113,7 +121,8 @@ public final class SuiteRunner {
             startHardWatchdog();
             platform = p;
             queue = "all".equals(suiteName) ? new ArrayList<>(SUITES)
-                    : List.of(SUITES.stream().filter(s -> s.name().equals(suiteName)).findFirst()
+                    : List.of(Stream.concat(SUITES.stream(), SPECIAL_SUITES.stream())
+                    .filter(s -> s.name().equals(suiteName)).findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("unknown suite: " + suiteName)));
             suiteIndex = 0;
             suite = queue.get(0);

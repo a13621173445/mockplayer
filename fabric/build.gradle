@@ -36,6 +36,12 @@ sourceSets {
     }
 }
 
+dependencies {
+    // JOL 仅测试运行期（校准快照），不进生产 jar
+    testmodRuntimeOnly("org.openjdk.jol:jol-core:${jol_version}")
+}
+
+
 // 新框架共享测试源码：testmod 编译/运行前先构建 common 的 testShared 输出
 tasks.named('testmodClasses').configure {
     dependsOn project(':common').tasks.named('testSharedClasses')

@@ -989,9 +989,27 @@ public class FakePlayListener extends ClientPacketListener {
         if (!this.hasClientLoaded()) {
             self.mockplayer$notifyPlayerLoaded();
         }
+        fire(b -> b.fireOnChunkLightData(
+                new net.minecraft.world.level.ChunkPos(packet.getX(), packet.getZ()),
+                lightArrayCount(packet.getLightData())));
         net.minecraft.world.level.chunk.LevelChunk chunk =
                 self.mockplayer$getLevel().getChunk(packet.getX(), packet.getZ());
         fire(b -> b.fireOnChunkLoaded(chunk));
+    }
+
+    /** 假人分支 handleLightUpdatePacket：光照变化包（原版写假人 level，再派发光照事件）。 */
+    @Override
+    public void handleLightUpdatePacket(net.minecraft.network.protocol.game.ClientboundLightUpdatePacket packet) {
+        PacketUtils.ensureRunningOnSameThread(packet, this, this.minecraft.packetProcessor());
+        super.handleLightUpdatePacket(packet);
+        fire(b -> b.fireOnChunkLightData(
+                new net.minecraft.world.level.ChunkPos(packet.getX(), packet.getZ()),
+                lightArrayCount(packet.getLightData())));
+    }
+
+    /** 光照包携带的 byte[2048] 数量（sky + block 更新层数，无头假人队列积压不消费）。 */
+    private int lightArrayCount(net.minecraft.network.protocol.game.ClientboundLightUpdatePacketData data) {
+        return data.getSkyUpdates().size() + data.getBlockUpdates().size();
     }
 
     /** 假人分支 handleForgetLevelChunk：区块卸载（原版逻辑写假人 level，再派发事件）。 */
@@ -1180,7 +1198,7 @@ public class FakePlayListener extends ClientPacketListener {
             net.minecraft.world.level.storage.ValueInput input = net.minecraft.world.level.storage.TagValueInput.create(
                     net.minecraft.util.ProblemReporter.DISCARDING, self.mockplayer$getRegistryAccess(), packet.getTag());
             blockEntity.loadWithComponents(input);
-            long dataBytes = packet.getTag() != null ? packet.getTag().sizeInBytes() : 0;
+            long dataBytes = com.mockplayer.memory.StructureHeap.nbtTag(packet.getTag());
             fire(b -> b.fireOnBlockEntityData(pos, dataBytes));
         });
     }

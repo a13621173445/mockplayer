@@ -278,7 +278,6 @@ public class QueryCommands {
                 CommandSupport.formatBytes(m.displayBytes())));
         out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.level",
                 m.entityCount(), m.chunkCount()));
-        out.append(Component.literal("\n")).append(CommandSupport.info("commands.mockplayer.query.memory.note"));
         return out;
     }
 

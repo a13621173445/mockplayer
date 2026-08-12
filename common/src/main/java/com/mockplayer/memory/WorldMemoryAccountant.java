@@ -28,6 +28,10 @@ public final class WorldMemoryAccountant implements BotListener, BotWorldMemory 
     private final Map<Integer, Long> entityBytes = new HashMap<>();
     /** 方块实体数据字节（已包含在区块记账内，仅作差值基线）。 */
     private final Map<BlockPos, Long> blockEntityBytes = new HashMap<>();
+    /** level 层结构字节（区块缓存/光照表/实体分区，随进出事件重算）。 */
+    private long levelStructuresBytes;
+    /** 光照更新队列积压字节（无头假人不消费 lightUpdateQueue，按包累计 byte[2048]）。 */
+    private final Map<ChunkPos, Long> pendingLightBytes = new HashMap<>();
 
     @Override
     public void onChunkLoaded(Bot bot, LevelChunk chunk) {
@@ -46,6 +50,7 @@ public final class WorldMemoryAccountant implements BotListener, BotWorldMemory 
             total -= old;
         }
         total += bytes;
+        refreshLevelStructures(bot);
     }
 
     @Override
@@ -55,6 +60,11 @@ public final class WorldMemoryAccountant implements BotListener, BotWorldMemory 
             total -= bytes;
         }
         total -= removeBlockEntitiesInChunk(pos);
+        Long pending = pendingLightBytes.remove(pos);
+        if (pending != null) {
+            total -= pending;
+        }
+        refreshLevelStructures(bot);
     }
 
     @Override
@@ -65,6 +75,7 @@ public final class WorldMemoryAccountant implements BotListener, BotWorldMemory 
             total -= old;
         }
         total += bytes;
+        refreshLevelStructures(bot);
     }
 
     @Override
@@ -73,6 +84,7 @@ public final class WorldMemoryAccountant implements BotListener, BotWorldMemory 
         if (bytes != null) {
             total -= bytes;
         }
+        refreshLevelStructures(bot);
     }
 
     @Override
@@ -99,6 +111,16 @@ public final class WorldMemoryAccountant implements BotListener, BotWorldMemory 
     }
 
     @Override
+    public void onChunkLightData(Bot bot, ChunkPos pos, int lightByteArrays) {
+        long bytes = (long) lightByteArrays
+                * LayoutSizes.arraySize(net.minecraft.world.level.chunk.DataLayer.SIZE, 1);
+        Long old = pendingLightBytes.put(pos, bytes);
+        long delta = old == null ? bytes : bytes - old;
+        total += delta;
+        refreshLevelStructures(bot);
+    }
+
+    @Override
     public void onRespawn(Bot bot) {
         reset();
     }
@@ -118,12 +140,40 @@ public final class WorldMemoryAccountant implements BotListener, BotWorldMemory 
         return total;
     }
 
+    /** 记账组件明细（调试/校准用）：区块/方块实体/实体/光照/level 结构各自的字节。 */
+    public java.util.Map<String, Long> breakdown() {
+        long chunks = chunkBytes.values().stream().mapToLong(Long::longValue).sum();
+        long be = blockEntityBytes.values().stream().mapToLong(Long::longValue).sum();
+        long entities = entityBytes.values().stream().mapToLong(Long::longValue).sum();
+        java.util.Map<String, Long> out = new java.util.LinkedHashMap<>();
+        out.put("chunks含BE", chunks);
+        out.put("BE独立", be);
+        out.put("实体", entities);
+        out.put("level结构", levelStructuresBytes);
+        out.put("光照队列", pendingLightBytes.values().stream().mapToLong(Long::longValue).sum());
+        out.put("total", total);
+        return out;
+    }
+
     /** 清空全部记账（世界重建）。 */
     public void reset() {
         total = 0;
         chunkBytes.clear();
         entityBytes.clear();
         blockEntityBytes.clear();
+        levelStructuresBytes = 0;
+        pendingLightBytes.clear();
+    }
+
+    /** level 层结构字节重算（O(1) 计数器公式，随区块/实体进出更新）。 */
+    private void refreshLevelStructures(Bot bot) {
+        if (bot == null) {
+            return; // 单元级记账测试无真实 bot，不涉及 level 结构
+        }
+        net.minecraft.client.multiplayer.ClientLevel level = bot.getLevel();
+        long bytes = level == null ? 0 : MemoryEstimator.levelStructuresBytes(level);
+        total += bytes - levelStructuresBytes;
+        levelStructuresBytes = bytes;
     }
 
     /** 移除某区块内的独立 BE 记账并返回其字节（供 total 扣除）。 */

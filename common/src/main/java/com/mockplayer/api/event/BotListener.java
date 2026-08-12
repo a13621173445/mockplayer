@@ -183,6 +183,10 @@ public interface BotListener {
     default void onBlockEntityData(Bot bot, BlockPos pos, long newDataBytes) {
     }
 
+    /** 假人 level 光照数据变化（lightByteArrays = 该区块光照包里的 byte[2048] 数量）。 */
+    default void onChunkLightData(Bot bot, ChunkPos pos, int lightByteArrays) {
+    }
+
     // ===== 高频（传参复用，不分配事件对象） =====
 
     /** 每帧驱动钩子（外部 AI 主循环）。 */

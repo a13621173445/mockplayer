@@ -4,17 +4,50 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
 /**
- * HotSpot 对象布局常量与浅尺寸公式（与 JOL 在 JDK 25 GraalVM 实测一致）：
- * 对象头 12B（Mark Word 8 + 压缩类指针 4）、数组头 16B、引用 4B、对齐 8B。
- * 基本类型：boolean/byte 1、short/char 2、int/float 4、long/double 8。
- * 总尺寸 = align8(对象头 + 实例字段总和)，字段按 JVM 重排后总量不变。
+ * 对象布局常量与浅尺寸公式（运行时探测，不写死任何 JVM 假设）。
+ *
+ * 探测方法（启动时一次，全部来自 Unsafe 公开 API）：
+ * - 对象头：单字段类的首个字段偏移 = 对象头大小（JVM 已按对齐排好）；
+ * - 数组头：Object[] 首元素基址偏移；
+ * - 引用大小：Object[] 元素步长（4 = 压缩 oop，8 = 无压缩）；
+ * - 对齐：64 位 JVM 8 字节，32 位 4 字节。
+ * 因此换 JVM/换 JDK（无压缩指针、Lilliput 压缩对象头、32 位等）都自动正确，
+ * 不再有硬编码 HotSpot 常量导致的跨平台错账。
  */
 public final class LayoutSizes {
 
-    public static final int OBJECT_HEADER = 12;
-    public static final int ARRAY_HEADER = 16;
-    public static final int REFERENCE = 4;
-    public static final int ALIGNMENT = 8;
+    public static final int OBJECT_HEADER;
+    public static final int ARRAY_HEADER;
+    public static final int REFERENCE;
+    public static final int ALIGNMENT;
+
+    static {
+        sun.misc.Unsafe unsafe = unsafe();
+        try {
+            OBJECT_HEADER = (int) unsafe.objectFieldOffset(HeaderProbe.class.getDeclaredField("v"));
+            ARRAY_HEADER = unsafe.arrayBaseOffset(Object[].class);
+            REFERENCE = unsafe.arrayIndexScale(Object[].class);
+            ALIGNMENT = "64".equals(System.getProperty("sun.arch.data.model")) ? 8 : 4;
+        } catch (NoSuchFieldException e) {
+            throw new IllegalStateException("布局探测字段缺失", e);
+        }
+    }
+
+    /** 探测对象头用：单布尔字段，其字段偏移即对象头大小。 */
+    private static final class HeaderProbe {
+        boolean v;
+    }
+
+    /** 获取 Unsafe（theUnsafe 反射是社区标准做法，jdk.unsupported 对无名模块导出）。 */
+    private static sun.misc.Unsafe unsafe() {
+        try {
+            java.lang.reflect.Field field = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+            field.setAccessible(true);
+            return (sun.misc.Unsafe) field.get(null);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("无法获取 Unsafe（布局探测需要运行时常量）", e);
+        }
+    }
 
     private LayoutSizes() {
     }
