@@ -178,7 +178,6 @@ jobs:
         timeout-minutes: 15
         env:
           JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
-          MOCKPLAYER_NORENDER: 1
         run: xvfb-run -a ./gradlew :fabric:runTestClient -Psuite=api-smoke -I scripts/verify-merged.gradle --console=plain
 
       - name: Assert Fabric api-smoke passed
@@ -194,7 +193,6 @@ jobs:
         timeout-minutes: 15
         env:
           JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
-          MOCKPLAYER_NORENDER: 1
         run: xvfb-run -a ./gradlew :neoforge:runTestClient -Psuite=api-smoke -I scripts/verify-merged.gradle --console=plain
 
       - name: Assert NeoForge api-smoke passed
