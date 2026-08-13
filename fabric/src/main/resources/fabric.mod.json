@@ -8,8 +8,8 @@
         "${mod_author}"
     ],
     "contact": {
-        "homepage": "https://fabricmc.net/",
-        "sources": "https://github.com/FabricMC/fabric-example-mod"
+        "homepage": "https://github.com/1cyberlangke1/mockplayer",
+        "sources": "https://github.com/1cyberlangke1/mockplayer"
     },
     "license": "${license}",
     "icon": "${mod_id}.png",

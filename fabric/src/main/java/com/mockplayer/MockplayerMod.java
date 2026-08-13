@@ -6,10 +6,6 @@ public class MockplayerMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
-
-        // This method is invoked by the Fabric mod loader when it is ready
-        // to load your mod. You can access Fabric and Common code in this
-        // project.
-        Constants.LOG.info("Hello Fabric world!");
+        // Fabric 入口：实际功能（命令 / 按键 / tick）在 MockplayerClient 客户端入口注册，这里保持空实现即可。
     }
 }

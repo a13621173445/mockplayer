@@ -1,36 +1,28 @@
 package com.mockplayer.platform.services;
 
+/** 平台抽象：隔离 Fabric / NeoForge 的加载器 API，common 代码只依赖此接口。 */
 public interface IPlatformHelper {
 
     /**
-     * Gets the name of the current platform
-     *
-     * @return The name of the current platform.
+     * @return 当前平台名（"Fabric" / "NeoForge"）。
      */
     String getPlatformName();
 
     /**
-     * Checks if a mod with the given id is loaded.
-     *
-     * @param modId The mod to check if it is loaded.
-     * @return True if the mod is loaded, false otherwise.
+     * @param modId 要查询的 mod id
+     * @return 该 mod 是否已加载。
      */
     boolean isModLoaded(String modId);
 
     /**
-     * Check if the game is currently in a development environment.
-     *
-     * @return True if in a development environment, false otherwise.
+     * @return 是否处于开发环境（dev 启动）。
      */
     boolean isDevelopmentEnvironment();
 
     /**
-     * Gets the name of the environment type as a string.
-     *
-     * @return The name of the environment type.
+     * @return 环境名：development / production。
      */
     default String getEnvironmentName() {
-
         return isDevelopmentEnvironment() ? "development" : "production";
     }
 }

@@ -1,30 +1,27 @@
 package com.mockplayer.platform;
 
-import com.mockplayer.Constants;
 import com.mockplayer.platform.services.IPlatformHelper;
 
 import java.util.ServiceLoader;
 
-// Service loaders are a built-in Java feature that allow us to locate implementations of an interface that vary from one
-// environment to another. In the context of MultiLoader we use this feature to access a mock API in the common code that
-// is swapped out for the platform specific implementation at runtime.
+/**
+ * 平台服务加载器：common 代码通过 Java ServiceLoader 获取各平台（Fabric / NeoForge）的实现，
+ * 实现类由各平台子项目在 META-INF/services 中声明，运行时替换，common 不直接依赖加载器 API。
+ */
 public class Services {
 
-    // In this example we provide a platform helper which provides information about what platform the mod is running on.
-    // For example this can be used to check if the code is running on NeoForge vs Fabric, or to ask the modloader if another
-    // mod is loaded.
+    /** 当前平台的辅助接口：平台名 / mod 加载判断 / 开发环境判断。 */
     public static final IPlatformHelper PLATFORM = load(IPlatformHelper.class);
 
-    // This code is used to load a service for the current environment. Your implementation of the service must be defined
-    // manually by including a text file in META-INF/services named with the fully qualified class name of the service.
-    // Inside the file you should write the fully qualified class name of the implementation to load for the platform. For
-    // example our file on Forge points to ForgePlatformHelper while Fabric points to FabricPlatformHelper.
+    /**
+     * 加载指定服务接口的唯一平台实现；找不到时抛异常，避免静默降级。
+     *
+     * @param clazz 服务接口类型
+     * @return 平台实现实例
+     */
     public static <T> T load(Class<T> clazz) {
-
-        final T loadedService = ServiceLoader.load(clazz, Services.class.getClassLoader())
+        return ServiceLoader.load(clazz, Services.class.getClassLoader())
                 .findFirst()
                 .orElseThrow(() -> new NullPointerException("Failed to load service for " + clazz.getName()));
-        Constants.LOG.debug("Loaded {} for service {}", loadedService, clazz);
-        return loadedService;
     }
 }
