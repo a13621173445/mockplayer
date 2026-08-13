@@ -10,6 +10,10 @@ allprojects {
     afterEvaluate { p ->
         if (p.name == 'fabric') {
             p.tasks.named('runTestClient').configure {
+                // CI 从零 checkout 没编译过 testmod：必须先构建 testmod 输出
+                // （含 mockplayer-test mod 的 fabric.mod.json + MixinMinecraftRender），
+                // 否则 mockplayer-test 不加载 → mocktest 永不启动
+                dependsOn p.tasks.named('testmodClasses')
                 // CI headless：环境变量 MOCKPLAYER_NORENDER=1 时跳过 renderFrame
                 // （testmod MixinMinecraftRender 读取），tick 照常推进跑 mocktest；
                 // 绕开 xvfb/llvmpipe 下 MC 26.2 主菜单渲染卡死。本地不设 → 渲染正常。
@@ -26,6 +30,7 @@ allprojects {
         }
         if (p.name == 'neoforge') {
             p.tasks.named('runTestClient').configure {
+                dependsOn p.tasks.named('testmodClasses')
                 if (System.getenv('MOCKPLAYER_NORENDER') == '1') {
                     systemProperty 'mockplayer.norender', '1'
                 }
