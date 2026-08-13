@@ -151,7 +151,9 @@ jobs:
           sudo apt-get update
           # libopenal1：MC 客户端初始化 OpenAL 声音，headless 无音频设备会挂起；
           # 配合 ALSOFT_DRIVERS=null 用空声音驱动（见下方 mocktest 步骤 env）
-          sudo apt-get install -y --no-install-recommends xvfb libgl1 libglu1-mesa libopenal1
+          # xcursor-themes：xvfb 无 X11 标准光标主题，GLFW 创建光标失败
+          # （GL ERROR 65547: X11: Standard cursor shape unavailable）→ 渲染线程卡死
+          sudo apt-get install -y --no-install-recommends xvfb libgl1 libglu1-mesa libopenal1 xcursor-themes
 
       - name: Stage merged jar into both run dirs
         run: |
