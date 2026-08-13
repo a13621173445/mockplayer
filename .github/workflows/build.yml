@@ -186,7 +186,7 @@ jobs:
           import json
           d = json.load(open('fabric/runs/client/test-results/api-smoke.json'))
           assert d['passed'], d
-          print('fabric api-smoke PASSED:', d['results'].count({'status': 'PASS'}))
+          print('fabric api-smoke PASSED:', sum(1 for r in d['results'] if r.get('status') == 'PASS'))
           EOF
 
       - name: Run mocktest on NeoForge (merged jar)
@@ -201,5 +201,5 @@ jobs:
           import json
           d = json.load(open('neoforge/runs/client/test-results/api-smoke.json'))
           assert d['passed'], d
-          print('neoforge api-smoke PASSED:', d['results'].count({'status': 'PASS'}))
+          print('neoforge api-smoke PASSED:', sum(1 for r in d['results'] if r.get('status') == 'PASS'))
           EOF
