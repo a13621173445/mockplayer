@@ -26,9 +26,41 @@ public final class SuitesSupport {
 
     public static void createBot(TestContext ctx, String name) {
         MockplayerApi.bots().removeBot(name, "command");
+        awaitServerPlayerGone(ctx, name);
         FakePlayerCommands.newPlayer(name);
         ctx.setBot(MockplayerApi.bots().getBot(name).orElse(null));
         ctx.setBotName(name);
+    }
+
+    /**
+     * 同步等待旧假人在服务端完全清理后再建新连接。
+     *
+     * 输入：假人名字；预期行为：返回时服务端 PlayerList 已无该玩家。
+     * 原因：removeBot 的断开是异步的（客户端移除 → 服务端 tick 才处理
+     * PlayerList.remove），同名立即重连会撞上残留玩家数据，服务端登录阶段
+     * 异常导致假人永远到不了 PLAYING（本地偶发，CI Epoll 时序更紧必现）。
+     * 渲染线程短阻塞不影响服务端 tick（独立线程），5s 超时兜底不卡测试。
+     */
+    private static void awaitServerPlayerGone(TestContext ctx, String name) {
+        long deadline = System.currentTimeMillis() + 5000L;
+        while (System.currentTimeMillis() < deadline) {
+            boolean gone;
+            try {
+                gone = ctx.server().getPlayerList().getPlayerByName(name) == null;
+            } catch (RuntimeException e) {
+                // 跨线程读 PlayerList（ArrayList 并发写）的兜底：视为还在
+                gone = false;
+            }
+            if (gone) {
+                return;
+            }
+            try {
+                Thread.sleep(20L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
     }
 
     /** 注册「建 bot + 等 PLAYING」两步。 */
