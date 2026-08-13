@@ -148,13 +148,17 @@ jobs:
 
       # 照抄 headlesshq/mc-runtime-test（26.2 fabric/neoforge ubuntu xvfb 全绿）：
       # xvfb + 真实 llvmpipe 软渲染，MC 26.2 可完整跑通主菜单/进世界/tick。
-      # xfonts-base：GLFW 在 X11 创建标准光标需要 X 核心 cursor 字体，
-      # 缺它报 GL ERROR 65547(X11: Standard cursor shape unavailable)渲染线程卡死；
-      # x11-xserver-utils：xvfb-run（xvfb 本体 ubuntu 镜像预装）。
-      - name: Install X11 cursor fonts and xvfb utils
+      # GLFW 3.x 的 X11 标准光标走 Xcursor 库（XcursorLibraryLoadCursor 动态加载
+      # libXcursor.so.1），ubuntu-latest 无头镜像未预装，缺它报
+      # GL ERROR 65547(X11: Standard cursor shape unavailable) 渲染线程卡死；
+      # 一次装齐 GLFW X11 平台依赖（libXcursor/libXi/libXrandr/libXinerama/libXrender
+      # /libXext/libXfixes）+ xvfb-run（xvfb 本体 ubuntu 镜像预装）。
+      - name: Install GLFW X11 dependencies and xvfb utils
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xfonts-base x11-xserver-utils
+          sudo apt-get install -y --no-install-recommends \
+            libxcursor1 libxi6 libxrandr2 libxinerama1 libxrender1 libxext6 libxfixes3 \
+            x11-xserver-utils
 
       - name: Stage merged jar into both run dirs
         run: |
