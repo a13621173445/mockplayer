@@ -146,13 +146,15 @@ jobs:
           name: merged-jar
           path: build/forgix
 
-      # headlessmc-lwjgl：Java agent，把所有 org.lwjgl 调用转成 no-op（headlessmc
-      # -lwjgl 模式，官方 release 已修复 26.2 支持）——无需 xvfb/软件渲染/声音设备
-      - name: Download headlessmc-lwjgl agent
+      # 照抄 headlesshq/mc-runtime-test（26.2 fabric/neoforge ubuntu xvfb 全绿）：
+      # xvfb + 真实 llvmpipe 软渲染，MC 26.2 可完整跑通主菜单/进世界/tick。
+      # xfonts-base：GLFW 在 X11 创建标准光标需要 X 核心 cursor 字体，
+      # 缺它报 GL ERROR 65547(X11: Standard cursor shape unavailable)渲染线程卡死；
+      # x11-xserver-utils：xvfb-run（xvfb 本体 ubuntu 镜像预装）。
+      - name: Install X11 cursor fonts and xvfb utils
         run: |
-          curl -sL -o headlessmc-lwjgl.jar \
-            https://github.com/headlesshq/headlessmc/releases/download/2.10.0/headlessmc-lwjgl-2.10.0-no-asm.jar
-          ls -la headlessmc-lwjgl.jar
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xfonts-base x11-xserver-utils
 
       - name: Stage merged jar into both run dirs
         run: |
@@ -169,9 +171,8 @@ jobs:
       - name: Run mocktest on Fabric (merged jar)
         timeout-minutes: 15
         env:
-          MOCKPLAYER_NORENDER: 1
-          HMC_LWJGL_JAR: ${{ github.workspace }}/headlessmc-lwjgl.jar
-        run: ./gradlew :fabric:runTestClient -Psuite=api-smoke -I scripts/verify-merged.gradle --console=plain
+          JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+        run: xvfb-run -a ./gradlew :fabric:runTestClient -Psuite=api-smoke -I scripts/verify-merged.gradle --console=plain
 
       - name: Assert Fabric api-smoke passed
         run: |
@@ -185,9 +186,8 @@ jobs:
       - name: Run mocktest on NeoForge (merged jar)
         timeout-minutes: 15
         env:
-          MOCKPLAYER_NORENDER: 1
-          HMC_LWJGL_JAR: ${{ github.workspace }}/headlessmc-lwjgl.jar
-        run: ./gradlew :neoforge:runTestClient -Psuite=api-smoke -I scripts/verify-merged.gradle --console=plain
+          JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+        run: xvfb-run -a ./gradlew :neoforge:runTestClient -Psuite=api-smoke -I scripts/verify-merged.gradle --console=plain
 
       - name: Assert NeoForge api-smoke passed
         run: |

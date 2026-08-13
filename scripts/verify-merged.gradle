@@ -10,20 +10,6 @@ allprojects {
     afterEvaluate { p ->
         if (p.name == 'fabric') {
             p.tasks.named('runTestClient').configure {
-                // CI headless：HMC_LWJGL_JAR 指向 headlessmc-lwjgl agent jar 时，
-                // 加 -javaagent 把所有 org.lwjgl 调用 no-op（headlessmc -lwjgl 模式，
-                // 官方已支持 26.2）——无需 xvfb/软件渲染，tick 照常推进。
-                // fabric 还需 fabric.systemLibraries 让 loader 把 agent jar 加入系统库。
-                String agent = System.getenv('HMC_LWJGL_JAR')
-                if (agent != null && !agent.isBlank()) {
-                    jvmArgs "-javaagent:${agent}", '-Djoml.nounsafe=true',
-                            "-Dfabric.systemLibraries=${agent}"
-                }
-                // CI headless：环境变量 MOCKPLAYER_NORENDER=1 时跳过渲染（testmod mixin 读取），
-                // 本地不设 → 渲染正常，调试画面不受影响
-                if (System.getenv('MOCKPLAYER_NORENDER') == '1') {
-                    systemProperty 'mockplayer.norender', '1'
-                }
                 classpath = p.files(classpath.files.findAll { f ->
                     !f.path.startsWith(p.rootProject.file('fabric/build/classes/java/main').path) &&
                     !f.path.startsWith(p.rootProject.file('fabric/build/resources/main').path) &&
@@ -34,13 +20,6 @@ allprojects {
         }
         if (p.name == 'neoforge') {
             p.tasks.named('runTestClient').configure {
-                String agent = System.getenv('HMC_LWJGL_JAR')
-                if (agent != null && !agent.isBlank()) {
-                    jvmArgs "-javaagent:${agent}", '-Djoml.nounsafe=true'
-                }
-                if (System.getenv('MOCKPLAYER_NORENDER') == '1') {
-                    systemProperty 'mockplayer.norender', '1'
-                }
                 classpath = p.files(classpath.files.findAll { f ->
                     !f.path.startsWith(p.rootProject.file('neoforge/build/classes/java/main').path) &&
                     !f.path.startsWith(p.rootProject.file('neoforge/build/resources/main').path) &&
