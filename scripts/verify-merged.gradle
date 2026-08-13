@@ -1,0 +1,32 @@
+// 验证 merged jar（单 jar 双端通用产物）的运行时脚本。
+// 用法：把 build/forgix/*.jar 复制到 fabric/runs/client/mods 与 neoforge/runs/client/mods 后：
+//   ./gradlew :fabric:runTestClient -Psuite=api-smoke -I scripts/verify-merged.gradle
+//   ./gradlew :neoforge:runTestClient -Psuite=api-smoke -I scripts/verify-merged.gradle
+// 原理：fabric 端从 dev classpath 摘掉 main/common 输出（保留 testmod 输出），
+// 让 mods 目录里的 merged jar 成为唯一 mockplayer 实现；neoforge 端 dev 产物
+// 由 InDevFolderLocator 扫描 sourceSet 输出（不走 classpath），mods 目录的 merged jar
+// 会被 UniqueModListBuilder 选中（"selecting main as it is ... from merged jar"）。
+allprojects {
+    afterEvaluate { p ->
+        if (p.name == 'fabric') {
+            p.tasks.named('runTestClient').configure {
+                classpath = p.files(classpath.files.findAll { f ->
+                    !f.path.startsWith(p.rootProject.file('fabric/build/classes/java/main').path) &&
+                    !f.path.startsWith(p.rootProject.file('fabric/build/resources/main').path) &&
+                    !f.path.startsWith(p.rootProject.file('common/build/classes/java/main').path) &&
+                    !f.path.startsWith(p.rootProject.file('common/build/resources/main').path)
+                })
+            }
+        }
+        if (p.name == 'neoforge') {
+            p.tasks.named('runTestClient').configure {
+                classpath = p.files(classpath.files.findAll { f ->
+                    !f.path.startsWith(p.rootProject.file('neoforge/build/classes/java/main').path) &&
+                    !f.path.startsWith(p.rootProject.file('neoforge/build/resources/main').path) &&
+                    !f.path.startsWith(p.rootProject.file('common/build/classes/java/main').path) &&
+                    !f.path.startsWith(p.rootProject.file('common/build/resources/main').path)
+                })
+            }
+        }
+    }
+}
