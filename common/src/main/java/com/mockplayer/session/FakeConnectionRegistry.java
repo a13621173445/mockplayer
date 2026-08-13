@@ -24,25 +24,38 @@ public class FakeConnectionRegistry {
     private static volatile boolean transferring;
 
     /**
-     * 假人是否正处于配置阶段（登录完成 → 进 play）。
+     * 正处于配置阶段的假人数量（登录完成 → 进 play）。
      * neoforge 服务端对假人（TCP）发 FrozenRegistrySyncCompletedPayload，客户端
      * RegistryManager.applySnapshot 会把 BuiltInRegistries.BLOCK 的 tags 覆盖成服务端
      * snapshot（基础态 16），破坏假人本地完整 block tags（395）→ 原版数据包加载缺 tag。
      * 主玩家（内存连接）不走 neoforge 网络同步不受影响。假人配置阶段跳过 applySnapshot。
+     *
+     * 用计数而非 boolean：多个假人并发登录时，A 先进 play 清除标志不能让仍在配置阶段的
+     * B 失去保护（否则 B 的 registry snapshot 跳过失效 → registry 崩 / sync_config 失败）。
+     * 置位 +1 / 清除 -1，>0 即存在任一假人处于配置阶段。
      */
-    private static volatile boolean configuringFake;
+    private static final java.util.concurrent.atomic.AtomicInteger configuringFakeCount =
+            new java.util.concurrent.atomic.AtomicInteger();
 
     private FakeConnectionRegistry() {
     }
 
-    /** 标记假人进入配置阶段（FakeLoginListener 登录完成时置位） */
+    /** 标记假人进入配置阶段（FakeLoginListener 登录完成时置位，计数 +1） */
     public static void setConfiguringFake(boolean configuring) {
-        FakeConnectionRegistry.configuringFake = configuring;
+        if (configuring) {
+            FakeConnectionRegistry.configuringFakeCount.incrementAndGet();
+        } else {
+            int remaining = FakeConnectionRegistry.configuringFakeCount.decrementAndGet();
+            if (remaining < 0) {
+                // 防御：不应出现（配对调用），但负值会让 isConfiguringFake 语义错乱，归零兜底
+                FakeConnectionRegistry.configuringFakeCount.set(0);
+            }
+        }
     }
 
     /** 当前是否有假人正在配置阶段（neoforge RegistryManager.applySnapshot 用它跳过假人） */
     public static boolean isConfiguringFake() {
-        return FakeConnectionRegistry.configuringFake;
+        return FakeConnectionRegistry.configuringFakeCount.get() > 0;
     }
 
 

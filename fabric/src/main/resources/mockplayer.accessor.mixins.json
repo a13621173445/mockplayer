@@ -8,6 +8,7 @@
   "client": [
     "MixinOptions",
     "MockplayerClientPacketListenerAccessor",
+    "MockplayerPlayerInfoAccessor",
     "MockplayerClientCommonListenerAccessor",
     "MockplayerClientLevelAccessor",
     "MockplayerClientInputAccessor",

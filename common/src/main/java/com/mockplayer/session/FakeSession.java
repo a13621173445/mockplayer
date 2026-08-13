@@ -360,10 +360,10 @@ public class FakeSession {
     public void tick() {
         if (connection != null && connection.isConnected()) {
             connection.tick();
-        } else if (connection != null && !connected) {
-            // 已断开
-            connection = null;
         }
+        // 注意：不存在 `connection != null && !connected` 的清理分支——connected 仅由
+        // disconnect() 置 false，而 disconnect() 同时置 connection = null，该分支不可达；
+        // 断开后的资源回收由 disconnect()/cleanupOnKick() 负责。
 
         // 驱动 play listener 的 tick（父类 ClientPacketListener.tick 的收尾逻辑；
         // 假人不用 LevelLoadTracker，chunk 就绪恢复物理由 handleLevelChunkWithLight 处理）

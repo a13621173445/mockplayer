@@ -64,6 +64,13 @@ public interface MockplayerClientPacketListenerAccessor {
     java.util.Map<java.util.UUID, net.minecraft.client.multiplayer.PlayerInfo> mockplayer$getPlayerInfoMap();
 
     /**
+     * listedPlayers（tab 列表中「列入名单」的玩家集合）：原版 applyPlayerInfoUpdate 的
+     * UPDATE_LISTED 动作维护它，handlePlayerInfoRemove 同步移除。假人无渲染但保持状态完整。
+     */
+    @Accessor("listedPlayers")
+    java.util.Set<net.minecraft.client.multiplayer.PlayerInfo> mockplayer$getListedPlayers();
+
+    /**
      * 标记客户端已加载完成。LocalPlayer.tick() 开头检查 hasClientLoaded()，
      * 假人必须调用 setClientLoaded(true)，否则 fakePlayer.tick() 里的物理（super.tick）不执行。
      */

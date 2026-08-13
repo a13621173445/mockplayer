@@ -12,6 +12,7 @@ import net.minecraft.client.multiplayer.CommonListenerCookie;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.PacketUtils;
 import net.minecraft.network.protocol.game.ClientboundLoginPacket;
@@ -462,18 +463,22 @@ public class FakePlayListener extends ClientPacketListener {
     public void handlePlayerInfoRemove(net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket packet) {
         PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
         try {
+            MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
             for (java.util.UUID profileId : packet.profileIds()) {
                 this.session.getState().removePlayerOnline(profileId);
-                MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
-                net.minecraft.client.multiplayer.PlayerInfo info = self.mockplayer$getPlayerInfoMap().get(profileId);
+                // 从假人自己的 playerInfoMap 移除（原版 super 会做同样的事，但还会调
+                // minecraft.getPlayerSocialManager().removePlayer——那是主玩家的社交管理器，
+                // 与 handlePlayerInfoUpdate 跳过 addPlayer 不对称，这里一并跳过，零污染）
+                net.minecraft.client.multiplayer.PlayerInfo info = self.mockplayer$getPlayerInfoMap().remove(profileId);
                 if (info != null) {
+                    // 原版 super 同步维护 listedPlayers（tab 名单），假人保持状态完整
+                    self.mockplayer$getListedPlayers().remove(info);
                     fire(b -> b.fireOnPlayerLeft(info.getProfile()));
                 }
             }
         } catch (Exception e) {
             FakeSession.LOG.warn("[{}] handlePlayerInfoRemove 异常: {}", this.session.getName(), e.toString());
         }
-        super.handlePlayerInfoRemove(packet);
     }
 
     @Override
@@ -497,7 +502,39 @@ public class FakePlayListener extends ClientPacketListener {
             }
         }
         for (net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry entry : packet.entries()) {
-            // 已有玩家更新动作：记录 state（applyPlayerInfoUpdate 父类 private，假人不调；tab list 主体由 newEntries 填充）
+            // 已有玩家更新动作：像原版 applyPlayerInfoUpdate 一样更新假人 playerInfoMap
+            // （否则 Bot.getOnlinePlayers() 读到的 latency/gameMode 永远是新上线时的旧值），
+            // 只替换作用对象：不碰主玩家 player.onGameModeChanged / socialManager。
+            net.minecraft.client.multiplayer.PlayerInfo info = infoMap.get(entry.profileId());
+            if (info != null) {
+                for (net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Action action : packet.actions()) {
+                    switch (action) {
+                        case UPDATE_GAME_MODE -> {
+                            // 原版还会对「自己」调 minecraft.player.onGameModeChanged（主玩家污染点）；
+                            // 假人自己的游戏模式由 handleGameEvent CHANGE_GAME_MODE 独立链路处理，这里只更新 tab 信息
+                            ((com.mockplayer.session.accessor.MockplayerPlayerInfoAccessor) info)
+                                    .mockplayer$setGameMode(entry.gameMode());
+                        }
+                        case UPDATE_LISTED -> {
+                            // 原版语义：listed = 加入 tab 渲染名单；假人无渲染但保持状态完整
+                            if (entry.listed()) {
+                                self.mockplayer$getListedPlayers().add(info);
+                            } else {
+                                self.mockplayer$getListedPlayers().remove(info);
+                            }
+                        }
+                        case UPDATE_LATENCY -> ((com.mockplayer.session.accessor.MockplayerPlayerInfoAccessor) info)
+                                .mockplayer$setLatency(entry.latency());
+                        case UPDATE_DISPLAY_NAME -> info.setTabListDisplayName(entry.displayName());
+                        case UPDATE_HAT -> info.setShowHat(entry.showHat());
+                        case UPDATE_LIST_ORDER -> info.setTabListOrder(entry.listOrder());
+                        case INITIALIZE_CHAT -> {
+                            // 聊天会话校验原版调主玩家 services 签名验证；假人不校验聊天签名，跳过
+                        }
+                    }
+                }
+            }
+            // 记录 state（供 AI 读取最新值）
             String name = entry.profile() != null ? entry.profile().name() : entry.profileId().toString();
             this.session.getState().recordPlayerOnline(entry.profileId(), name,
                     entry.latency(), entry.gameMode(), entry.listed());
@@ -513,6 +550,11 @@ public class FakePlayListener extends ClientPacketListener {
     @Override
     public void handleMovePlayer(net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket packet) {
         PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
+        if (this.fakePlayer == null) {
+            // 防御：位置包应在 handleLogin 建 player 之后到达（服务端顺序保证），
+            // 异常时序下静默丢弃，不 NPE 崩连接
+            return;
+        }
         MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
         net.minecraft.world.entity.player.Player player = this.fakePlayer;
         if (!player.isPassenger()) {
@@ -532,6 +574,9 @@ public class FakePlayListener extends ClientPacketListener {
     @Override
     public void handleRotatePlayer(net.minecraft.network.protocol.game.ClientboundPlayerRotationPacket packet) {
         PacketUtils.ensureRunningOnSameThread(packet, this, Minecraft.getInstance().packetProcessor());
+        if (this.fakePlayer == null) {
+            return;
+        }
         MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
         net.minecraft.world.entity.player.Player player = this.fakePlayer;
         Set<net.minecraft.world.entity.Relative> relatives = net.minecraft.world.entity.Relative.rotation(packet.relativeY(), packet.relativeX());
@@ -550,7 +595,7 @@ public class FakePlayListener extends ClientPacketListener {
      */
     @Override
     public void handleSetHeldSlot(net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket packet) {
-        if (net.minecraft.world.entity.player.Inventory.isHotbarSlot(packet.slot())) {
+        if (this.fakePlayer != null && net.minecraft.world.entity.player.Inventory.isHotbarSlot(packet.slot())) {
             this.fakePlayer.getInventory().setSelectedSlot(packet.slot());
             fire(b -> b.fireOnHeldSlotChanged(packet.slot()));
         }
@@ -628,8 +673,12 @@ public class FakePlayListener extends ClientPacketListener {
         // 完整记录原始包（粒子类型/位置/数量/速度）供 AI 读取。
         // 不调父类——父类 this.level.addParticle → doAddParticle → 经主玩家 Minecraft.particleEngine 渲染。
         this.session.getState().recordPacket("handleParticleEvent", packet);
+        // 粒子类型用注册表 key（minecraft:xxx），与 SessionManager.recordFakeParticle 一致——
+        // ParticleType 不重写 toString()，直接 toString 是类名垃圾
+        net.minecraft.resources.Identifier key =
+                BuiltInRegistries.PARTICLE_TYPE.getKey(packet.getParticle().getType());
         this.session.getState().recordParticle(
-                packet.getParticle().getType().toString(),
+                key != null ? key.toString() : packet.getParticle().getType().toString(),
                 packet.getX(), packet.getY(), packet.getZ());
     }
 
