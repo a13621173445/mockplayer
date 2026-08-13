@@ -149,15 +149,17 @@ jobs:
       # 照抄 headlesshq/mc-runtime-test（26.2 fabric/neoforge ubuntu xvfb 全绿）：
       # xvfb + 真实 llvmpipe 软渲染，MC 26.2 可完整跑通主菜单/进世界/tick。
       # GLFW 3.x 的 X11 标准光标走 Xcursor 库（XcursorLibraryLoadCursor 动态加载
-      # libXcursor.so.1），ubuntu-latest 无头镜像未预装，缺它报
-      # GL ERROR 65547(X11: Standard cursor shape unavailable) 渲染线程卡死；
-      # 一次装齐 GLFW X11 平台依赖（libXcursor/libXi/libXrandr/libXinerama/libXrender
-      # /libXext/libXfixes）+ xvfb-run（xvfb 本体 ubuntu 镜像预装）。
+      # libXcursor.so.1），需要两层都满足：libxcursor1（库）+ xcursor-themes
+      # （主题文件 /usr/share/icons/*/cursors/，缺任一 XcursorLibraryLoadCursor
+      # 都返回 None）→ GL ERROR 65547(X11: Standard cursor shape unavailable)
+      # 渲染线程卡死；曾单独装 xcursor-themes（缺库）与单独装 libxcursor1（缺主题）
+      # 各失败一次，两者必须一起。其余 libXi/libXrandr/libXinerama/libXrender
+      # /libXext/libXfixes 为 GLFW X11 平台依赖；xvfb-run 本体 ubuntu 镜像预装。
       - name: Install GLFW X11 dependencies and xvfb utils
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libxcursor1 libxi6 libxrandr2 libxinerama1 libxrender1 libxext6 libxfixes3 \
+            libxcursor1 xcursor-themes libxi6 libxrandr2 libxinerama1 libxrender1 libxext6 libxfixes3 \
             x11-xserver-utils
 
       - name: Stage merged jar into both run dirs
