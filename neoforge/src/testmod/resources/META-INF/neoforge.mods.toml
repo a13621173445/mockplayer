@@ -13,3 +13,6 @@ environment="CLIENT"
 modId="mockplayer"
 type="required"
 versionRange="[0.1,)"
+
+[[mixins]]
+config="mockplayer-test.mixins.json"

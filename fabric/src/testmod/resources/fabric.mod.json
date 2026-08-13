@@ -10,6 +10,9 @@
             "com.mockplayer.test.MockplayerTestMod"
         ]
     },
+    "mixins": [
+        "mockplayer-test.mixins.json"
+    ],
     "depends": {
         "mockplayer": "*"
     }
