@@ -1312,9 +1312,10 @@ public class ControlCommandsSuite extends TestSuite {
         wait[0] = 0;
         ctx.await("chunk settle 20 ticks", () -> ++wait[0] >= 20, 40);
         ctx.run(() -> {
-            ctx.checkNow("chunk config default 2",
-                    MockplayerConfig.get().getFakePlayerChunkRadius() == 2);
-            ctx.checkNow("chunk bot default radius", ctx.bot().getChunkRadius() == 2);
+            // 默认假人区块半径 = 1（ModConfig.DEFAULT_FAKE_PLAYER_CHUNK_RADIUS，8363e58 起）
+            ctx.checkNow("chunk config default 1",
+                    MockplayerConfig.get().getFakePlayerChunkRadius() == 1);
+            ctx.checkNow("chunk bot default radius", ctx.bot().getChunkRadius() == 1);
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName());
                 serverRequested.set(serverRequestedViewDistance(sp));
@@ -1329,7 +1330,7 @@ public class ControlCommandsSuite extends TestSuite {
         ctx.await("chunk server values read", () -> serverRequested.get() != -1
                 && serverView.get() != -1, 50);
         ctx.run(() -> {
-            ctx.checkNow("chunk server requestedViewDistance default", serverRequested.get() == 2,
+            ctx.checkNow("chunk server requestedViewDistance default", serverRequested.get() == 1,
                     "server=" + serverRequested.get());
             ctx.checkNow("chunk server tracking view default", serverView.get() == 2,
                     "view=" + serverView.get());
@@ -1384,7 +1385,7 @@ public class ControlCommandsSuite extends TestSuite {
                 MockplayerConfig.save(new ModConfig());
                 MockplayerConfig.reload();
                 ctx.checkNow("chunk config restore default",
-                        MockplayerConfig.get().getFakePlayerChunkRadius() == 2);
+                        MockplayerConfig.get().getFakePlayerChunkRadius() == 1);
             }
         });
     }
