@@ -3,6 +3,8 @@ plugins {
     id 'net.fabricmc.fabric-loom' version '1.16.3' apply false
     // see https://projects.neoforged.net/neoforged/moddevgradle for new versions
     id 'net.neoforged.moddev' version '2.0.141' apply false
+    // Forgix：合并 fabric + neoforge 产物为单 jar（双端通用，发布用）
+    id 'io.github.pacifistmc.forgix' version '2.0.0'
 }
 
 allprojects {
@@ -18,4 +20,32 @@ allprojects {
 // never overwrites distributionUrl back to services.gradle.org (slow/blocked in CN).
 tasks.wrapper {
     distributionUrl = "https://mirrors.cloud.tencent.com/gradle/gradle-${gradleVersion}-bin.zip"
+}
+
+// Forgix：把 fabric + neoforge 双端 jar 合并成单 jar（见 Forgix README）
+// 原理（Forgix 2.0.0）：同名不同内容的类自动改名（如 MockplayerMod_neoforge）+ TinyRemapper
+// 同步重写字节码引用；mixin 配置/refmap/manifest 文本引用自动跟随；同内容文件去重；
+// META-INF/services 合并 union。产物在 build/forgix/，只发布这一个 jar。
+// autoRun=true：跑 gradle build/assemble/jar 时自动执行 mergeJars（root jar finalizedBy mergeJars）。
+// 显式 inputJar（README 的 "automatic detection fails" 备选）：本仓库 build/libs 常年堆积
+// 多版本产物 + 最新时间戳的 sources/javadoc，自动检测的时间惩罚（毫秒×0.15）会让
+// 刚生成的 sources jar 反超主 jar（实测挑中 neoforge 的 -sources.jar，合并产物丢 @Mod 入口）。
+// inputJar 用 provider 延迟解析：forgix 块在根项目 afterEvaluate 执行时子项目还没评估（父先子后），
+// 直接 tasks.jar 会炸；provider 到 mergeJars 执行时才解析，且保留显式指定。
+forgix {
+    autoRun = true
+    fabric {
+        inputJar = project.provider { project(':fabric').tasks.jar.archiveFile.get() }
+    }
+    neoforge {
+        inputJar = project.provider { project(':neoforge').tasks.jar.archiveFile.get() }
+    }
+}
+
+// provider 包装会丢失 builtBy 任务依赖（mergeJars 不知道要先构建 jar），手动补上。
+// projectsEvaluated 时所有子项目已评估完，访问任务安全。
+gradle.projectsEvaluated {
+    rootProject.tasks.named('mergeJars').configure {
+        dependsOn project(':fabric').tasks.jar, project(':neoforge').tasks.jar
+    }
 }
