@@ -146,15 +146,13 @@ jobs:
           name: merged-jar
           path: build/forgix
 
-      - name: Install xvfb and Mesa software rendering
+      # headlessmc-lwjgl：Java agent，把所有 org.lwjgl 调用转成 no-op（headlessmc
+      # -lwjgl 模式，官方 release 已修复 26.2 支持）——无需 xvfb/软件渲染/声音设备
+      - name: Download headlessmc-lwjgl agent
         run: |
-          sudo apt-get update
-          # libopenal1：MC 客户端初始化 OpenAL 声音，headless 无音频设备会挂起；
-          # 配合 ALSOFT_DRIVERS=null 用空声音驱动（见下方 mocktest 步骤 env）
-          # xfonts-base：xvfb 无 X11 核心字体，GLFW 创建标准光标失败
-          # （GL ERROR 65547: X11: Standard cursor shape unavailable，XCreateFontCursor
-          # fallback 需要 cursor font）→ 渲染线程卡死；xcursor-themes（主题光标）不够
-          sudo apt-get install -y --no-install-recommends xvfb libgl1 libglu1-mesa libopenal1 xfonts-base
+          curl -sL -o headlessmc-lwjgl.jar \
+            https://github.com/headlesshq/headlessmc/releases/download/2.10.0/headlessmc-lwjgl-2.10.0-no-asm.jar
+          ls -la headlessmc-lwjgl.jar
 
       - name: Stage merged jar into both run dirs
         run: |
@@ -163,9 +161,7 @@ jobs:
           mkdir -p fabric/runs/client/mods neoforge/runs/client/mods
           cp "$jar" fabric/runs/client/mods/
           cp "$jar" neoforge/runs/client/mods/
-          # headless 无焦点窗口：MC 默认 pauseOnLostFocus=true 会直接暂停游戏
-          # （tick 不跑、mocktest 永不启动、无日志），必须禁掉（参照 mc-runtime-test 的做法）；
-          # 顺手禁 vsync + 高帧率上限防 xvfb swap 阻塞（两个 run 目录都要）。
+          # 无焦点窗口禁失焦暂停（防 tick 不跑）+ 禁 vsync（防 swap 阻塞）
           printf 'onboardAccessibility:false\npauseOnLostFocus:false\nframerateLimit:260\nenableVsync:false\n' > fabric/runs/client/options.txt
           printf 'onboardAccessibility:false\npauseOnLostFocus:false\nframerateLimit:260\nenableVsync:false\n' > neoforge/runs/client/options.txt
           echo "staged: $jar"
@@ -173,9 +169,9 @@ jobs:
       - name: Run mocktest on Fabric (merged jar)
         timeout-minutes: 15
         env:
-          ALSOFT_DRIVERS: null
           MOCKPLAYER_NORENDER: 1
-        run: xvfb-run -a ./gradlew :fabric:runTestClient -Psuite=api-smoke -I scripts/verify-merged.gradle --console=plain
+          HMC_LWJGL_JAR: ${{ github.workspace }}/headlessmc-lwjgl.jar
+        run: ./gradlew :fabric:runTestClient -Psuite=api-smoke -I scripts/verify-merged.gradle --console=plain
 
       - name: Assert Fabric api-smoke passed
         run: |
@@ -189,9 +185,9 @@ jobs:
       - name: Run mocktest on NeoForge (merged jar)
         timeout-minutes: 15
         env:
-          ALSOFT_DRIVERS: null
           MOCKPLAYER_NORENDER: 1
-        run: xvfb-run -a ./gradlew :neoforge:runTestClient -Psuite=api-smoke -I scripts/verify-merged.gradle --console=plain
+          HMC_LWJGL_JAR: ${{ github.workspace }}/headlessmc-lwjgl.jar
+        run: ./gradlew :neoforge:runTestClient -Psuite=api-smoke -I scripts/verify-merged.gradle --console=plain
 
       - name: Assert NeoForge api-smoke passed
         run: |
