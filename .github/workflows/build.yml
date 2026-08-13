@@ -160,6 +160,11 @@ jobs:
           mkdir -p fabric/runs/client/mods neoforge/runs/client/mods
           cp "$jar" fabric/runs/client/mods/
           cp "$jar" neoforge/runs/client/mods/
+          # headless 无显示器：首次启动无 options.txt 时 MC 默认开启 vsync，
+          # xvfb 下 swap 会阻塞渲染线程（主菜单卡死、tick 不跑、mocktest 不启动）。
+          # 预写 options.txt 禁 vsync + 高帧率上限（两个 run 目录都要）。
+          printf 'framerateLimit:260\nenableVsync:false\n' > fabric/runs/client/options.txt
+          printf 'framerateLimit:260\nenableVsync:false\n' > neoforge/runs/client/options.txt
           echo "staged: $jar"
 
       - name: Run mocktest on Fabric (merged jar)

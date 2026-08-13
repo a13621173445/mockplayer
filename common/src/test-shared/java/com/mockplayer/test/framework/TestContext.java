@@ -117,7 +117,7 @@ public final class TestContext {
 
     /** 立即记录一个断言（供 run 步骤内部使用；普通用例主体请用延迟 {@link #check}）。 */
     public void checkNow(String name, boolean ok, String detail) {
-        records.add(new Record(name, ok, ok ? "" : detail));
+        record(name, ok, detail);
     }
 
     /** 立即记录一个断言（无详情）。 */
@@ -133,6 +133,15 @@ public final class TestContext {
     /** 是否已有断言失败/等待超时（SuiteRunner 据此立即停止游戏）。 */
     public boolean failed() {
         return failed;
+    }
+
+    /**
+     * 记录断言并实时打印（CI/控制台可逐条看到进度，卡住时能定位到具体断言）。
+     */
+    private void record(String name, boolean ok, String detail) {
+        records.add(new Record(name, ok, ok ? "" : detail));
+        System.out.println("[mocktest]   " + (ok ? "PASS" : "FAIL") + " " + name
+                + (ok ? "" : " :: " + detail));
     }
 
     /** 断言记录（结果写入用）。 */
@@ -159,7 +168,7 @@ public final class TestContext {
             } else if (current.kind() == Kind.CHECK) {
                 boolean ok = current.cond().getAsBoolean();
                 String detail = ok ? "" : (current.detail() != null ? current.detail().get() : "");
-                records.add(new Record(current.name(), ok, detail));
+                record(current.name(), ok, detail);
                 if (!ok) {
                     failed = true;
                 }
@@ -175,8 +184,8 @@ public final class TestContext {
             current = null;
             currentTicks = 0;
         } else if (++currentTicks > current.timeoutTicks()) {
-            records.add(new Record("await: " + current.name(), false,
-                    "timeout after " + current.timeoutTicks() + " ticks"));
+            record("await: " + current.name(), false,
+                    "timeout after " + current.timeoutTicks() + " ticks");
             failed = true;
             current = null;
             currentTicks = 0;
