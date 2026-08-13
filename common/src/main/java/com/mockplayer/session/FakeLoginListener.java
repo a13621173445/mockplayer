@@ -146,8 +146,14 @@ public class FakeLoginListener implements ClientLoginPacketListener {
                 ConfigurationProtocols.CLIENTBOUND,
                 new ClientConfigurationPacketListenerImpl(mc, this.connection, cookie)
         );
-        this.connection.send(ServerboundLoginAcknowledgedPacket.INSTANCE);
+        // 顺序与原版不同（原版：先 ack 再 setupOutboundProtocol）：假人走真实 TCP，
+        // 服务端收到 ack 后立即回配置包（neoforge ModdedNetworkQuery 等），Linux/Epoll
+        // 下回包可能先于本线程的 setupOutboundProtocol 到达，回包时出站协议未配置 →
+        // UnconfiguredPipelineHandler 抛 "Pipeline has no outbound protocol configured"
+        // 连接断开（本地 Windows/NIO 时序宽松不触发，CI 必现）。先配好出站协议再发 ack
+        // 仅提前准备 handler 不发任何包，行为与原版等价且无竞态。
         this.connection.setupOutboundProtocol(ConfigurationProtocols.SERVERBOUND);
+        this.connection.send(ServerboundLoginAcknowledgedPacket.INSTANCE);
         this.connection.send(new ServerboundCustomPayloadPacket(new BrandPayload(ClientBrandRetriever.getClientModName())));
         // 假人用配置默认区块加载半径（默认 2，节约性能），不再直接继承主玩家 options 的渲染距离
         net.minecraft.server.level.ClientInformation base = mc.options.buildPlayerInformation();
