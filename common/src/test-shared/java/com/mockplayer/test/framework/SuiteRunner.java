@@ -23,6 +23,7 @@ import com.mockplayer.test.suites.UseItemsSuite;
 import com.mockplayer.test.suites.ApiSmokeSuite;
 import com.mockplayer.test.suites.MemoryAccountingSuite;
 import com.mockplayer.test.suites.ApiFullSuite;
+import com.mockplayer.test.suites.PayloadInterceptionSuite;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
@@ -88,7 +89,8 @@ public final class SuiteRunner {
             new GuiActionsSuite(),
             new ListenerEventsSuite(),
             new ControlCommandsSuite(),
-            new BotGuiSuite());
+            new BotGuiSuite(),
+            new PayloadInterceptionSuite());
 
     /**
      * 特殊套件：不随 all 运行（太特殊且校准太卡，如内存校准），

@@ -19,6 +19,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -197,6 +198,112 @@ public class QueryCommands {
         return out;
     }
 
+    // ===== mod payload 查询（入站拦截 + 出站记录） =====
+
+    /**
+     * /query payload <player>：入站 mod payload 列表（按 typeId 聚合 + 统计）。
+     * 统计行：次数 / 最近 tick / 总字节（估算）/ 最近间隔（最近两条到达 tick 差，
+     * 标识疑似周期性心跳包；不足两条显示 ?）。
+     */
+    public static Component payloadList(String name) {
+        Bot bot = CommandSupport.findBot(name);
+        if (bot == null) {
+            return CommandSupport.fail("commands.mockplayer.query.not_found", CommandSupport.playerName(name));
+        }
+        List<com.mockplayer.api.ModPayloadInfo> list = bot.getReceivedModPayloads();
+        if (list.isEmpty()) {
+            return CommandSupport.info("commands.mockplayer.query.payload.empty", CommandSupport.playerName(name));
+        }
+        MutableComponent out = CommandSupport.info("commands.mockplayer.query.payload.list.header",
+                CommandSupport.playerName(name), list.size());
+        // 按 typeId 聚合（list 最新在前，LinkedHashMap 保持出现顺序 = 最新 typeId 在前）
+        Map<String, List<com.mockplayer.api.ModPayloadInfo>> byType = new java.util.LinkedHashMap<>();
+        for (com.mockplayer.api.ModPayloadInfo info : list) {
+            byType.computeIfAbsent(info.typeIdString(), k -> new java.util.ArrayList<>()).add(info);
+        }
+        for (Map.Entry<String, List<com.mockplayer.api.ModPayloadInfo>> e : byType.entrySet()) {
+            List<com.mockplayer.api.ModPayloadInfo> entries = e.getValue();
+            long totalBytes = 0;
+            for (com.mockplayer.api.ModPayloadInfo info : entries) {
+                totalBytes += info.sizeBytes();
+            }
+            long interval = entries.size() >= 2 ? entries.get(0).tick() - entries.get(1).tick() : -1;
+            String modName = entries.get(0).modName();
+            out.append(Component.literal("\n")).append(CommandSupport.info(
+                    "commands.mockplayer.query.payload.list.entry",
+                    e.getKey(),
+                    modName != null ? modName : e.getKey(),
+                    entries.size(),
+                    entries.get(0).tick(),
+                    totalBytes,
+                    interval >= 0 ? interval : "?"));
+        }
+        return out;
+    }
+
+    /**
+     * /query payload <player> <typeId>：单个 typeId 详情（最近最多 20 条 + 统计）。
+     */
+    public static Component payloadDetail(String name, String typeId) {
+        Bot bot = CommandSupport.findBot(name);
+        if (bot == null) {
+            return CommandSupport.fail("commands.mockplayer.query.not_found", CommandSupport.playerName(name));
+        }
+        List<com.mockplayer.api.ModPayloadInfo> list = bot.getReceivedModPayloads(typeId);
+        if (list.isEmpty()) {
+            return CommandSupport.fail("commands.mockplayer.query.payload.not_found", typeId);
+        }
+        long totalBytes = 0;
+        for (com.mockplayer.api.ModPayloadInfo info : list) {
+            totalBytes += info.sizeBytes();
+        }
+        long interval = list.size() >= 2 ? list.get(0).tick() - list.get(1).tick() : -1;
+        String modName = list.get(0).modName();
+        MutableComponent out = CommandSupport.info("commands.mockplayer.query.payload.detail.header",
+                typeId, list.size());
+        out.append(Component.literal("\n")).append(CommandSupport.info(
+                "commands.mockplayer.query.payload.detail.meta",
+                modName != null ? modName : typeId,
+                list.get(0).tick(),
+                totalBytes,
+                interval >= 0 ? interval : "?"));
+        int shown = Math.min(list.size(), 20);
+        for (int i = 0; i < shown; i++) {
+            com.mockplayer.api.ModPayloadInfo info = list.get(i);
+            out.append(Component.literal("\n")).append(CommandSupport.info(
+                    "commands.mockplayer.query.payload.detail.entry",
+                    i + 1, info.tick(), info.sizeBytes()));
+        }
+        return out;
+    }
+
+    /**
+     * /query payload <player> <typeId> raw：最近一条的反射 dump（JSON，调试用）。
+     */
+    public static Component payloadRaw(String name, String typeId) {
+        Bot bot = CommandSupport.findBot(name);
+        if (bot == null) {
+            return CommandSupport.fail("commands.mockplayer.query.not_found", CommandSupport.playerName(name));
+        }
+        String dump = bot.getLastModPayloadDump(typeId);
+        if (dump == null) {
+            return CommandSupport.fail("commands.mockplayer.query.payload.not_found", typeId);
+        }
+        return CommandSupport.info("commands.mockplayer.query.payload.raw", dump);
+    }
+
+    /**
+     * /query payload clear <player>：双向清空 mod payload 记录。
+     */
+    public static Component payloadClear(String name) {
+        Bot bot = CommandSupport.findBot(name);
+        if (bot == null) {
+            return CommandSupport.fail("commands.mockplayer.query.not_found", CommandSupport.playerName(name));
+        }
+        bot.clearModPayloads();
+        return CommandSupport.info("commands.mockplayer.query.payload.cleared", CommandSupport.playerName(name));
+    }
+
     public static Component chatHistory(String name) {
         Bot bot = CommandSupport.findBot(name);
         if (bot == null) {
@@ -372,6 +479,32 @@ public class QueryCommands {
                                     IntegerArgumentType.getInteger(ctx, "count")));
                             return 1;
                         })));
+        player.then(f.literal("payload")
+                .executes(ctx -> {
+                    f.sendFeedback(ctx.getSource(), payloadList(StringArgumentType.getString(ctx, "player")));
+                    return 1;
+                })
+                .then(f.literal("clear").executes(ctx -> {
+                    f.sendFeedback(ctx.getSource(), payloadClear(StringArgumentType.getString(ctx, "player")));
+                    return 1;
+                }))
+                .then(f.argument("typeId", net.minecraft.commands.arguments.IdentifierArgument.id())
+                        .executes(ctx -> {
+                            net.minecraft.resources.Identifier typeId = ctx.getArgument(
+                                    "typeId", net.minecraft.resources.Identifier.class);
+                            f.sendFeedback(ctx.getSource(), payloadDetail(
+                                    StringArgumentType.getString(ctx, "player"),
+                                    typeId.toString()));
+                            return 1;
+                        })
+                        .then(f.literal("raw").executes(ctx -> {
+                            net.minecraft.resources.Identifier typeId = ctx.getArgument(
+                                    "typeId", net.minecraft.resources.Identifier.class);
+                            f.sendFeedback(ctx.getSource(), payloadRaw(
+                                    StringArgumentType.getString(ctx, "player"),
+                                    typeId.toString()));
+                            return 1;
+                        }))));
         player.then(f.literal("memory").executes(ctx -> {
             f.sendFeedback(ctx.getSource(), memory(StringArgumentType.getString(ctx, "player")));
             return 1;

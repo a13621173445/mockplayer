@@ -34,6 +34,8 @@ public class MockplayerTestMod {
         if (suite == null || suite.isBlank()) {
             return;
         }
+        // 测试 payload 注册（mod bus 事件，早于任何连接；集成服务器同 JVM 一并生效）
+        modBus.addListener(NeoForgeTestPayloads::register);
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post e) ->
                 SuiteRunner.tick(Minecraft.getInstance(), suite, new NeoForgeTestPlatform()));
     }

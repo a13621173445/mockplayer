@@ -368,6 +368,8 @@ public class BotGuiSuite extends TestSuite {
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
         SuitesSupport.awaitChunkLoaded(ctx);
+        int[] before = {0};
+        ctx.run(() -> before[0] = ctx.bot().getChunkRadius());
         ctx.run(() -> {
             BotControlScreen screen = bgScreen();
             Button plus = bgFindButton(screen, "gui.mockplayer.action.chunk_plus");
@@ -375,8 +377,8 @@ public class BotGuiSuite extends TestSuite {
                 bgClick(plus);
             }
         });
-        ctx.await("chunk +1 applied", () -> ctx.bot().getChunkRadius() == 3, 100);
-        ctx.check("chunk +1 applied", () -> ctx.bot().getChunkRadius() == 3);
+        ctx.await("chunk +1 applied", () -> ctx.bot().getChunkRadius() == before[0] + 1, 100);
+        ctx.check("chunk +1 applied", () -> ctx.bot().getChunkRadius() == before[0] + 1);
         ctx.run(() -> {
             BotControlScreen screen = bgScreen();
             Button minus = bgFindButton(screen, "gui.mockplayer.action.chunk_minus");
@@ -384,8 +386,8 @@ public class BotGuiSuite extends TestSuite {
                 bgClick(minus);
             }
         });
-        ctx.await("chunk -1 applied", () -> ctx.bot().getChunkRadius() == 2, 100);
-        ctx.check("chunk -1 applied", () -> ctx.bot().getChunkRadius() == 2);
+        ctx.await("chunk -1 applied", () -> ctx.bot().getChunkRadius() == before[0], 100);
+        ctx.check("chunk -1 applied", () -> ctx.bot().getChunkRadius() == before[0]);
     }
 
     private void chat(TestContext ctx) {

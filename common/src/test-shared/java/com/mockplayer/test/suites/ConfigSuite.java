@@ -58,6 +58,14 @@ public class ConfigSuite extends TestSuite {
             guiChanged.setGuiOpacity(0.5F);
             ModConfigIO.save(cfgFile, guiChanged);
             ctx.checkNow("gui blur/opacity round trip", configEquals(guiChanged, ModConfigIO.load(cfgFile)));
+            ModConfig payloadChanged = new ModConfig();
+            payloadChanged.setPayloadInterceptEnabled(false);
+            payloadChanged.setPayloadLogLimit(123);
+            payloadChanged.setPayloadSendLogEnabled(false);
+            payloadChanged.setPayloadSendLogLimit(77);
+            payloadChanged.setPayloadPassthroughNamespaces(java.util.List.of("mod_a", "mod_b"));
+            ModConfigIO.save(cfgFile, payloadChanged);
+            ctx.checkNow("payload config round trip", configEquals(payloadChanged, ModConfigIO.load(cfgFile)));
             ModConfigIO.save(cfgFile, defaults);
         });
         ctx.run(() -> {
@@ -98,6 +106,19 @@ public class ConfigSuite extends TestSuite {
             writeConfigRaw("{\"debugOverlayEnabled\": \"yes\"}");
             ctx.checkNow("debug overlay non-boolean falls back",
                     ModConfigIO.load(cfgFile).isDebugOverlayEnabled());
+            writeConfigRaw("{\"payloadLogLimit\": 99999, \"payloadSendLogLimit\": 0,"
+                    + "\"payloadInterceptEnabled\": \"x\", \"payloadSendLogEnabled\": \"x\","
+                    + "\"payloadPassthroughNamespaces\": [\" mod_a \", \"mod_a\", \"\", 3]}");
+            ModConfig payloadLoaded = ModConfigIO.load(cfgFile);
+            ctx.checkNow("payload invalid values fallback",
+                    payloadLoaded.getPayloadLogLimit() == ModConfig.DEFAULT_PAYLOAD_LOG_LIMIT
+                            && payloadLoaded.getPayloadSendLogLimit()
+                            == ModConfig.DEFAULT_PAYLOAD_SEND_LOG_LIMIT
+                            && payloadLoaded.isPayloadInterceptEnabled()
+                            && payloadLoaded.isPayloadSendLogEnabled());
+            ctx.checkNow("payload passthrough normalized (trim/dedup/drop non-string)",
+                    payloadLoaded.getPayloadPassthroughNamespaces().size() == 1
+                            && "mod_a".equals(payloadLoaded.getPayloadPassthroughNamespaces().get(0)));
         });
     }
 
@@ -251,7 +272,12 @@ public class ConfigSuite extends TestSuite {
                 && Double.compare(a.getEventMoveSampleDistance(), b.getEventMoveSampleDistance()) == 0
                 && a.isDebugOverlayEnabled() == b.isDebugOverlayEnabled()
                 && a.getGuiBlur() == b.getGuiBlur()
-                && Float.compare(a.getGuiOpacity(), b.getGuiOpacity()) == 0;
+                && Float.compare(a.getGuiOpacity(), b.getGuiOpacity()) == 0
+                && a.isPayloadInterceptEnabled() == b.isPayloadInterceptEnabled()
+                && a.getPayloadLogLimit() == b.getPayloadLogLimit()
+                && a.isPayloadSendLogEnabled() == b.isPayloadSendLogEnabled()
+                && a.getPayloadSendLogLimit() == b.getPayloadSendLogLimit()
+                && a.getPayloadPassthroughNamespaces().equals(b.getPayloadPassthroughNamespaces());
     }
 
     private void deleteConfigTempDir() {

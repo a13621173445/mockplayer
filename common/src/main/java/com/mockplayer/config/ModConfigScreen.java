@@ -16,6 +16,8 @@ import dev.isxander.yacl3.gui.YACLScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -105,6 +107,39 @@ public final class ModConfigScreen extends YACLScreen {
                                         ModConfig.DEFAULT_GUI_BLUR,
                                         ModConfig.MIN_GUI_BLUR, ModConfig.MAX_GUI_BLUR,
                                         cfg::getGuiBlur, cfg::setGuiBlur))
+                                .build())
+                        .build())
+                .category(ConfigCategory.createBuilder()
+                        .name(Component.translatable("config.mockplayer.category.network"))
+                        .tooltip(Component.translatable("config.mockplayer.category.network.tooltip"))
+                        .group(OptionGroup.createBuilder()
+                                .name(Component.translatable("config.mockplayer.group.payload"))
+                                .option(booleanOption("payloadInterceptEnabled",
+                                        ModConfig.DEFAULT_PAYLOAD_INTERCEPT_ENABLED,
+                                        cfg::isPayloadInterceptEnabled, cfg::setPayloadInterceptEnabled))
+                                .option(intOption("payloadLogLimit",
+                                        ModConfig.DEFAULT_PAYLOAD_LOG_LIMIT,
+                                        ModConfig.MIN_PAYLOAD_LOG_LIMIT, ModConfig.MAX_PAYLOAD_LOG_LIMIT,
+                                        cfg::getPayloadLogLimit, cfg::setPayloadLogLimit))
+                                .option(booleanOption("payloadSendLogEnabled",
+                                        ModConfig.DEFAULT_PAYLOAD_SEND_LOG_ENABLED,
+                                        cfg::isPayloadSendLogEnabled, cfg::setPayloadSendLogEnabled))
+                                .option(intOption("payloadSendLogLimit",
+                                        ModConfig.DEFAULT_PAYLOAD_SEND_LOG_LIMIT,
+                                        ModConfig.MIN_PAYLOAD_SEND_LOG_LIMIT, ModConfig.MAX_PAYLOAD_SEND_LOG_LIMIT,
+                                        cfg::getPayloadSendLogLimit, cfg::setPayloadSendLogLimit))
+                                .option(stringOption("payloadPassthroughNamespaces",
+                                        () -> String.join(", ", cfg.getPayloadPassthroughNamespaces()),
+                                        value -> {
+                                            List<String> list = new ArrayList<>();
+                                            for (String ns : value.split(",")) {
+                                                String trimmed = ns.trim();
+                                                if (!trimmed.isEmpty()) {
+                                                    list.add(trimmed);
+                                                }
+                                            }
+                                            cfg.setPayloadPassthroughNamespaces(list);
+                                        }))
                                 .build())
                         .build())
                 .category(ConfigCategory.createBuilder()

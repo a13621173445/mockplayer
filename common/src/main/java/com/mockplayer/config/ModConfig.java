@@ -1,7 +1,9 @@
 package com.mockplayer.config;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -89,6 +91,26 @@ public class ModConfig {
     public static final int MAX_BATCH_MAX_COUNT = 1000;
 
     private int batchMaxCount = DEFAULT_BATCH_MAX_COUNT;
+
+    /** mod payload 入站拦截总开关（默认开：假人连接收到的 mod payload 不交给双端分发链，记录到 state）。 */
+    public static final boolean DEFAULT_PAYLOAD_INTERCEPT_ENABLED = true;
+    /** 入站 mod payload 记录条数上限（环形截断）。 */
+    public static final int DEFAULT_PAYLOAD_LOG_LIMIT = 50;
+    public static final int MIN_PAYLOAD_LOG_LIMIT = 10;
+    public static final int MAX_PAYLOAD_LOG_LIMIT = 500;
+    /** 出站 mod payload 记录开关（只记录不拦截，服务端无感知，默认开）。 */
+    public static final boolean DEFAULT_PAYLOAD_SEND_LOG_ENABLED = true;
+    /** 出站 mod payload 记录条数上限（环形截断）。 */
+    public static final int DEFAULT_PAYLOAD_SEND_LOG_LIMIT = 50;
+    public static final int MIN_PAYLOAD_SEND_LOG_LIMIT = 10;
+    public static final int MAX_PAYLOAD_SEND_LOG_LIMIT = 500;
+
+    private boolean payloadInterceptEnabled = DEFAULT_PAYLOAD_INTERCEPT_ENABLED;
+    private int payloadLogLimit = DEFAULT_PAYLOAD_LOG_LIMIT;
+    private boolean payloadSendLogEnabled = DEFAULT_PAYLOAD_SEND_LOG_ENABLED;
+    private int payloadSendLogLimit = DEFAULT_PAYLOAD_SEND_LOG_LIMIT;
+    /** 放行逃生舱：这些 namespace 的 mod payload 不拦截（走原版分发链，mod handler 处理）。 */
+    private List<String> payloadPassthroughNamespaces = new ArrayList<>();
 
     public int getChatHistoryLimit() {
         return this.chatHistoryLimit;
@@ -225,6 +247,46 @@ public class ModConfig {
         this.batchMaxCount = batchMaxCount;
     }
 
+    public boolean isPayloadInterceptEnabled() {
+        return this.payloadInterceptEnabled;
+    }
+
+    public void setPayloadInterceptEnabled(boolean payloadInterceptEnabled) {
+        this.payloadInterceptEnabled = payloadInterceptEnabled;
+    }
+
+    public int getPayloadLogLimit() {
+        return this.payloadLogLimit;
+    }
+
+    public void setPayloadLogLimit(int payloadLogLimit) {
+        this.payloadLogLimit = payloadLogLimit;
+    }
+
+    public boolean isPayloadSendLogEnabled() {
+        return this.payloadSendLogEnabled;
+    }
+
+    public void setPayloadSendLogEnabled(boolean payloadSendLogEnabled) {
+        this.payloadSendLogEnabled = payloadSendLogEnabled;
+    }
+
+    public int getPayloadSendLogLimit() {
+        return this.payloadSendLogLimit;
+    }
+
+    public void setPayloadSendLogLimit(int payloadSendLogLimit) {
+        this.payloadSendLogLimit = payloadSendLogLimit;
+    }
+
+    public List<String> getPayloadPassthroughNamespaces() {
+        return this.payloadPassthroughNamespaces;
+    }
+
+    public void setPayloadPassthroughNamespaces(List<String> payloadPassthroughNamespaces) {
+        this.payloadPassthroughNamespaces = payloadPassthroughNamespaces;
+    }
+
     /** 越界字段回退默认（非法值不保留，保证配置文件永远可手改且不崩）。 */
     public void normalize() {
         this.chatHistoryLimit = clampInt(this.chatHistoryLimit,
@@ -245,6 +307,23 @@ public class ModConfig {
                 MIN_FAKE_PLAYER_CHUNK_RADIUS, MAX_FAKE_PLAYER_CHUNK_RADIUS, DEFAULT_FAKE_PLAYER_CHUNK_RADIUS);
         this.batchMaxCount = clampInt(this.batchMaxCount,
                 MIN_BATCH_MAX_COUNT, MAX_BATCH_MAX_COUNT, DEFAULT_BATCH_MAX_COUNT);
+        this.payloadLogLimit = clampInt(this.payloadLogLimit,
+                MIN_PAYLOAD_LOG_LIMIT, MAX_PAYLOAD_LOG_LIMIT, DEFAULT_PAYLOAD_LOG_LIMIT);
+        this.payloadSendLogLimit = clampInt(this.payloadSendLogLimit,
+                MIN_PAYLOAD_SEND_LOG_LIMIT, MAX_PAYLOAD_SEND_LOG_LIMIT, DEFAULT_PAYLOAD_SEND_LOG_LIMIT);
+        // 放行名单规范化：trim、去空、去重；null 视为空
+        List<String> cleaned = new ArrayList<>();
+        if (this.payloadPassthroughNamespaces != null) {
+            for (String ns : this.payloadPassthroughNamespaces) {
+                if (ns != null) {
+                    String trimmed = ns.trim();
+                    if (!trimmed.isEmpty() && !cleaned.contains(trimmed)) {
+                        cleaned.add(trimmed);
+                    }
+                }
+            }
+        }
+        this.payloadPassthroughNamespaces = cleaned;
         this.commands = ModCommands.normalize(this.commands);
         this.guiOpacity = normalizeGuiOpacity(this.guiOpacity);
         this.guiBlur = Math.max(MIN_GUI_BLUR, Math.min(MAX_GUI_BLUR, this.guiBlur));

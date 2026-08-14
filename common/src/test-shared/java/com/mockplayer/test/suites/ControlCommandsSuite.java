@@ -140,7 +140,7 @@ public class ControlCommandsSuite extends TestSuite {
                     .collect(Collectors.toSet());
             List<String> queries = List.of(
                     "info", "inventory", "container", "near", "block", "chunk", "online", "chatlog",
-                    "listen", "events", "memory");
+                    "listen", "events", "memory", "payload");
             List<String> qMissing = new ArrayList<>(queries);
             qMissing.removeAll(qSubs);
             List<String> qLeaked = qSubs.stream().filter(s -> !queries.contains(s)).toList();

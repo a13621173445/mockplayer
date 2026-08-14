@@ -172,6 +172,62 @@ public class FakePlayListener extends ClientPacketListener {
      * 假人分支 handleLogin：只建假人自己的 world/player，不写主玩家全局。
      * 不调 minecraft.setLevel / setCameraEntity / startWaitingForNewLevel（不污染主玩家、不弹加载界面）。
      */
+    /**
+     * 假人分支 handleCustomPayload：mod payload 统一拦截（YSM 等 mod 兼容）。
+     *
+     * 背景：fabric 的 mod payload 分发是父类方法 HEAD @Inject(cancellable)，neoforge 在父类
+     * 方法尾部 patch 调 handleModdedPayload；两者的 handler context 都硬编码主玩家
+     * （Minecraft.getInstance().player），会把 YSM 这类「同步到客户端玩家」的数据应用到主玩家。
+     * 本 override 不调 super 时双端分发链同时被绕过（虚分派到本方法后父类方法体不执行）。
+     *
+     * 规则（纯代码，不看 payload 内容，不逐个 mod 适配）：
+     * - DiscardedPayload：同原版忽略
+     * - BrandPayload（minecraft:brand）：写继承字段 serverBrand（不调 telemetry——
+     *   telemetryManager 是主玩家侧实例）
+     * - namespace == "minecraft" 的其他包：照原版（调 super，走原版处理 + 双端分发链）
+     * - 配置 payloadInterceptEnabled=false：不拦截，调 super（兼容「某些 mod 的 payload
+     *   假人需要真处理」的场景）
+     * - 配置 payloadPassthroughNamespaces 含该 namespace：放行，调 super（逃生舱，
+     *   接受 mod handler 应用到主玩家的代价，协议类兼容才用）
+     * - 其余（全部 mod payload）：记录到 state（元信息 + 原始对象，零丢弃铁律），不调 super
+     *
+     * 副作用：fabric channel 注册协商在 listener 构造时已定，play 阶段拦截不影响连接建立；
+     * 服务端若仍发 mod 包则被拦截记录 = 双保险。
+     */
+    @Override
+    public void handleCustomPayload(net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket packet) {
+        net.minecraft.network.protocol.common.custom.CustomPacketPayload payload = packet.payload();
+        if (payload instanceof net.minecraft.network.protocol.common.custom.DiscardedPayload) {
+            return;
+        }
+        PacketUtils.ensureRunningOnSameThread(packet, this, this.minecraft.packetProcessor());
+        if (payload instanceof net.minecraft.network.protocol.common.custom.BrandPayload brand) {
+            this.serverBrand = brand.brand();
+            return;
+        }
+        String namespace = payload.type().id().getNamespace();
+        com.mockplayer.config.ModConfig cfg = com.mockplayer.config.MockplayerConfig.get();
+        boolean intercept = cfg.isPayloadInterceptEnabled()
+                && !"minecraft".equals(namespace)
+                && !cfg.getPayloadPassthroughNamespaces().contains(namespace);
+        if (intercept) {
+            // neoforge 平台扩展容器数据（如附魔成本走 advanced_container_set_data）：
+            // 解析应用到假人菜单（等价原版语义），同时记录（零丢弃）；不调 super
+            // （neoforge handler 的 context.player() 硬编码主玩家，会污染）
+            com.mockplayer.platform.Services.PLATFORM.handlePlatformContainerPayload(
+                    payload, this.fakePlayer != null ? this.fakePlayer.containerMenu : null);
+            // 记录元信息 + 原始对象（网络层已解码），不调 super（跳过双端 mod 分发链）
+            this.session.getState().recordReceivedModPayload(new com.mockplayer.api.ModPayloadInfo(
+                    payload.type().id(),
+                    namespace,
+                    com.mockplayer.platform.Services.PLATFORM.getModDisplayName(namespace),
+                    this.minecraft.level != null ? this.minecraft.level.getGameTime() : 0L,
+                    PayloadInspector.estimateSize(payload)), payload);
+            return;
+        }
+        super.handleCustomPayload(packet);
+    }
+
     @Override
     public void handleLogin(ClientboundLoginPacket packet) {
         // 显式转渲染线程：假人 level/player 必须在渲染线程创建，否则 neoforge ModelDataManager

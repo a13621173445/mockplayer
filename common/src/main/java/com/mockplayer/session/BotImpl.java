@@ -2,8 +2,10 @@ package com.mockplayer.session;
 
 import com.mockplayer.api.Bot;
 import com.mockplayer.api.BotLifecycle;
+import com.mockplayer.api.ModPayloadInfo;
 import com.mockplayer.api.action.BotActions;
 import com.mockplayer.api.container.BotContainer;
+import com.mockplayer.platform.Services;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.client.multiplayer.PlayerInfo;
@@ -11,6 +13,9 @@ import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.Connection;
+import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.trading.MerchantOffers;
@@ -370,5 +375,57 @@ public class BotImpl implements Bot {
 
     void fireOnChunkLightData(ChunkPos pos, int lightByteArrays) {
         this.events.fire(this, l -> l.onChunkLightData(this, pos, lightByteArrays));
+    }
+
+    // ===== mod payload 观测/发送（透传 FakePlayerState，逃生舱登记见 Bot 接口注释） =====
+
+    @Override
+    public List<ModPayloadInfo> getReceivedModPayloads() {
+        return this.session.getState().getReceivedModPayloads();
+    }
+
+    @Override
+    public List<ModPayloadInfo> getReceivedModPayloads(String typeId) {
+        return this.session.getState().getReceivedModPayloads(typeId);
+    }
+
+    @Override
+    public List<ModPayloadInfo> getSentModPayloads() {
+        return this.session.getState().getSentModPayloads();
+    }
+
+    @Override
+    public List<ModPayloadInfo> getSentModPayloads(String typeId) {
+        return this.session.getState().getSentModPayloads(typeId);
+    }
+
+    @Override
+    public void clearModPayloads() {
+        this.session.getState().clearModPayloads();
+    }
+
+    @Override
+    public Object getLastRawModPayload(String typeId) {
+        return this.session.getState().getLastRawModPayload(typeId);
+    }
+
+    @Override
+    public String getLastModPayloadDump(String typeId) {
+        Object raw = this.session.getState().getLastRawModPayload(typeId);
+        return raw == null ? null : PayloadInspector.toJson(raw);
+    }
+
+    @Override
+    public boolean sendModPayload(CustomPacketPayload payload) {
+        // 注册检查：未注册类型编码成 DiscardedPayload 内容丢失，先查后发（双端平台实现）
+        if (!Services.PLATFORM.isServerboundPayloadRegistered(payload.type().id())) {
+            return false;
+        }
+        Connection conn = this.session.getConnection();
+        if (conn == null || !conn.isConnected()) {
+            return false;
+        }
+        conn.send(new ServerboundCustomPayloadPacket(payload));
+        return true;
     }
 }
