@@ -89,9 +89,11 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             echo "Release $GITHUB_REF_NAME already exists, skipping"
           else
+            mc=$(grep '^minecraft_version=' gradle.properties | cut -d= -f2)
+            notes="Minecraft $mc 双端通用单 jar（Fabric + NeoForge 合并产物）"
             gh release create "$GITHUB_REF_NAME" "${files[@]}" \
               --title "$GITHUB_REF_NAME" \
-              --generate-notes
+              --notes "$notes"
           fi
 
       - name: Upload merged jar

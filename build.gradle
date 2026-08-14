@@ -34,6 +34,9 @@ tasks.wrapper {
 // 直接 tasks.jar 会炸；provider 到 mergeJars 执行时才解析，且保留显式指定。
 forgix {
     autoRun = true
+    // 产物名带 MC 版本（tag 是仓库级共享空间，多 MC 版本分支并存时靠文件名区分）
+    // → mockplayer-26.2-0.2.2-fabric-neoforge.jar
+    archiveVersion = "${minecraft_version}-${version}"
     fabric {
         inputJar = project.provider { project(':fabric').tasks.jar.archiveFile.get() }
     }
