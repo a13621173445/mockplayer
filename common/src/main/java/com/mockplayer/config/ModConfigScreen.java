@@ -97,7 +97,7 @@ public final class ModConfigScreen extends YACLScreen {
                                 .name(Component.translatable("config.mockplayer.group.gui"))
                                 .option(booleanOption("guiEnabled", true,
                                         cfg::isGuiEnabled, cfg::setGuiEnabled))
-                                .option(guiKeyOption(cfg::getGuiKeyName, cfg::setGuiKeyName))
+                                .option(openControlsButton())
                                 .option(opacityOption(
                                         () -> (double) cfg.getGuiOpacity(),
                                         value -> cfg.setGuiOpacity(value.floatValue())))
@@ -200,14 +200,19 @@ public final class ModConfigScreen extends YACLScreen {
                 .build();
     }
 
-    /** GUI 按键名字符串选项（空串 = 禁用按键，YACL 可改；名称/描述走 option 前缀）。 */
-    private static Option<String> guiKeyOption(Supplier<String> getter, Consumer<String> setter) {
-        return Option.<String>createBuilder()
-                .name(Component.translatable("config.mockplayer.option.guiKeyName"))
+    /** 打开原版「键位」列表按钮：找到「打开假人控制台」，点一下按对应键；Esc 解绑。 */
+    private static ButtonOption openControlsButton() {
+        return ButtonOption.createBuilder()
+                .name(Component.translatable("config.mockplayer.open_controls"))
+                .text(Component.translatable("config.mockplayer.open_controls"))
                 .description(OptionDescription.of(
-                        Component.translatable("config.mockplayer.option.guiKeyName.description")))
-                .binding(ModConfig.DEFAULT_GUI_KEY_NAME, getter, setter)
-                .controller(option -> StringControllerBuilder.create(option))
+                        Component.translatable("config.mockplayer.open_controls.description")))
+                .action((screen, button) -> {
+                    // 直接打开原版「控制 → 键位」列表，一步到位
+                    net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+                    mc.gui.setScreen(new net.minecraft.client.gui.screens.options.controls.KeyBindsScreen(
+                            screen, mc.options));
+                })
                 .build();
     }
 

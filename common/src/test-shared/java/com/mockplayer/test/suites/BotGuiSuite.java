@@ -80,15 +80,12 @@ public class BotGuiSuite extends TestSuite {
     private void i18nAndConfig(TestContext ctx) {
         i18nGuiLangChecks(ctx);
         ctx.check("gui config default on", () -> MockplayerConfig.get().isGuiEnabled());
-        ctx.check("gui key default g", () -> "key.keyboard.g".equals(MockplayerConfig.get().getGuiKeyName()));
         ctx.run(() -> {
             ModConfig off = new ModConfig();
             off.setGuiEnabled(false);
-            off.setGuiKeyName("bad name!");
             MockplayerConfig.save(off);
             MockplayerConfig.reload();
-            ctx.checkNow("gui config normalize", !MockplayerConfig.get().isGuiEnabled()
-                    && "key.keyboard.g".equals(MockplayerConfig.get().getGuiKeyName()));
+            ctx.checkNow("gui config normalize", !MockplayerConfig.get().isGuiEnabled());
             MockplayerConfig.save(new ModConfig());
         });
     }
@@ -760,5 +757,3 @@ public class BotGuiSuite extends TestSuite {
         }
     }
 }
-
-

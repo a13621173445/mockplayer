@@ -1,6 +1,6 @@
 package com.mockplayer.gui;
 
-import com.mockplayer.config.ModCommands;
+import com.mockplayer.Constants;
 import com.mockplayer.config.MockplayerConfig;
 
 import com.mojang.blaze3d.platform.InputConstants;
@@ -8,13 +8,19 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 /**
  * 假人控制台 GUI 入口与多分辨率纯函数（common，双端平台 tick 共用）。
  *
- * 输入：配置 guiEnabled（总开关，默认 true）+ guiKeyName（GLFW key name，空串 = 禁用）
+ * 输入：配置 guiEnabled（总开关，默认 true）
  * 输出：原版 {@link KeyMapping} 注册后由原版键盘链路计数（界面打开不计数），
  *       平台 tick 调 {@link #tick(Minecraft)} 消费点击 → {@link #open(Minecraft)} 打开 {@link BotControlScreen}
+ *
+ * 键位策略：KeyMapping 是唯一键位来源（默认 G），改键/解绑在原版
+ * 「选项 → 控制 → 键位」界面完成，持久化走原版 options.txt。
+ * 静态初始化必须零依赖：neoforge 的 RegisterKeyMappingsEvent 在 Minecraft
+ * 构造前触发，静态块里碰 Minecraft 单例会让注册失败（键位列表消失）。
  *
  * 渲染路径探针仅测试属性 mockplayer.guiRenderProbe=true 时记录（生产默认零开销）。
  */
@@ -28,15 +34,21 @@ public final class BotGui {
     /** 快捷键注册名（语言文件 key.mockplayer.openGui）。 */
     public static final String KEY_NAME = "key.mockplayer.openGui";
 
+    /** 按键分类（原版键位列表按分类分组显示；自定义分类 = 独立一行，社区标准写法）。 */
+    public static final KeyMapping.Category KEY_CATEGORY = KeyMapping.Category.register(
+            Identifier.fromNamespaceAndPath(Constants.MOD_ID, "gui"));
+
     /**
      * 原版按键：聊天/命令等界面打开时原版键盘链路不计数（与原版 handleKeybinds 门禁一致）。
-     * 默认绑定 G（与配置 DEFAULT_GUI_KEY_NAME 一致），改键/禁用由 {@link #applyKeyFromConfig()} 同步。
+     * 默认绑定 G；修改/解绑（Esc）都在原版控制界面完成，options.txt 自动持久化。
+     * 分类用自定义 KEY_CATEGORY（语言文件 key.category.mockplayer.gui），
+     * 按官方 26.2 文档写法注册。
      */
     public static final KeyMapping KEY_BINDING = new KeyMapping(
             KEY_NAME,
             InputConstants.Type.KEYSYM,
             InputConstants.KEY_G,
-            KeyMapping.Category.MISC);
+            KEY_CATEGORY);
 
     /** 渲染路径探针计数（仅测试属性开启时记录；私有字段 + 测试反射读取）。 */
     private static volatile int openCount;
@@ -58,16 +70,11 @@ public final class BotGui {
     private BotGui() {
     }
 
-    static {
-        // 配置热重载（改键/禁用）立即同步原版 KeyMapping；静态块注册保证 Fabric/NeoForge 共用
-        MockplayerConfig.onReload(BotGui::applyKeyFromConfig);
-        applyKeyFromConfig();
-    }
-
-    /** GUI 功能是否可用（配置总开关且按键未禁用）。 */
+    /** GUI 功能是否可用（配置总开关且原版按键未解绑）。 */
     public static boolean shouldOpen() {
         var cfg = MockplayerConfig.get();
-        return cfg.isGuiEnabled() && !ModCommands.isDisabled(cfg.getGuiKeyName());
+        // 禁用 = 原版控制界面里按 Esc 解绑（isUnbound）
+        return cfg.isGuiEnabled() && !KEY_BINDING.isUnbound();
     }
 
     /**
@@ -101,22 +108,6 @@ public final class BotGui {
         while (KEY_BINDING.consumeClick()) {
             open(mc);
         }
-    }
-
-    /**
-     * 把配置 guiKeyName 同步到原版 KeyMapping：空串 = 禁用（UNKNOWN）；
-     * 非法键名同样落到 UNKNOWN（不崩客户端）。改键后重建原版按键路由 MAP。
-     */
-    public static void applyKeyFromConfig() {
-        String keyName = MockplayerConfig.get().getGuiKeyName();
-        InputConstants.Key key;
-        try {
-            key = ModCommands.isDisabled(keyName) ? InputConstants.UNKNOWN : InputConstants.getKey(keyName);
-        } catch (IllegalArgumentException e) {
-            key = InputConstants.UNKNOWN;
-        }
-        KEY_BINDING.setKey(key);
-        KeyMapping.resetMapping();
     }
 
     /**

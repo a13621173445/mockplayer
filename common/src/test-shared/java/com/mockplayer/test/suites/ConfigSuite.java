@@ -133,12 +133,15 @@ public class ConfigSuite extends TestSuite {
                     findDoubleOption(screen, (double) ModConfig.DEFAULT_GUI_OPACITY);
             dev.isxander.yacl3.api.Option<Integer> blurOption =
                     findIntOption(screen, ModConfig.DEFAULT_GUI_BLUR);
+            dev.isxander.yacl3.api.ButtonOption openControls =
+                    findButtonOption(screen, "config.mockplayer.open_controls");
             ctx.checkNow("integer option found", intOption != null);
             ctx.checkNow("query option found", queryOption != null);
             ctx.checkNow("control option found", controlOption != null);
             ctx.checkNow("debug option found", debugOption != null);
             ctx.checkNow("opacity option found", opacityOption != null);
             ctx.checkNow("guiBlur option found", blurOption != null);
+            ctx.checkNow("open controls button present", openControls != null);
             if (intOption != null && queryOption != null && controlOption != null && debugOption != null
                     && opacityOption != null && blurOption != null) {
                 int before = intOption.binding().getValue();
@@ -315,6 +318,9 @@ public class ConfigSuite extends TestSuite {
         for (dev.isxander.yacl3.api.ConfigCategory category : screen.config.categories()) {
             for (dev.isxander.yacl3.api.OptionGroup group : category.groups()) {
                 for (dev.isxander.yacl3.api.Option<?> option : group.options()) {
+                    if (option instanceof dev.isxander.yacl3.api.ButtonOption) {
+                        continue;
+                    }
                     if (option.binding().getValue() instanceof Integer) {
                         return (dev.isxander.yacl3.api.Option) option;
                     }
@@ -328,6 +334,9 @@ public class ConfigSuite extends TestSuite {
         for (dev.isxander.yacl3.api.ConfigCategory category : screen.config.categories()) {
             for (dev.isxander.yacl3.api.OptionGroup group : category.groups()) {
                 for (dev.isxander.yacl3.api.Option<?> option : group.options()) {
+                    if (option instanceof dev.isxander.yacl3.api.ButtonOption) {
+                        continue;
+                    }
                     if (option.binding().getValue() instanceof String s && s.equals(defaultName)) {
                         return (dev.isxander.yacl3.api.Option) option;
                     }
@@ -341,6 +350,9 @@ public class ConfigSuite extends TestSuite {
         for (dev.isxander.yacl3.api.ConfigCategory category : screen.config.categories()) {
             for (dev.isxander.yacl3.api.OptionGroup group : category.groups()) {
                 for (dev.isxander.yacl3.api.Option<?> option : group.options()) {
+                    if (option instanceof dev.isxander.yacl3.api.ButtonOption) {
+                        continue;
+                    }
                     if (option.binding().getValue() instanceof Boolean) {
                         return (dev.isxander.yacl3.api.Option) option;
                     }
@@ -354,6 +366,9 @@ public class ConfigSuite extends TestSuite {
         for (dev.isxander.yacl3.api.ConfigCategory category : screen.config.categories()) {
             for (dev.isxander.yacl3.api.OptionGroup group : category.groups()) {
                 for (dev.isxander.yacl3.api.Option<?> option : group.options()) {
+                    if (option instanceof dev.isxander.yacl3.api.ButtonOption) {
+                        continue;
+                    }
                     if (option.binding().getValue() instanceof Double d && Math.abs(d - defaultValue) < 1e-6) {
                         return (dev.isxander.yacl3.api.Option) option;
                     }
@@ -367,8 +382,26 @@ public class ConfigSuite extends TestSuite {
         for (dev.isxander.yacl3.api.ConfigCategory category : screen.config.categories()) {
             for (dev.isxander.yacl3.api.OptionGroup group : category.groups()) {
                 for (dev.isxander.yacl3.api.Option<?> option : group.options()) {
+                    if (option instanceof dev.isxander.yacl3.api.ButtonOption) {
+                        continue;
+                    }
                     if (option.binding().getValue() instanceof Integer i && i == defaultValue) {
                         return (dev.isxander.yacl3.api.Option) option;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** 按名称翻译 key 找按钮选项（名称 Component 深度相等判断）。 */
+    private dev.isxander.yacl3.api.ButtonOption findButtonOption(ModConfigScreen screen, String nameKey) {
+        for (dev.isxander.yacl3.api.ConfigCategory category : screen.config.categories()) {
+            for (dev.isxander.yacl3.api.OptionGroup group : category.groups()) {
+                for (dev.isxander.yacl3.api.Option<?> option : group.options()) {
+                    if (option instanceof dev.isxander.yacl3.api.ButtonOption
+                            && Component.translatable(nameKey).equals(option.name())) {
+                        return (dev.isxander.yacl3.api.ButtonOption) option;
                     }
                 }
             }

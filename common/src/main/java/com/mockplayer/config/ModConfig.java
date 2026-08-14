@@ -63,9 +63,6 @@ public class ModConfig {
 
     /** GUI 功能总开关（默认启用；关闭后按键/快捷键不打开 BotControlScreen，命令不受影响）。 */
     public static final boolean DEFAULT_GUI_ENABLED = true;
-    /** GUI 打开按键（GLFW key name，如 key.keyboard.g；空串 = 禁用）。 */
-    public static final String DEFAULT_GUI_KEY_NAME = "key.keyboard.g";
-    public static final int MAX_GUI_KEY_NAME_LENGTH = 64;
     /** GUI 背景不透明度（0.05-1.0，默认 0.25 = 低透明，透出游戏场景）。 */
     public static final float DEFAULT_GUI_OPACITY = 0.25F;
     public static final float MIN_GUI_OPACITY = 0.05F;
@@ -76,7 +73,6 @@ public class ModConfig {
     public static final int MAX_GUI_BLUR = 10;
 
     private boolean guiEnabled = DEFAULT_GUI_ENABLED;
-    private String guiKeyName = DEFAULT_GUI_KEY_NAME;
     private float guiOpacity = DEFAULT_GUI_OPACITY;
     private int guiBlur = DEFAULT_GUI_BLUR;
 
@@ -189,14 +185,6 @@ public class ModConfig {
         this.guiEnabled = guiEnabled;
     }
 
-    public String getGuiKeyName() {
-        return this.guiKeyName;
-    }
-
-    public void setGuiKeyName(String guiKeyName) {
-        this.guiKeyName = guiKeyName;
-    }
-
     public float getGuiOpacity() {
         return this.guiOpacity;
     }
@@ -219,29 +207,6 @@ public class ModConfig {
             return DEFAULT_GUI_OPACITY;
         }
         return Math.max(MIN_GUI_OPACITY, Math.min(MAX_GUI_OPACITY, value));
-    }
-
-    /** GUI 按键名规范化：null → 默认；trim 空 → 禁用；非法字符/超长 → 默认。 */
-    static String normalizeGuiKeyName(String value) {
-        if (value == null) {
-            return DEFAULT_GUI_KEY_NAME;
-        }
-        String trimmed = value.trim();
-        if (trimmed.isEmpty()) {
-            return "";
-        }
-        if (trimmed.length() > MAX_GUI_KEY_NAME_LENGTH) {
-            return DEFAULT_GUI_KEY_NAME;
-        }
-        for (int i = 0; i < trimmed.length(); i++) {
-            char c = trimmed.charAt(i);
-            boolean valid = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-                    || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.';
-            if (!valid) {
-                return DEFAULT_GUI_KEY_NAME;
-            }
-        }
-        return trimmed;
     }
 
     public int getFakePlayerChunkRadius() {
@@ -281,7 +246,6 @@ public class ModConfig {
         this.batchMaxCount = clampInt(this.batchMaxCount,
                 MIN_BATCH_MAX_COUNT, MAX_BATCH_MAX_COUNT, DEFAULT_BATCH_MAX_COUNT);
         this.commands = ModCommands.normalize(this.commands);
-        this.guiKeyName = normalizeGuiKeyName(this.guiKeyName);
         this.guiOpacity = normalizeGuiOpacity(this.guiOpacity);
         this.guiBlur = Math.max(MIN_GUI_BLUR, Math.min(MAX_GUI_BLUR, this.guiBlur));
     }
