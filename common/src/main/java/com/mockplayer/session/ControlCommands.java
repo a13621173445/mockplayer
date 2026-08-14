@@ -564,11 +564,11 @@ public class ControlCommands {
                 yield true;
             }
             case "left" -> {
-                bot.actions().setStrafe(-1.0F);
+                bot.actions().setStrafe(1.0F);
                 yield true;
             }
             case "right" -> {
-                bot.actions().setStrafe(1.0F);
+                bot.actions().setStrafe(-1.0F);
                 yield true;
             }
             default -> false;

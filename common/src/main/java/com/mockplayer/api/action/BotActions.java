@@ -30,7 +30,7 @@ public interface BotActions {
     BotActions setForward(float value);
 
     /**
-     * 设置左右平移（-1 左 ~ 1 右，0 停止）。
+     * 设置左右平移（1 左 ~ -1 右，0 停止；与 MC moveVector.x 语义一致，正值=左）。
      *
      * @param value 移动幅度
      * @return this

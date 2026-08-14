@@ -291,10 +291,10 @@ public class BotControlScreen extends Screen {
                 () -> this.act(b -> b.actions().setForward(1.0F), "gui.mockplayer.action.move_forward"),
                 () -> this.actQuiet(b -> b.actions().setForward(0.0F)));
         this.moveLeft = this.addHold(leftX, actY + rowH, PAD_BTN_W, BTN_H, "gui.mockplayer.action.move_left",
-                () -> this.act(b -> b.actions().setStrafe(-1.0F), "gui.mockplayer.action.move_left"),
+                () -> this.act(b -> b.actions().setStrafe(1.0F), "gui.mockplayer.action.move_left"),
                 () -> this.actQuiet(b -> b.actions().setStrafe(0.0F)));
         this.moveRight = this.addHold(rightX, actY + rowH, PAD_BTN_W, BTN_H, "gui.mockplayer.action.move_right",
-                () -> this.act(b -> b.actions().setStrafe(1.0F), "gui.mockplayer.action.move_right"),
+                () -> this.act(b -> b.actions().setStrafe(-1.0F), "gui.mockplayer.action.move_right"),
                 () -> this.actQuiet(b -> b.actions().setStrafe(0.0F)));
         this.moveBackward = this.addHold(crossX, actY + rowH * 2, PAD_BTN_W, BTN_H, "gui.mockplayer.action.move_backward",
                 () -> this.act(b -> b.actions().setForward(-1.0F), "gui.mockplayer.action.move_backward"),
