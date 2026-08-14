@@ -120,25 +120,25 @@ public class ContainerSuite extends TestSuite {
         ctx.await("chest menu open", () -> ctx.bot().getContainer().isPresent(), 200);
         ctx.run(() -> {
             Minecraft mc = Minecraft.getInstance();
-            if (mc.gui.screen() == null) {
-                mc.gui.setScreen(new PauseScreen(true));
+            if (mc.screen == null) {
+                mc.setScreen(new PauseScreen(true));
             }
         });
-        ctx.check("pause screen open", () -> Minecraft.getInstance().gui.screen()
+        ctx.check("pause screen open", () -> Minecraft.getInstance().screen
                 instanceof PauseScreen);
         ctx.run(() -> ctx.bot().getContainer().ifPresent(c -> {
             c.click(0, 0, ContainerInput.PICKUP);
             c.close();
         }));
         ctx.await("container closed during pause isolation", () -> {
-            if (!(Minecraft.getInstance().gui.screen() instanceof PauseScreen)) {
+            if (!(Minecraft.getInstance().screen instanceof PauseScreen)) {
                 screenOk.set(false);
             }
             return ctx.bot().getContainer().isEmpty();
         }, 100);
         ctx.check("pause screen not interrupted", screenOk::get);
         ctx.run(() -> {
-            Minecraft.getInstance().gui.setScreen(null);
+            Minecraft.getInstance().setScreen(null);
             MockplayerApi.bots().removeBot(BOT, "command");
         });
     }

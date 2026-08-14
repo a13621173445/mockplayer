@@ -25,7 +25,6 @@ import com.mockplayer.test.suites.MemoryAccountingSuite;
 import com.mockplayer.test.suites.ApiFullSuite;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.MinecraftServer.MultiplayerScope;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
@@ -216,7 +215,7 @@ public final class SuiteRunner {
                         if (testLanPort < 0) {
                             testLanPort = findFreeTestPort();
                         }
-                        server.publishServer(MultiplayerScope.LAN, GameType.SURVIVAL, false, testLanPort);
+                          server.publishServer(GameType.SURVIVAL, false, testLanPort);
                     }
                     if (server.isPublished() && server.getPort() > 0) {
                         phase = Phase.RUN;
@@ -414,7 +413,7 @@ public final class SuiteRunner {
                 new LevelSettings("mocktest", GameType.SURVIVAL,
                         LevelSettings.DifficultySettings.DEFAULT, true, WorldDataConfiguration.DEFAULT),
                 new WorldOptions(0L, false, false),
-                WorldPresets::createTestWorldDimensions,
+                WorldPresets::createFlatWorldDimensions,
                 null);
     }
 }

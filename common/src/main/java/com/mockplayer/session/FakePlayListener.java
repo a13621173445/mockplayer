@@ -211,7 +211,7 @@ public class FakePlayListener extends ClientPacketListener {
                 dimensionType,
                 self.mockplayer$getServerChunkRadius(),
                 self.mockplayer$getServerSimulationDistance(),
-                mc.levelExtractor,
+                mc.levelRenderer,
                 isDebug,
                 spawnInfo.seed(),
                 seaLevel
@@ -936,7 +936,7 @@ public class FakePlayListener extends ClientPacketListener {
                     dimensionType,
                     self.mockplayer$getServerChunkRadius(),
                     self.mockplayer$getServerSimulationDistance(),
-                    net.minecraft.client.Minecraft.getInstance().levelExtractor,
+                    net.minecraft.client.Minecraft.getInstance().levelRenderer,
                     isDebug,
                     spawnInfo.seed(),
                     seaLevel);
@@ -1099,7 +1099,7 @@ public class FakePlayListener extends ClientPacketListener {
     private net.minecraft.world.entity.Entity createEntityFromPacketFake(net.minecraft.network.protocol.game.ClientboundAddEntityPacket packet) {
         MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
         net.minecraft.world.entity.EntityType<?> type = packet.getType();
-        if (type == net.minecraft.world.entity.EntityTypes.PLAYER) {
+        if (type == net.minecraft.world.entity.EntityType.PLAYER) {
             String name = this.session.getState().getOnlinePlayers().containsKey(packet.getUUID())
                     ? this.session.getState().getOnlinePlayers().get(packet.getUUID()).name()
                     : null;

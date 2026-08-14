@@ -128,7 +128,7 @@ public class FakeLoginListener implements ClientLoginPacketListener {
         CommonListenerCookie cookie = new CommonListenerCookie(
                 new LevelLoadTracker(),
                 profile,
-                new WorldSessionTelemetryManager(net.minecraft.client.telemetry.TelemetryEventSender.DISABLED, false, Duration.ZERO, "", UUID.randomUUID()),
+                new WorldSessionTelemetryManager(net.minecraft.client.telemetry.TelemetryEventSender.DISABLED, false, Duration.ZERO, ""),
                 registryAccess,
                 FeatureFlags.DEFAULT_FLAGS,
                 null,

@@ -123,7 +123,7 @@ public class BotGuiSuite extends TestSuite {
             }
             ctx.checkNow("all widgets inside panel", inside, "outside=" + outside);
             ctx.checkNow("screen is BotControlScreen",
-                    mc.gui.screen() instanceof BotControlScreen);
+                    mc.screen instanceof BotControlScreen);
             ctx.checkNow("title translated", bgScreen() != null
                     && !bgScreen().getTitle().getString().contains("gui.mockplayer."));
             ctx.checkNow("probe open counted", BotGui.probeOpenCount() > 0);
@@ -145,7 +145,7 @@ public class BotGuiSuite extends TestSuite {
         ctx.run(() -> {
             Minecraft mc = Minecraft.getInstance();
             int blurBefore = mc.options.menuBackgroundBlurriness().get();
-            mc.gui.setScreen(null);
+            mc.setScreen(null);
             ctx.checkNow("blur option untouched after close",
                     mc.options.menuBackgroundBlurriness().get() == blurBefore);
         });
@@ -561,7 +561,7 @@ public class BotGuiSuite extends TestSuite {
         ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
                 && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
         SuitesSupport.awaitChunkLoaded(ctx);
-        ctx.run(() -> Minecraft.getInstance().gui.setScreen(null));
+        ctx.run(() -> Minecraft.getInstance().setScreen(null));
         ctx.run(() -> ctx.server().execute(() -> {
             ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName());
             if (sp != null) {
@@ -605,7 +605,7 @@ public class BotGuiSuite extends TestSuite {
     // ===== GUI helpers（与旧 TestRunner 等价） =====
 
     private static BotControlScreen bgScreen() {
-        net.minecraft.client.gui.screens.Screen s = Minecraft.getInstance().gui.screen();
+        net.minecraft.client.gui.screens.Screen s = Minecraft.getInstance().screen;
         return s instanceof BotControlScreen screen ? screen : null;
     }
 
@@ -664,7 +664,7 @@ public class BotGuiSuite extends TestSuite {
     private static void reopenGui(TestContext ctx) {
         ctx.run(() -> {
             Minecraft mc = Minecraft.getInstance();
-            mc.gui.setScreen(null);
+            mc.setScreen(null);
             BotGui.open(mc);
         });
     }

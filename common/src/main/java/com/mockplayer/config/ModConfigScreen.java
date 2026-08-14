@@ -210,7 +210,7 @@ public final class ModConfigScreen extends YACLScreen {
                 .action((screen, button) -> {
                     // 直接打开原版「控制 → 键位」列表，一步到位
                     net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-                    mc.gui.setScreen(new net.minecraft.client.gui.screens.options.controls.KeyBindsScreen(
+                    mc.setScreen(new net.minecraft.client.gui.screens.options.controls.KeyBindsScreen(
                             screen, mc.options));
                 })
                 .build();

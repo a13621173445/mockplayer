@@ -2,7 +2,7 @@ package com.mockplayer.mixin;
 
 import com.mockplayer.session.FakeLocalPlayer;
 
-import net.minecraft.client.gui.Gui;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
@@ -38,20 +38,20 @@ public abstract class MixinLocalPlayer {
     }
 
     /**
-     * 假人传送门过场：跳过主玩家 Gui.setScreen。
+     * 假人传送门过场：跳过主玩家 Minecraft.setScreen。
      *
-     * 原版 handlePortalTransitionEffect 在传传送门时会 this.minecraft.gui.setScreen(null)
+     * 原版 handlePortalTransitionEffect 在传传送门时会 this.minecraft.setScreen(null)
      * （关闭当前屏幕），假人传传送门不应关掉主玩家的暂停/容器界面。
      */
     @Redirect(
             method = "handlePortalTransitionEffect",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/client/gui/Gui;setScreen(Lnet/minecraft/client/gui/screens/Screen;)V"
+                    target = "Lnet/minecraft/client/Minecraft;setScreen(Lnet/minecraft/client/gui/screens/Screen;)V"
             ),
             require = 1
     )
-    private void mockplayer$portalSetScreen(Gui instance, Screen screen) {
+    private void mockplayer$portalSetScreen(Minecraft instance, Screen screen) {
         if (!((Object) this instanceof FakeLocalPlayer)) {
             instance.setScreen(screen);
         }

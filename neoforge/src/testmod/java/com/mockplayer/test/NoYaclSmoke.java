@@ -117,7 +117,7 @@ public final class NoYaclSmoke {
                 new LevelSettings("mocktest-noyacl", GameType.SURVIVAL,
                         LevelSettings.DifficultySettings.DEFAULT, true, WorldDataConfiguration.DEFAULT),
                 new WorldOptions(0L, false, false),
-                WorldPresets::createTestWorldDimensions,
+                WorldPresets::createFlatWorldDimensions,
                 null);
     }
 
@@ -128,10 +128,10 @@ public final class NoYaclSmoke {
                 .orElse(false);
         check("config extension point absent", extensionAbsent);
         MissingYaclScreen missing = new MissingYaclScreen(null);
-        mc.gui.setScreen(missing);
-        check("missing-yacl screen opens", mc.gui.screen() == missing);
+            mc.setScreen(missing);
+            check("missing-yacl screen opens", mc.screen == missing);
         missing.onClose();
-        check("missing-yacl screen closes", mc.gui.screen() == null);
+            check("missing-yacl screen closes", mc.screen == null);
         configIoChecks();
     }
 

@@ -116,8 +116,8 @@ public class ConfigSuite extends TestSuite {
             MockplayerConfig.reload();
             Minecraft mc = Minecraft.getInstance();
             ModConfigScreen screen = new ModConfigScreen(null);
-            mc.gui.setScreen(screen);
-            ctx.checkNow("yacl screen opened", mc.gui.screen() == screen);
+            mc.setScreen(screen);
+            ctx.checkNow("yacl screen opened", mc.screen == screen);
             ctx.checkNow("screen holds bound config", screen.config() == MockplayerConfig.get());
             ctx.checkNow("screen title translated", !screen.getTitle().getString()
                     .equals("config.mockplayer.title"));
@@ -223,12 +223,12 @@ public class ConfigSuite extends TestSuite {
             MockplayerConfig.save(new ModConfig());
             Minecraft mc = Minecraft.getInstance();
             MissingYaclScreen missing = new MissingYaclScreen(null);
-            mc.gui.setScreen(missing);
-            ctx.checkNow("missing-yacl screen opened", mc.gui.screen() == missing);
+            mc.setScreen(missing);
+            ctx.checkNow("missing-yacl screen opened", mc.screen == missing);
             ctx.checkNow("missing-yacl title translated",
                     !missing.getTitle().getString().equals("config.mockplayer.missing_yacl.title"));
             missing.onClose();
-            ctx.checkNow("missing-yacl screen closed", mc.gui.screen() == null);
+            ctx.checkNow("missing-yacl screen closed", mc.screen == null);
             deleteConfigTempDir();
         });
     }

@@ -4,7 +4,7 @@ name: Build and Release
 on:
   push:
     branches:
-      - '26.2'
+      - '26.1.2'
     tags:
       - 'v*'
   workflow_dispatch:

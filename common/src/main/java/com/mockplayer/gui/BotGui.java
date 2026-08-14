@@ -87,10 +87,10 @@ public final class BotGui {
         if (!shouldOpen()) {
             return false;
         }
-        if (mc.gui.screen() instanceof BotControlScreen) {
+        if (mc.screen instanceof BotControlScreen) {
             return true;
         }
-        mc.gui.setScreen(new BotControlScreen());
+        mc.setScreen(new BotControlScreen());
         recordOpen();
         return true;
     }
@@ -102,7 +102,7 @@ public final class BotGui {
      * 主线程调用。
      */
     public static void tick(Minecraft mc) {
-        if (mc.gui.screen() != null || mc.gui.overlay() != null) {
+        if (mc.screen != null || mc.getOverlay() != null) {
             return;
         }
         while (KEY_BINDING.consumeClick()) {

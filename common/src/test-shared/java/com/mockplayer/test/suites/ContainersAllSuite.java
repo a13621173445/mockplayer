@@ -13,7 +13,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.animal.equine.AbstractHorse;
 import net.minecraft.world.entity.animal.equine.Horse;
-import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.Item;
@@ -163,7 +163,7 @@ public class ContainersAllSuite extends TestSuite {
     private void horseCase(TestContext ctx, Case c, AtomicReference<BlockPos> pos, AtomicBoolean opened) {
         ctx.run(() -> ctx.server().execute(() -> {
             Vec3 hp = ctx.bot().getLocalPlayer().position().add(1.0, 0.0, 0.0);
-            Horse horse = new Horse(EntityTypes.HORSE, ctx.server().getLevel(Level.OVERWORLD));
+            Horse horse = new Horse(EntityType.HORSE, ctx.server().getLevel(Level.OVERWORLD));
             horse.setPos(hp);
             horse.setTamed(true);
             horse.setNoAi(true);

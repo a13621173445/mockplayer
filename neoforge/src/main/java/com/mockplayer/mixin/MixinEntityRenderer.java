@@ -21,22 +21,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * 假人 F3 调试信息标签：把信息行写入实体渲染状态的 scoreText。
  *
- * 26.2 渲染架构里 scoreText 原版就画在名字标签正下方（第二行），
+ * scoreText 原版就画在名字标签正下方（第二行），
  * 假人无队伍时原值为空，覆盖安全；主玩家/其它实体不受影响。
+ * 26.1.2 的 nameTag/scoreText 提取发生在 extractRenderState（26.2 拆成了 extractNameTags）。
  */
 @Mixin(EntityRenderer.class)
 public abstract class MixinEntityRenderer {
 
     @Inject(
-            method = "extractNameTags(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/client/renderer/entity/state/EntityRenderState;FDD)V",
+            method = "extractRenderState(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/client/renderer/entity/state/EntityRenderState;F)V",
             at = @At("RETURN")
     )
     private void mockplayer$appendFakePlayerDebug(
             Entity entity,
             EntityRenderState state,
             float partialTicks,
-            double nameTagDistance,
-            double belowNameDistance,
             CallbackInfo ci) {
         // 主玩家世界里的假人实体是 RemotePlayer（服务端玩家的客户端表示），
         // 不是 FakeLocalPlayer（那只存在于假人自己的无头会话）——必须按玩家名匹配 Bot
@@ -86,12 +85,12 @@ public abstract class MixinEntityRenderer {
         poseStack.translate(0.0F, infoOffset, 0.0F);
         for (net.minecraft.network.chat.Component row : rows) {
             submitNodeCollector.submitNameTag(poseStack, state.nameTagAttachment, offset,
-                    row, !state.isDiscrete, state.lightCoords, camera);
+                    row, !state.isDiscrete, state.lightCoords, state.distanceToCameraSq, camera);
             poseStack.translate(0.0F, -lineHeight, 0.0F);
         }
         if (state.nameTag != null) {
             submitNodeCollector.submitNameTag(poseStack, state.nameTagAttachment, offset, state.nameTag,
-                    !state.isDiscrete, state.lightCoords, camera);
+                    !state.isDiscrete, state.lightCoords, state.distanceToCameraSq, camera);
         }
         DebugNameTagInfo.recordRenderLayout(infoOffset, 0.0F);
         poseStack.popPose();

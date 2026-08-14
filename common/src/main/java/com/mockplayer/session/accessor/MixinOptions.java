@@ -23,7 +23,7 @@ public abstract class MixinOptions {
 
     @Inject(method = "getMenuBackgroundBlurriness", at = @At("HEAD"), cancellable = true)
     private void mockplayer$guiBlurOverride(CallbackInfoReturnable<Integer> cir) {
-        if (Minecraft.getInstance().gui.screen() instanceof BotControlScreen) {
+        if (Minecraft.getInstance().screen instanceof BotControlScreen) {
             cir.setReturnValue(MockplayerConfig.get().getGuiBlur());
         }
     }
