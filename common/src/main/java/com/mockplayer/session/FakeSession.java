@@ -375,6 +375,9 @@ public class FakeSession {
             }
         }
 
+        // entityculling 兼容：重置假人实体剔除标记（详见 resetFakePlayerCulling 注释），
+        // 必须在假人 level 实体 tick 之前执行，否则 tickEntity 会把假人判定为相机外并跳过完整 tick
+        this.resetFakePlayerCulling();
 
         // 驱动假人 level 实体 tick（复用原版 ClientLevel.tickEntities）：
         // 假人 LocalPlayer 物理 + RemotePlayer/生物插值全部按原版推进，不手写位置同步
@@ -400,6 +403,52 @@ public class FakeSession {
             } catch (Exception e) {
                 LOG.error("[{}] 假人 bot tick 出错", name, e);
             }
+        }
+    }
+
+    /**
+     * entityculling 兼容（2026-08-14 实测定位）：
+     * entityculling 会把「不在相机内」的实体 cancel 掉原版完整 tick，只跑 basicTick
+     * （setOldPosAndRot + tickCount++ + aiStep + hurtTime）。假人实体活在假人自己的 level，
+     * 无头设计下永远不会被任何渲染器渲染，剔除标记（outOfCamera/culled）永远不会被渲染侧清除，
+     * 于是假人完整 tick（输入/物理/移动/发包）被永久跳过 → 假人不能移动/转头，但挥手/背包
+     * 等网络事件驱动功能正常。这里在假人 level 实体 tick 之前把标记重置为 false，
+     * 让 entityculling 判定永远走「仅设标记不 cancel」的正常分支。
+     *
+     * 输入：假人实体（fakePlayer，可能为 null 表示尚未进 play）。
+     * 输出：无；副作用是每 tick 反射调用 entityculling 的 Cullable#setOutOfCamera(false)/
+     * setCulled(false)（entityculling 未安装时只做一次反射查找，失败后零开销跳过）。
+     */
+    private static boolean cullingApiChecked;
+    private static Class<?> cullableClass;
+    private static java.lang.reflect.Method cullingSetOutOfCamera;
+    private static java.lang.reflect.Method cullingSetCulled;
+
+    private void resetFakePlayerCulling() {
+        net.minecraft.client.player.LocalPlayer player = this.fakePlayer;
+        if (player == null) {
+            return;
+        }
+        if (!cullingApiChecked) {
+            cullingApiChecked = true;
+            try {
+                cullableClass = Class.forName("dev.tr7zw.entityculling.versionless.access.Cullable");
+                cullingSetOutOfCamera = cullableClass.getMethod("setOutOfCamera", boolean.class);
+                cullingSetCulled = cullableClass.getMethod("setCulled", boolean.class);
+            } catch (ReflectiveOperationException e) {
+                // entityculling 未安装：保留 null，后续检查失败直接跳过，不影响假人
+            }
+        }
+        if (cullableClass == null || cullingSetOutOfCamera == null || cullingSetCulled == null) {
+            return;
+        }
+        try {
+            if (cullableClass.isInstance(player)) {
+                cullingSetOutOfCamera.invoke(player, false);
+                cullingSetCulled.invoke(player, false);
+            }
+        } catch (ReflectiveOperationException ignored) {
+            // 反射失败不影响假人运行，下一 tick 重试
         }
     }
 
