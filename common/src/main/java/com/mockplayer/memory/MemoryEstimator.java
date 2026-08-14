@@ -13,13 +13,6 @@ import com.mockplayer.session.accessor.MockplayerDataLayerStorageMapAccessor;
 import com.mockplayer.session.accessor.MockplayerEntityTickListAccessor;
 import com.mockplayer.session.accessor.MockplayerEnvironmentAttributeSystemAccessor;
 import com.mockplayer.session.accessor.MockplayerEntitySectionStorageAccessor;
-import com.mockplayer.session.accessor.MockplayerFastutilInt2ObjectLinkedAccessor;
-import com.mockplayer.session.accessor.MockplayerFastutilLong2ByteAccessor;
-import com.mockplayer.session.accessor.MockplayerFastutilLong2IntAccessor;
-import com.mockplayer.session.accessor.MockplayerFastutilLong2ObjectAccessor;
-import com.mockplayer.session.accessor.MockplayerFastutilLong2ObjectLinkedAccessor;
-import com.mockplayer.session.accessor.MockplayerFastutilObjectOpenCustomHashSetAccessor;
-import com.mockplayer.session.accessor.MockplayerFastutilReference2ObjectAccessor;
 import com.mockplayer.session.accessor.MockplayerHashMapPaletteAccessor;
 import com.mockplayer.session.accessor.MockplayerHeightmapAccessor;
 import com.mockplayer.session.accessor.MockplayerKeyframeTrackSamplerAccessor;
@@ -29,7 +22,6 @@ import com.mockplayer.session.accessor.MockplayerLightEngineAccessor;
 import com.mockplayer.session.accessor.MockplayerLightEngineQueueAccessor;
 import com.mockplayer.session.accessor.MockplayerLightEngineStorageAccessor;
 import com.mockplayer.session.accessor.MockplayerLongArrayFIFOQueueAccessor;
-import com.mockplayer.session.accessor.MockplayerLongOpenHashSetAccessor;
 import com.mockplayer.session.accessor.MockplayerLevelChunkAccessor;
 import com.mockplayer.session.accessor.MockplayerLevelMiscAccessor;
 import com.mockplayer.session.accessor.MockplayerPalettedContainerDataAccessor;
@@ -180,8 +172,7 @@ public final class MemoryEstimator {
                     + (long) pending.size() * LayoutSizes.shallowSize(pending.getFirst().getClass());
         }
         total += StructureHeap.objectKeySetHeapByCapacity(
-                ((MockplayerFastutilObjectOpenCustomHashSetAccessor)
-                        access.mockplayer$getTicksPerPosition()).mockplayer$getKey());
+                FastutilKeys.objectKey(access.mockplayer$getTicksPerPosition()));
         return total;
     }
 
@@ -223,20 +214,20 @@ public final class MemoryEstimator {
             LongOpenHashSet[] sets = storageAccess.mockplayer$getAddedLoadedChunks();
             for (LongOpenHashSet set : sets) {
                 total += StructureHeap.longOpenHashSetHeapByCapacity(
-                        ((MockplayerLongOpenHashSetAccessor) set).mockplayer$getKey().length);
+                        FastutilKeys.longKey(set).length);
             }
             for (LongOpenHashSet set : storageAccess.mockplayer$getRemovedLoadedChunks()) {
                 total += StructureHeap.longOpenHashSetHeapByCapacity(
-                        ((MockplayerLongOpenHashSetAccessor) set).mockplayer$getKey().length);
+                        FastutilKeys.longKey(set).length);
             }
             // 空 section 跟踪集合同样预分配大容量（视距范围），按实际数组长度计
             for (LongOpenHashSet set : storageAccess.mockplayer$getAddedEmptySections()) {
                 total += StructureHeap.longOpenHashSetHeapByCapacity(
-                        ((MockplayerLongOpenHashSetAccessor) set).mockplayer$getKey().length);
+                        FastutilKeys.longKey(set).length);
             }
             for (LongOpenHashSet set : storageAccess.mockplayer$getRemovedEmptySections()) {
                 total += StructureHeap.longOpenHashSetHeapByCapacity(
-                        ((MockplayerLongOpenHashSetAccessor) set).mockplayer$getKey().length);
+                        FastutilKeys.longKey(set).length);
             }
 
             // 光照引擎：sky/block 各一张 sectionStates + columnsWithSources + 数据层表
@@ -252,8 +243,7 @@ public final class MemoryEstimator {
             if (entities.mockplayer$getTickingChunks()
                     instanceof it.unimi.dsi.fastutil.longs.LongOpenHashSet) {
                 total += StructureHeap.longOpenHashSetHeapByCapacity(
-                        ((MockplayerLongOpenHashSetAccessor) entities.mockplayer$getTickingChunks())
-                                .mockplayer$getKey().length);
+                    FastutilKeys.longKey(entities.mockplayer$getTickingChunks()).length);
             } else {
                 total += StructureHeap.longOpenHashSetHeap(
                         entities.mockplayer$getTickingChunks().size());
@@ -263,8 +253,7 @@ public final class MemoryEstimator {
             if (sections.mockplayer$getSections()
                     instanceof it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<?>) {
                 total += StructureHeap.longKeyObjectValueMapHeapByCapacity(
-                        ((MockplayerFastutilLong2ObjectAccessor) sections.mockplayer$getSections())
-                                .mockplayer$getKey());
+                        FastutilKeys.longKey(sections.mockplayer$getSections()));
             } else {
                 total += StructureHeap.long2ObjectMapHeap(
                         sections.mockplayer$getSections().size());
@@ -304,8 +293,7 @@ public final class MemoryEstimator {
                         (MockplayerBlockTintCacheAccessor) cache;
                 total += LayoutSizes.shallowSize(cache.getClass())
                         + StructureHeap.longKeyObjectValueLinkedMapHeapByCapacity(
-                        ((MockplayerFastutilLong2ObjectLinkedAccessor) cacheAccess.mockplayer$getCache())
-                                .mockplayer$getKey())
+                        FastutilKeys.longKey(cacheAccess.mockplayer$getCache()))
                         + LayoutSizes.shallowSize(cacheAccess.mockplayer$getLock().getClass());
             }
             total += StructureHeap.int2ObjectMapHeap(misc.mockplayer$getDestroyingBlocks().size());
@@ -337,7 +325,7 @@ public final class MemoryEstimator {
     /** Int2ObjectLinkedOpenHashMap 按实际 key 数组计（含链接数组），包装类回退 size 公式。 */
     private static long intLinkedMapHeapByCapacity(it.unimi.dsi.fastutil.ints.Int2ObjectMap<?> map) {
         if (map instanceof it.unimi.dsi.fastutil.ints.Int2ObjectLinkedOpenHashMap<?>) {
-            int[] key = ((MockplayerFastutilInt2ObjectLinkedAccessor) map).mockplayer$getKey();
+            int[] key = FastutilKeys.intKey(map);
             return StructureHeap.intKeyObjectValueMapHeapByCapacity(key)
                     + 2L * LayoutSizes.arraySize(key.length, Integer.BYTES);
         }
@@ -352,8 +340,7 @@ public final class MemoryEstimator {
         MockplayerEnvironmentAttributeSystemAccessor access =
                 (MockplayerEnvironmentAttributeSystemAccessor) system;
         long total = StructureHeap.objectKeyObjectValueMapHeapByCapacity(
-                ((MockplayerFastutilReference2ObjectAccessor)
-                        access.mockplayer$getAttributeSamplers()).mockplayer$getKey());
+                FastutilKeys.objectKey(access.mockplayer$getAttributeSamplers()));
         for (Object sampler : access.mockplayer$getAttributeSamplers().values()) {
             total += LayoutSizes.shallowSize(sampler.getClass());
             java.util.List<?> layers = ((MockplayerValueSamplerAccessor) sampler).mockplayer$getLayers();
@@ -390,8 +377,7 @@ public final class MemoryEstimator {
         if (queues.mockplayer$getBlockNodesToCheck()
                 instanceof it.unimi.dsi.fastutil.longs.LongOpenHashSet) {
             total = StructureHeap.longOpenHashSetHeapByCapacity(
-                    ((MockplayerLongOpenHashSetAccessor) queues.mockplayer$getBlockNodesToCheck())
-                            .mockplayer$getKey().length);
+                    FastutilKeys.longKey(queues.mockplayer$getBlockNodesToCheck()).length);
         } else {
             total = StructureHeap.longOpenHashSetHeap(
                     queues.mockplayer$getBlockNodesToCheck().size(), 0.5F);
@@ -410,17 +396,15 @@ public final class MemoryEstimator {
                 (MockplayerLayerLightSectionStorageAccessor) storage;
         if (access.mockplayer$getSectionStates()
                 instanceof it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap) {
-            total += StructureHeap.longKeyByteValueMapHeapByCapacity(
-                    ((MockplayerFastutilLong2ByteAccessor) access.mockplayer$getSectionStates())
-                            .mockplayer$getKey());
+                total += StructureHeap.longKeyByteValueMapHeapByCapacity(
+                        FastutilKeys.longKey(access.mockplayer$getSectionStates()));
         } else {
             total += StructureHeap.long2ByteMapHeap(access.mockplayer$getSectionStates().size());
         }
         if (access.mockplayer$getColumnsWithSources()
                 instanceof it.unimi.dsi.fastutil.longs.LongOpenHashSet) {
             total += StructureHeap.longOpenHashSetHeapByCapacity(
-                    ((MockplayerLongOpenHashSetAccessor) access.mockplayer$getColumnsWithSources())
-                            .mockplayer$getKey().length);
+                    FastutilKeys.longKey(access.mockplayer$getColumnsWithSources()).length);
         } else {
             total += StructureHeap.longOpenHashSetHeap(
                     access.mockplayer$getColumnsWithSources().size());
@@ -439,11 +423,10 @@ public final class MemoryEstimator {
         total += lightDataLayerBytes(access.mockplayer$getQueuedSections());
         if (storage instanceof net.minecraft.world.level.lighting.SkyLightSectionStorage sky) {
             total += StructureHeap.longKeyIntValueMapHeapByCapacity(
-                    ((MockplayerFastutilLong2IntAccessor)
+                    FastutilKeys.longKey(
                             ((MockplayerSkyLightSectionStorageAccessor)
                                     access.mockplayer$getUpdatingSectionData())
-                                    .mockplayer$getTopSections())
-                            .mockplayer$getKey());
+                                    .mockplayer$getTopSections()));
         }
         return total;
     }
@@ -452,7 +435,7 @@ public final class MemoryEstimator {
     private static long lightLongSetBytes(it.unimi.dsi.fastutil.longs.LongSet set) {
         if (set instanceof it.unimi.dsi.fastutil.longs.LongOpenHashSet) {
             return StructureHeap.longOpenHashSetHeapByCapacity(
-                    ((MockplayerLongOpenHashSetAccessor) set).mockplayer$getKey().length);
+                FastutilKeys.longKey(set).length);
         }
         return StructureHeap.longOpenHashSetHeap(set.size());
     }
@@ -463,7 +446,7 @@ public final class MemoryEstimator {
         long total;
         if (layers instanceof it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<?>) {
             total = StructureHeap.longKeyObjectValueMapHeapByCapacity(
-                    ((MockplayerFastutilLong2ObjectAccessor) layers).mockplayer$getKey());
+                    FastutilKeys.longKey(layers));
         } else {
             // 同步包装类（queuedSections）：按 size 公式近似
             total = StructureHeap.long2ObjectMapHeap(layers.size());
