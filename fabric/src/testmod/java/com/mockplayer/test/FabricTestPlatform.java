@@ -23,6 +23,7 @@ public final class FabricTestPlatform implements TestPlatform {
                     .execute(command, source);
             return true;
         } catch (Exception e) {
+            System.out.println("[mocktest] command failed: " + command + " :: " + e);
             return false;
         }
     }
@@ -37,5 +38,35 @@ public final class FabricTestPlatform implements TestPlatform {
     public boolean hasExecRoot(String commandName) {
         var connection = Minecraft.getInstance().getConnection();
         return connection != null && connection.getCommands().getRoot().getChild(commandName) != null;
+    }
+
+    @Override
+    public void sendTestPayloadToBot(String botName) {
+        FabricTestPayloads.sendToBot(botName);
+    }
+
+    @Override
+    public void sendTestPayloadToMainPlayer() {
+        FabricTestPayloads.sendToMainPlayer();
+    }
+
+    @Override
+    public void sendTestPayloadBToBot(String botName, int count) {
+        FabricTestPayloads.sendBToBot(botName, count);
+    }
+
+    @Override
+    public boolean isClientTestHandlerFired() {
+        return FabricTestPayloads.isClientFired();
+    }
+
+    @Override
+    public boolean isServerTestHandlerFired() {
+        return FabricTestPayloads.isServerFired();
+    }
+
+    @Override
+    public void resetTestPayloadFlags() {
+        FabricTestPayloads.reset();
     }
 }

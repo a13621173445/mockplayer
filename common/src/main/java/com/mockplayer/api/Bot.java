@@ -8,6 +8,7 @@ import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -175,4 +176,70 @@ public interface Bot {
      * @return 内存信息（未 PLAYING 时 level 统计为 0，其余字段仍有效）
      */
     BotMemoryInfo memoryInfo();
+
+    /**
+     * 假人连接收到的 mod payload 元信息快照（入站拦截记录，最新在前）。
+     * 只含 namespace/typeId/modName/tick/字节估算，不含原始对象引用。
+     *
+     * @return 入站 mod payload 记录（不可变；未 PLAYING 或没有记录时为空列表）
+     */
+    List<ModPayloadInfo> getReceivedModPayloads();
+
+    /**
+     * 入站记录按 typeId（"namespace:path"）过滤。
+     *
+     * @param typeId 完整 typeId，如 "yes_steve_model:sync"
+     * @return 匹配的记录（不可变）
+     */
+    List<ModPayloadInfo> getReceivedModPayloads(String typeId);
+
+    /**
+     * 假人连接发出的 mod payload 元信息快照（出站记录，只记录不阻止发送）。
+     *
+     * @return 出站 mod payload 记录（不可变）
+     */
+    List<ModPayloadInfo> getSentModPayloads();
+
+    /**
+     * 出站记录按 typeId 过滤。
+     *
+     * @param typeId 完整 typeId
+     * @return 匹配的记录（不可变）
+     */
+    List<ModPayloadInfo> getSentModPayloads(String typeId);
+
+    /**
+     * 双向清空 mod payload 记录（AI 消费后清理用）。
+     */
+    void clearModPayloads();
+
+    /**
+     * 逃生舱（登记理由：AI 需要解码 mod 数据时使用）：入站最近一次该 typeId 的原始
+     * payload 对象（网络层已解码）。只读引用，不要修改；可 cast 到 mod 的 payload 类。
+     *
+     * @param typeId 完整 typeId
+     * @return 原始对象或 null（无记录）
+     */
+    Object getLastRawModPayload(String typeId);
+
+    /**
+     * 入站最近一次该 typeId 的反射 dump（JSON 字符串，见 PayloadInspector）。
+     * 调试用：人排查污染/验证拦截时看「这个包是什么」。
+     *
+     * @param typeId 完整 typeId
+     * @return JSON 字符串或 null（无记录）
+     */
+    String getLastModPayloadDump(String typeId);
+
+    /**
+     * 发送自定义 serverbound payload（逃生舱，登记理由：AI 扩展 mod 玩法时使用）。
+     *
+     * 前置检查：payload 类型须已注册（fabric PayloadTypeRegistry / neoforge NetworkRegistry），
+     * 未注册返回 false——26.1.2 原版 codec 只注册 brand，未注册类型会编码成 DiscardedPayload
+     * 内容丢失。发送走假人自己的连接（服务端视角 = 假人发出），出站记录自动联动。
+     *
+     * @param payload 目标 payload 实例（AI 依赖 mod jar 构造）
+     * @return true 已发送；false 未注册或假人连接不可用
+     */
+    boolean sendModPayload(CustomPacketPayload payload);
 }

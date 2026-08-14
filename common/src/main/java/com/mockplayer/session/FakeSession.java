@@ -194,6 +194,12 @@ public class FakeSession {
         return this.playListener;
     }
 
+    /** 内部：假人 TCP 连接（sendModPayload 出站发送用；PLAYING 后可用，断开为 null）。 */
+    @com.mockplayer.api.Internal
+    public Connection getConnection() {
+        return this.connection;
+    }
+
     /** 假人区块加载半径：登录时取配置默认（2，节约性能），命令可改；与主玩家完全隔离。 */
     private volatile int chunkRadius = com.mockplayer.config.MockplayerConfig.get().getFakePlayerChunkRadius();
 

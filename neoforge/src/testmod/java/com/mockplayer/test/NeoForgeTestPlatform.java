@@ -35,4 +35,35 @@ public final class NeoForgeTestPlatform implements TestPlatform {
         var connection = net.minecraft.client.Minecraft.getInstance().getConnection();
         return connection != null && connection.getCommands().getRoot().getChild(commandName) != null;
     }
+
+    @Override
+    public void sendTestPayloadToBot(String botName) {
+        NeoForgeTestPayloads.sendToBot(botName);
+    }
+
+    @Override
+    public void sendTestPayloadToMainPlayer() {
+        NeoForgeTestPayloads.sendToMainPlayer();
+    }
+
+    @Override
+    public void sendTestPayloadBToBot(String botName, int count) {
+        NeoForgeTestPayloads.sendBToBot(botName, count);
+    }
+
+    @Override
+    public boolean isClientTestHandlerFired() {
+        return NeoForgeTestPayloads.isClientFired();
+    }
+
+    @Override
+    public boolean isServerTestHandlerFired() {
+        return NeoForgeTestPayloads.isServerFired();
+    }
+
+    @Override
+    public void resetTestPayloadFlags() {
+        NeoForgeTestPayloads.reset();
+    }
+
 }

@@ -24,6 +24,8 @@ public class MockplayerTestMod implements ClientModInitializer {
         if (suite == null || suite.isBlank()) {
             return;
         }
+        // 测试 payload 注册（早于任何连接；集成服务器同 JVM 一并注册）
+        FabricTestPayloads.register();
         ClientTickEvents.END_CLIENT_TICK.register(mc ->
                 SuiteRunner.tick(mc, suite, new FabricTestPlatform()));
     }

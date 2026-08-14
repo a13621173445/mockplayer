@@ -2,6 +2,7 @@ package com.mockplayer.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -13,6 +14,8 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 配置文件读写（原版自带 Gson，零第三方依赖，YACL 缺席也能用）。
@@ -89,6 +92,17 @@ public final class ModConfigIO {
             config.setBatchMaxCount(readInt(root, "batchMaxCount",
                     ModConfig.DEFAULT_BATCH_MAX_COUNT,
                     ModConfig.MIN_BATCH_MAX_COUNT, ModConfig.MAX_BATCH_MAX_COUNT));
+            config.setPayloadInterceptEnabled(readBool(root, "payloadInterceptEnabled",
+                    ModConfig.DEFAULT_PAYLOAD_INTERCEPT_ENABLED));
+            config.setPayloadLogLimit(readInt(root, "payloadLogLimit",
+                    ModConfig.DEFAULT_PAYLOAD_LOG_LIMIT,
+                    ModConfig.MIN_PAYLOAD_LOG_LIMIT, ModConfig.MAX_PAYLOAD_LOG_LIMIT));
+            config.setPayloadSendLogEnabled(readBool(root, "payloadSendLogEnabled",
+                    ModConfig.DEFAULT_PAYLOAD_SEND_LOG_ENABLED));
+            config.setPayloadSendLogLimit(readInt(root, "payloadSendLogLimit",
+                    ModConfig.DEFAULT_PAYLOAD_SEND_LOG_LIMIT,
+                    ModConfig.MIN_PAYLOAD_SEND_LOG_LIMIT, ModConfig.MAX_PAYLOAD_SEND_LOG_LIMIT));
+            config.setPayloadPassthroughNamespaces(readStringList(root, "payloadPassthroughNamespaces"));
         } catch (Exception e) {
             // 文件损坏/非 JSON 对象 → 整体回退默认，不崩客户端
             return new ModConfig();
@@ -119,6 +133,11 @@ public final class ModConfigIO {
         normalized.setGuiBlur(config.getGuiBlur());
         normalized.setFakePlayerChunkRadius(config.getFakePlayerChunkRadius());
         normalized.setBatchMaxCount(config.getBatchMaxCount());
+        normalized.setPayloadInterceptEnabled(config.isPayloadInterceptEnabled());
+        normalized.setPayloadLogLimit(config.getPayloadLogLimit());
+        normalized.setPayloadSendLogEnabled(config.isPayloadSendLogEnabled());
+        normalized.setPayloadSendLogLimit(config.getPayloadSendLogLimit());
+        normalized.setPayloadPassthroughNamespaces(config.getPayloadPassthroughNamespaces());
         normalized.normalize();
 
         try {
@@ -166,6 +185,30 @@ public final class ModConfigIO {
         } catch (NumberFormatException e) {
             return fallback;
         }
+    }
+
+    /** 读 bool 字段：缺失/非布尔 → 默认值。 */
+    private static boolean readBool(JsonObject root, String key, boolean fallback) {
+        if (!root.has(key) || !root.get(key).isJsonPrimitive()
+                || !root.get(key).getAsJsonPrimitive().isBoolean()) {
+            return fallback;
+        }
+        return root.get(key).getAsBoolean();
+    }
+
+    /** 读字符串列表字段：缺失/非数组/含非字符串元素 → 回退默认（空列表）。 */
+    private static List<String> readStringList(JsonObject root, String key) {
+        if (!root.has(key) || !root.get(key).isJsonArray()) {
+            return new ArrayList<>();
+        }
+        JsonArray array = root.getAsJsonArray(key);
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < array.size(); i++) {
+            if (array.get(i).isJsonPrimitive() && array.get(i).getAsJsonPrimitive().isString()) {
+                out.add(array.get(i).getAsString());
+            }
+        }
+        return out;
     }
 
     /** 读 commands 对象：缺失/非对象 → 默认；逐条交给 ModCommands 规范化。 */

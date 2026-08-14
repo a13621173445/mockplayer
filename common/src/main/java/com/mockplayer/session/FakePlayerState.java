@@ -211,6 +211,92 @@ public class FakePlayerState {
         return java.util.Collections.unmodifiableMap(this.lastPackets);
     }
 
+    // ===== mod payload 记录（入站拦截 + 出站记录，双向环形，配置上限） =====
+
+    /**
+     * 入站 mod payload 元信息（最新在前，上限 = payloadLogLimit，环形截断）。
+     * 与 lastPackets 隔离：本列表只存「非 minecraft: namespace 的自定义 payload」。
+     */
+    private final List<com.mockplayer.api.ModPayloadInfo> receivedModPayloads = new CopyOnWriteArrayList<>();
+    /** 出站 mod payload 元信息（最新在前，上限 = payloadSendLogLimit）。 */
+    private final List<com.mockplayer.api.ModPayloadInfo> sentModPayloads = new CopyOnWriteArrayList<>();
+    /**
+     * 入站原始 payload 对象（typeId → 最近一次解码后的对象，逃生舱只读引用）。
+     * 网络层已完成 decode，存的是完整数据对象；AI 可 cast 到 mod 的 payload 类读字段，
+     * 或经 PayloadInspector 反射 dump。只存引用不复制，随 clear() 释放。
+     */
+    private final java.util.Map<String, Object> receivedRawPayloads = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 记录一条入站 mod payload（拦截后调用；rawPayload 为网络层解码后的对象）。 */
+    public void recordReceivedModPayload(com.mockplayer.api.ModPayloadInfo info, Object rawPayload) {
+        recordTo(this.receivedModPayloads, info,
+                MockplayerConfig.get().getPayloadLogLimit());
+        this.receivedRawPayloads.put(info.typeIdString(), rawPayload);
+    }
+
+    /** 记录一条出站 mod payload（MixinConnection.send 拦截调用，只记录不阻止发送）。 */
+    public void recordSentModPayload(com.mockplayer.api.ModPayloadInfo info) {
+        recordTo(this.sentModPayloads, info,
+                MockplayerConfig.get().getPayloadSendLogLimit());
+    }
+
+    /** 环形写入：最新在前，超过上限丢最旧。 */
+    private static void recordTo(List<com.mockplayer.api.ModPayloadInfo> list,
+                                 com.mockplayer.api.ModPayloadInfo info, int limit) {
+        list.add(0, info);
+        while (list.size() > limit) {
+            list.remove(list.size() - 1);
+        }
+    }
+
+    /** 入站 mod payload 全量快照（不可变）。 */
+    public List<com.mockplayer.api.ModPayloadInfo> getReceivedModPayloads() {
+        return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(this.receivedModPayloads));
+    }
+
+    /** 入站按 typeId 过滤快照（不可变）。 */
+    public List<com.mockplayer.api.ModPayloadInfo> getReceivedModPayloads(String typeId) {
+        return filterByTypeId(this.receivedModPayloads, typeId);
+    }
+
+    /** 出站 mod payload 全量快照（不可变）。 */
+    public List<com.mockplayer.api.ModPayloadInfo> getSentModPayloads() {
+        return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(this.sentModPayloads));
+    }
+
+    /** 出站按 typeId 过滤快照（不可变）。 */
+    public List<com.mockplayer.api.ModPayloadInfo> getSentModPayloads(String typeId) {
+        return filterByTypeId(this.sentModPayloads, typeId);
+    }
+
+    private static List<com.mockplayer.api.ModPayloadInfo> filterByTypeId(
+            List<com.mockplayer.api.ModPayloadInfo> list, String typeId) {
+        java.util.List<com.mockplayer.api.ModPayloadInfo> out = new java.util.ArrayList<>();
+        for (com.mockplayer.api.ModPayloadInfo info : list) {
+            if (info.typeIdString().equals(typeId)) {
+                out.add(info);
+            }
+        }
+        return java.util.Collections.unmodifiableList(out);
+    }
+
+    /** 双向清空 mod payload 记录（供 AI 消费后清理与 /query payload clear）。 */
+    public void clearModPayloads() {
+        this.receivedModPayloads.clear();
+        this.sentModPayloads.clear();
+        this.receivedRawPayloads.clear();
+    }
+
+    /** 入站最近一次原始 payload 对象（typeId 无记录返回 null）。 */
+    public Object getLastRawModPayload(String typeId) {
+        return this.receivedRawPayloads.get(typeId);
+    }
+
+    /** 入站最近一条记录的 typeId 是否存在（供查询命令判断）。 */
+    public boolean hasReceivedModPayload(String typeId) {
+        return this.receivedRawPayloads.containsKey(typeId);
+    }
+
     /** 最近一次 Boss 事件包（假人不显示 Boss 栏，但数据保留供 AI 读取） */
     private volatile net.minecraft.network.protocol.game.ClientboundBossEventPacket lastBossEvent;
 
@@ -290,6 +376,7 @@ public class FakePlayerState {
         this.particleBytes = 0;
         this.onlinePlayers.clear();
         this.lastPackets.clear();
+        this.clearModPayloads();
         this.lastAdvancementPacket = null;
         this.lastStopSound = null;
         this.lastBossEvent = null;

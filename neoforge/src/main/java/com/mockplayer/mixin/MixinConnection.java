@@ -47,4 +47,38 @@ public abstract class MixinConnection {
             }
         }
     }
+
+    /**
+     * 假人连接出站 mod payload 记录（只记录，不阻止发送，服务端无感知）。
+     *
+     * 入站拦截（FakePlayListener.handleCustomPayload）与出站记录（本注入）构成完整观测面：
+     * mod 客户端 tick 自动发的心跳/报到/状态上报也能查到（Bot.getSentModPayloads）。
+     *
+     * 只注入单参 send(Packet)（mod 发送链路的主入口；双参重载由它内部委托，避免重复记录）。
+     * minecraft: namespace（brand 等 vanilla payload）不记录。
+     */
+    @Inject(method = "send(Lnet/minecraft/network/protocol/Packet;)V", at = @At("HEAD"))
+    private void mockplayer$recordFakeOutboundModPayload(Packet<?> packet, CallbackInfo ci) {
+        if (!(packet instanceof net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket custom)) {
+            return;
+        }
+        Connection self = (Connection) (Object) this;
+        com.mockplayer.session.FakeSession session = FakeConnectionRegistry.getSession(self);
+        if (session == null || !self.isConnected()
+                || !com.mockplayer.config.MockplayerConfig.get().isPayloadSendLogEnabled()) {
+            return;
+        }
+        net.minecraft.network.protocol.common.custom.CustomPacketPayload payload = custom.payload();
+        net.minecraft.resources.Identifier id = payload.type().id();
+        if ("minecraft".equals(id.getNamespace())) {
+            return;
+        }
+        long tick = Minecraft.getInstance().level != null ? Minecraft.getInstance().level.getGameTime() : 0L;
+        session.getState().recordSentModPayload(new com.mockplayer.api.ModPayloadInfo(
+                id,
+                id.getNamespace(),
+                com.mockplayer.platform.Services.PLATFORM.getModDisplayName(id.getNamespace()),
+                tick,
+                com.mockplayer.session.PayloadInspector.estimateSize(payload)));
+    }
 }
