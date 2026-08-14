@@ -18,6 +18,7 @@
     "MixinLocalPlayer",
     "MixinMinecraft",
     "MixinMultiPlayerGameMode",
+    "MixinServerPlayer",
     "MixinServerLoginPacketListenerImpl"
   ],
   "server": [],

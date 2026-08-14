@@ -27,6 +27,7 @@
     "MockplayerSkyLightSectionStorageAccessor",
     "MockplayerDataLayerStorageMapAccessor",
     "MockplayerChunkAccessAccessor",
+    "MockplayerChunkMapAccessor",
     "MockplayerDataLayerAccessor",
     "MockplayerSynchedEntityDataAccessor",
     "MockplayerLightEngineQueueAccessor",
@@ -38,6 +39,7 @@
     "MockplayerAttributeTrackSamplerAccessor",
     "MockplayerChunkSkyLightSourcesAccessor",
     "MockplayerLevelChunkTicksAccessor",
+    "MockplayerLevelRendererAccessor",
     "MockplayerClientLevelMiscAccessor",
     "MockplayerLevelMiscAccessor",
     "MockplayerBlockTintCacheAccessor"

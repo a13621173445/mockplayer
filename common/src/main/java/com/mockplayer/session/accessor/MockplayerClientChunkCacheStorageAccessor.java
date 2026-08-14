@@ -7,7 +7,10 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-/** 暴露 ClientChunkCache$Storage（私有内部类）的 chunk 数组与跟踪集合。 */
+/**
+ * 暴露 ClientChunkCache$Storage（私有内部类）的 chunk 数组与跟踪集合。
+ * 26.1.2 空 section 跟踪是单个 LongOpenHashSet（26.2 拆成 added/removed 四数组）。
+ */
 @Mixin(targets = "net.minecraft.client.multiplayer.ClientChunkCache$Storage")
 public interface MockplayerClientChunkCacheStorageAccessor {
 
@@ -17,15 +20,6 @@ public interface MockplayerClientChunkCacheStorageAccessor {
     @Accessor("chunkRadius")
     int mockplayer$getChunkRadius();
 
-    @Accessor("addedLoadedChunks")
-    LongOpenHashSet[] mockplayer$getAddedLoadedChunks();
-
-    @Accessor("removedLoadedChunks")
-    LongOpenHashSet[] mockplayer$getRemovedLoadedChunks();
-
-    @Accessor("addedEmptySections")
-    LongOpenHashSet[] mockplayer$getAddedEmptySections();
-
-    @Accessor("removedEmptySections")
-    LongOpenHashSet[] mockplayer$getRemovedEmptySections();
+    @Accessor("loadedEmptySections")
+    LongOpenHashSet mockplayer$getLoadedEmptySections();
 }

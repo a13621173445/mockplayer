@@ -28,6 +28,10 @@ public interface MockplayerClientLevelAccessor {
     @org.spongepowered.asm.mixin.gen.Accessor("environmentAttributes")
     net.minecraft.world.attribute.EnvironmentAttributeSystem mockplayer$getEnvironmentAttributes();
 
+    /** 假人 level 的渲染器（26.1.2 破坏进度状态挂在 LevelRenderer 上，记账用）。 */
+    @org.spongepowered.asm.mixin.gen.Accessor("levelRenderer")
+    net.minecraft.client.renderer.LevelRenderer mockplayer$getLevelRenderer();
+
     @Invoker("getAllMapData")
     java.util.Map<net.minecraft.world.level.saveddata.maps.MapId, net.minecraft.world.level.saveddata.maps.MapItemSavedData> mockplayer$getAllMapData();
 

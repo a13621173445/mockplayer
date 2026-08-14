@@ -204,31 +204,17 @@ public final class MemoryEstimator {
     public static long levelStructuresBytes(net.minecraft.client.multiplayer.ClientLevel level) {
         long total = 0;
         try {
-            // 区块缓存存储：AtomicReferenceArray + 跟踪 LongOpenHashSet[]（容量按当前半径）
+            // 区块缓存存储：AtomicReferenceArray + 空 section 跟踪 LongOpenHashSet
+            // （26.1.2 单个集合；26.2 拆成 added/removed 四数组）
             Object storage = CHUNK_CACHE_STORAGE_FIELD.get(level.getChunkSource());
             MockplayerClientChunkCacheStorageAccessor storageAccess =
                     (MockplayerClientChunkCacheStorageAccessor) storage;
             long side = 2L * storageAccess.mockplayer$getChunkRadius() + 1;
             total += StructureHeap.atomicReferenceArrayHeap((int) (side * side));
-            int loaded = level.getChunkSource().getLoadedChunksCount();
-            LongOpenHashSet[] sets = storageAccess.mockplayer$getAddedLoadedChunks();
-            for (LongOpenHashSet set : sets) {
-                total += StructureHeap.longOpenHashSetHeapByCapacity(
-                        FastutilKeys.longKey(set).length);
-            }
-            for (LongOpenHashSet set : storageAccess.mockplayer$getRemovedLoadedChunks()) {
-                total += StructureHeap.longOpenHashSetHeapByCapacity(
-                        FastutilKeys.longKey(set).length);
-            }
-            // 空 section 跟踪集合同样预分配大容量（视距范围），按实际数组长度计
-            for (LongOpenHashSet set : storageAccess.mockplayer$getAddedEmptySections()) {
-                total += StructureHeap.longOpenHashSetHeapByCapacity(
-                        FastutilKeys.longKey(set).length);
-            }
-            for (LongOpenHashSet set : storageAccess.mockplayer$getRemovedEmptySections()) {
-                total += StructureHeap.longOpenHashSetHeapByCapacity(
-                        FastutilKeys.longKey(set).length);
-            }
+            // 空 section 跟踪集合预分配大容量（视距范围），按实际数组长度计
+            LongOpenHashSet empty = storageAccess.mockplayer$getLoadedEmptySections();
+            total += StructureHeap.longOpenHashSetHeapByCapacity(
+                    FastutilKeys.longKey(empty).length);
 
             // 光照引擎：sky/block 各一张 sectionStates + columnsWithSources + 数据层表
             MockplayerLightEngineAccessor light =
@@ -282,7 +268,7 @@ public final class MemoryEstimator {
             // 实测单条 ≈ 335B，随队列积压计）
             total += queue.size() * 335L;
 
-            // level 直接小字段：tint 缓存、破坏进度、玩家/龙部件/全局渲染 BE 列表、邻居/生物群系
+            // level 直接小字段：tint 缓存、玩家/龙部件/全局渲染 BE 列表、邻居/生物群系
             MockplayerClientLevelMiscAccessor misc =
                     (MockplayerClientLevelMiscAccessor) level;
             total += StructureHeap.object2ObjectArrayMapHeap(misc.mockplayer$getTintCaches().size());
@@ -296,8 +282,13 @@ public final class MemoryEstimator {
                         FastutilKeys.longKey(cacheAccess.mockplayer$getCache()))
                         + LayoutSizes.shallowSize(cacheAccess.mockplayer$getLock().getClass());
             }
-            total += StructureHeap.int2ObjectMapHeap(misc.mockplayer$getDestroyingBlocks().size());
-            total += StructureHeap.long2ObjectMapHeap(misc.mockplayer$getDestructionProgress().size());
+            // 破坏进度（26.1.2 挂在 LevelRenderer 上，经假人 level 的 levelRenderer 取）
+            com.mockplayer.session.accessor.MockplayerLevelRendererAccessor renderer =
+                    (com.mockplayer.session.accessor.MockplayerLevelRendererAccessor)
+                            ((com.mockplayer.session.accessor.MockplayerClientLevelAccessor) level)
+                                    .mockplayer$getLevelRenderer();
+            total += StructureHeap.int2ObjectMapHeap(renderer.mockplayer$getDestroyingBlocks().size());
+            total += StructureHeap.long2ObjectMapHeap(renderer.mockplayer$getDestructionProgress().size());
             total += listHeap(misc.mockplayer$getPlayers());
             total += listHeap(misc.mockplayer$getDragonParts());
             total += StructureHeap.objectOpenHashSetHeap(

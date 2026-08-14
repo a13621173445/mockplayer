@@ -24,12 +24,25 @@ import com.mockplayer.test.suites.ApiSmokeSuite;
 import com.mockplayer.test.suites.MemoryAccountingSuite;
 import com.mockplayer.test.suites.ApiFullSuite;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
+import net.minecraft.world.level.dimension.DimensionType;
+import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.FlatLevelSource;
+import net.minecraft.world.level.levelgen.WorldDimensions;
 import net.minecraft.world.level.levelgen.WorldOptions;
-import net.minecraft.world.level.levelgen.presets.WorldPresets;
+import net.minecraft.world.level.levelgen.flat.FlatLayerInfo;
+import net.minecraft.world.level.levelgen.flat.FlatLevelGeneratorSettings;
+import net.minecraft.world.level.levelgen.placement.PlacedFeature;
+import net.minecraft.world.level.levelgen.structure.StructureSet;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -413,7 +426,60 @@ public final class SuiteRunner {
                 new LevelSettings("mocktest", GameType.SURVIVAL,
                         LevelSettings.DifficultySettings.DEFAULT, true, WorldDataConfiguration.DEFAULT),
                 new WorldOptions(0L, false, false),
-                WorldPresets::createFlatWorldDimensions,
+                SuiteRunner::createTestDimensions,
                 null);
+    }
+
+    /**
+     * 26.1.2 的测试世界：与 26.2 的 FLAT_ALL_DIMENSIONS（createTestWorldDimensions）
+     * 完全等价的 flat 世界——overworld = desert + 1 层 bedrock + 67 层 sandstone（地表
+     * y=67），nether = basalt_deltas + 1 bedrock + 3 basalt，end = the_end + 1 bedrock + 3
+     * end_stone。
+     *
+     * 必须等价的原因：control-commands 的 chunkRadius 用例把假人 tp 到 (3000, 4, 0)。
+     * 26.2 地表 y=67 → y=4 在地下，假人 tp 后被服务端原版物理挤出、摔落伤害清零；
+     * 26.1.2 默认 FLAT 预设只有 4 层（地表 y=3），y=4 恰在地表——假人 tp 到未加载
+     * 区块会掉虚空，服务端按移动包把假人拉穿方块累积摔落伤害而摔死。测试环境不
+     * 等价会掩盖/放大假人行为差异，故 26.1.2 自行构造与 26.2 相同的世界（含三维度，
+     * 跨维用例需要 nether/end）。
+     *
+     * 输入: registries = 数据包世界生成 registry；预期: 与 26.2 地表结构一致的 WorldDimensions。
+     */
+    private static WorldDimensions createTestDimensions(HolderLookup.Provider registries) {
+        HolderLookup<Biome> biomes = registries.lookupOrThrow(Registries.BIOME);
+        HolderLookup<StructureSet> structureSets = registries.lookupOrThrow(Registries.STRUCTURE_SET);
+        HolderLookup<PlacedFeature> placedFeatures = registries.lookupOrThrow(Registries.PLACED_FEATURE);
+        HolderLookup<DimensionType> dimensionTypes = registries.lookupOrThrow(Registries.DIMENSION_TYPE);
+        FlatLevelGeneratorSettings overworldSettings = FlatLevelGeneratorSettings
+                .getDefault(biomes, structureSets, placedFeatures)
+                .withBiomeAndLayers(
+                        List.of(new FlatLayerInfo(1, Blocks.BEDROCK), new FlatLayerInfo(67, Blocks.SANDSTONE)),
+                        java.util.Optional.empty(),
+                        biomes.getOrThrow(Biomes.DESERT));
+        FlatLevelGeneratorSettings netherSettings = FlatLevelGeneratorSettings
+                .getDefault(biomes, structureSets, placedFeatures)
+                .withBiomeAndLayers(
+                        List.of(new FlatLayerInfo(1, Blocks.BEDROCK), new FlatLayerInfo(3, Blocks.BASALT)),
+                        java.util.Optional.empty(),
+                        biomes.getOrThrow(Biomes.BASALT_DELTAS));
+        FlatLevelGeneratorSettings endSettings = FlatLevelGeneratorSettings
+                .getDefault(biomes, structureSets, placedFeatures)
+                .withBiomeAndLayers(
+                        List.of(new FlatLayerInfo(1, Blocks.BEDROCK), new FlatLayerInfo(3, Blocks.END_STONE)),
+                        java.util.Optional.empty(),
+                        biomes.getOrThrow(Biomes.THE_END));
+        return new WorldDimensions(java.util.Map.of(
+                LevelStem.OVERWORLD,
+                new LevelStem(
+                        dimensionTypes.getOrThrow(BuiltinDimensionTypes.OVERWORLD),
+                        new FlatLevelSource(overworldSettings)),
+                LevelStem.NETHER,
+                new LevelStem(
+                        dimensionTypes.getOrThrow(BuiltinDimensionTypes.NETHER),
+                        new FlatLevelSource(netherSettings)),
+                LevelStem.END,
+                new LevelStem(
+                        dimensionTypes.getOrThrow(BuiltinDimensionTypes.END),
+                        new FlatLevelSource(endSettings))));
     }
 }

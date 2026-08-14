@@ -1356,11 +1356,12 @@ public class ControlCommandsSuite extends TestSuite {
         ctx.check("chunk server tracking view after set", () -> serverView.get() == 4,
                 () -> "view=" + serverView.get());
         wait[0] = 0;
-        ctx.await("chunk load settle 60 ticks", () -> ++wait[0] >= 60, 120);
+        // 26.1.2 的 chunk 传输比 26.2 慢（客户端 batch 确认/渲染线程负载），等真实加载
+        // （轮询，最长 300 tick）而非固定等待；tracking=4 含 ±5（ChunkTrackingView ±viewDistance+1）。
+        ctx.await("chunk set +5 loaded", () -> ctx.bot().isBlockLoaded(probe.get().offset(80, 0, 0)), 300);
         ctx.run(() -> {
             if (!loadedChecked.get()) {
                 loadedChecked.set(true);
-                ctx.checkNow("chunk set +5 loaded", ctx.bot().isBlockLoaded(probe.get().offset(80, 0, 0)));
                 ctx.checkNow("chunk set +6 not loaded", !ctx.bot().isBlockLoaded(probe.get().offset(96, 0, 0)));
                 ctx.checkNow("chunk main player isolated",
                         Minecraft.getInstance().options.renderDistance().get() == mainOptionsBefore.get());
@@ -1429,16 +1430,17 @@ public class ControlCommandsSuite extends TestSuite {
     }
 
     /**
-     * 反射读主玩家 level 的 destroyingBlocks（裂纹进度）：
+     * 反射读主玩家 destroyingBlocks（裂纹进度）：
      * 服务端会向主玩家广播 bot 的挖掘进度（原版行为），但绝不允许出现「主玩家自己 id」的条目
      * （旧 bug：假人 gameMode 的 lambda 用主玩家 id 往主 level 画裂纹）。P0-1 隔离断言用。
+     * 26.1.2 的 destroyingBlocks 在 LevelRenderer（26.2 移入 ClientLevel）。
      */
     private static boolean mainDestroyingBlocksHasMainPlayer() {
         try {
             java.lang.reflect.Field f =
-                    Minecraft.getInstance().level.getClass().getDeclaredField("destroyingBlocks");
+                    Minecraft.getInstance().levelRenderer.getClass().getDeclaredField("destroyingBlocks");
             f.setAccessible(true);
-            java.util.Map<?, ?> map = (java.util.Map<?, ?>) f.get(Minecraft.getInstance().level);
+            java.util.Map<?, ?> map = (java.util.Map<?, ?>) f.get(Minecraft.getInstance().levelRenderer);
             return Minecraft.getInstance().player != null
                     && map.containsKey(Minecraft.getInstance().player.getId());
         } catch (Exception e) {
@@ -1446,13 +1448,13 @@ public class ControlCommandsSuite extends TestSuite {
         }
     }
 
-    /** 反射读主玩家 level 的 destroyingBlocks（裂纹进度）数量（失败返回 -1）。 */
+    /** 反射读主玩家 destroyingBlocks（裂纹进度）数量（失败返回 -1）。 */
     private static int mainDestroyingBlockCount() {
         try {
             java.lang.reflect.Field f =
-                    Minecraft.getInstance().level.getClass().getDeclaredField("destroyingBlocks");
+                    Minecraft.getInstance().levelRenderer.getClass().getDeclaredField("destroyingBlocks");
             f.setAccessible(true);
-            return ((java.util.Map<?, ?>) f.get(Minecraft.getInstance().level)).size();
+            return ((java.util.Map<?, ?>) f.get(Minecraft.getInstance().levelRenderer)).size();
         } catch (Exception e) {
             return -1;
         }
@@ -1792,6 +1794,3 @@ public class ControlCommandsSuite extends TestSuite {
         return -1;
     }
 }
-
-
-
