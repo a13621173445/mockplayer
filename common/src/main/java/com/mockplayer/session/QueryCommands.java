@@ -201,7 +201,7 @@ public class QueryCommands {
     // ===== mod payload 查询（入站拦截 + 出站记录） =====
 
     /**
-     * /query payload <player>：入站 mod payload 列表（按 typeId 聚合 + 统计）。
+     * /query payload {@code <player>}：入站 mod payload 列表（按 typeId 聚合 + 统计）。
      * 统计行：次数 / 最近 tick / 总字节（估算）/ 最近间隔（最近两条到达 tick 差，
      * 标识疑似周期性心跳包；不足两条显示 ?）。
      */
@@ -242,7 +242,7 @@ public class QueryCommands {
     }
 
     /**
-     * /query payload <player> <typeId>：单个 typeId 详情（最近最多 20 条 + 统计）。
+     * /query payload {@code <player> <typeId>}：单个 typeId 详情（最近最多 20 条 + 统计）。
      */
     public static Component payloadDetail(String name, String typeId) {
         Bot bot = CommandSupport.findBot(name);
@@ -278,7 +278,7 @@ public class QueryCommands {
     }
 
     /**
-     * /query payload <player> <typeId> raw：最近一条的反射 dump（JSON，调试用）。
+     * /query payload {@code <player> <typeId> raw}：最近一条的反射 dump（JSON，调试用）。
      */
     public static Component payloadRaw(String name, String typeId) {
         Bot bot = CommandSupport.findBot(name);
@@ -293,7 +293,7 @@ public class QueryCommands {
     }
 
     /**
-     * /query payload clear <player>：双向清空 mod payload 记录。
+     * /query payload clear {@code <player>}：双向清空 mod payload 记录。
      */
     public static Component payloadClear(String name) {
         Bot bot = CommandSupport.findBot(name);
