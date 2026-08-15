@@ -12,16 +12,20 @@ import com.mockplayer.session.FakeSession;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
+
+import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 
 /**
  * 让假人 gameMode 操作（挖矿/放置/攻击/交互/使用物品）复用原版逻辑但作用对象是假人，不污染主玩家。
  *
  * 原版 MultiPlayerGameMode 内部硬编码 this.minecraft.player / this.minecraft.level（主玩家）——假人
- * gameMode（fakeGameMode）调它会把操作打到主玩家（污染 + 依赖主玩家视角）。@Redirect 把方法内
- * Minecraft.player / Minecraft.level 字段访问换成假人（按连接判假人），其余逻辑（发包/服务端处理/
- * 预测）完全复用原版——mod 扩展（如 PiercingWeapon 戳刺）假人也继承，不自己写一份。
+ * gameMode（fakeGameMode）调它会把操作打到主玩家（污染 + 依赖主玩家视角）。@ModifyExpressionValue
+ * 把方法内 Minecraft.player / Minecraft.level 字段访问换成假人（按连接判假人），其余逻辑（发包/
+ * 服务端处理/预测）完全复用原版——mod 扩展（如 PiercingWeapon 戳刺）假人也继承，不自己写一份。
  * 主玩家连接不受影响（isFake 判断只在假人连接时替换）。
+ *
+ * 用 @ModifyExpressionValue 而非 @Redirect：同一指令可多 mod 共存（handler 链），不与应用冲突
+ * （@Redirect 同一指令只允许一个，第二个应用直接炸）。
  */
 @Mixin(MultiPlayerGameMode.class)
 public abstract class MixinMultiPlayerGameMode {
@@ -37,7 +41,7 @@ public abstract class MixinMultiPlayerGameMode {
         return FakeConnectionRegistry.getSession(this.connection.getConnection());
     }
 
-    @Redirect(
+    @ModifyExpressionValue(
             method = {
                     "continueDestroyBlock", "destroyBlock", "ensureHasSentCarriedItem", "handleCreativeModeItemAdd",
                     "handleCreativeModeItemDrop", "isServerControlledInventory", "piercingAttack",
@@ -48,17 +52,17 @@ public abstract class MixinMultiPlayerGameMode {
             },
             at = @At(value = "FIELD", target = "Lnet/minecraft/client/Minecraft;player:Lnet/minecraft/client/player/LocalPlayer;")
     )
-    private LocalPlayer mockplayer$useFakePlayer(Minecraft mc) {
+    private LocalPlayer mockplayer$useFakePlayer(LocalPlayer original) {
         if (this.mockplayer$isFake()) {
             FakeSession session = this.mockplayer$session();
             if (session != null && session.getFakePlayer() != null) {
                 return session.getFakePlayer();
             }
         }
-        return mc.player;
+        return original;
     }
 
-    @Redirect(
+    @ModifyExpressionValue(
             method = {
                     "continueDestroyBlock", "destroyBlock",
                     "startDestroyBlock", "stopDestroyBlock", "useItem", "useItemOn",
@@ -67,7 +71,7 @@ public abstract class MixinMultiPlayerGameMode {
             },
             at = @At(value = "FIELD", target = "Lnet/minecraft/client/Minecraft;level:Lnet/minecraft/client/multiplayer/ClientLevel;")
     )
-    private ClientLevel mockplayer$useFakeLevel(Minecraft mc) {
+    private ClientLevel mockplayer$useFakeLevel(ClientLevel original) {
         if (this.mockplayer$isFake()) {
             FakeSession session = this.mockplayer$session();
             if (session != null) {
@@ -77,6 +81,6 @@ public abstract class MixinMultiPlayerGameMode {
                 }
             }
         }
-        return mc.level;
+        return original;
     }
 }
