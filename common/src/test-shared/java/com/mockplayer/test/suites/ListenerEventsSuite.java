@@ -170,9 +170,9 @@ public class ListenerEventsSuite extends TestSuite {
             });
         });
         ctx.await("interact wait 20", () -> ++wait[0] >= 20, 40);
-        ctx.run(() -> ctx.bot().actions().useItem(InteractionHand.MAIN_HAND));
+        ctx.run(() -> ctx.bot().actions().use(InteractionHand.MAIN_HAND));
         ctx.await("interact wait 40", () -> ++wait[0] >= 40, 40);
-        ctx.run(() -> ctx.bot().actions().useItemOn(
+        ctx.run(() -> ctx.bot().actions().use(
                 ctx.bot().getLocalPlayer().blockPosition().offset(3, 0, 0), Direction.UP));
         ctx.await("onUseItem/onInteractBlock",
                 () -> count("onUseItem") >= 1 && count("onInteractBlock") >= 1, 100);
@@ -187,10 +187,10 @@ public class ListenerEventsSuite extends TestSuite {
                     "item replace entity " + ctx.botName() + " weapon.mainhand with minecraft:dirt"));
         });
         ctx.await("dirt in hand", () -> ctx.bot().getLocalPlayer().getMainHandItem().is(Items.DIRT), 200);
-        ctx.run(() -> ctx.bot().actions().placeBlock(
+        ctx.run(() -> ctx.bot().actions().place(
                 ctx.bot().getLocalPlayer().blockPosition().offset(4, 0, 0), Direction.UP));
         ctx.await("onPlaceBlock", () -> count("onPlaceBlock") >= 1, 100);
-        ctx.run(() -> ctx.bot().actions().mineBlock(
+        ctx.run(() -> ctx.bot().actions().mine(
                 ctx.bot().getLocalPlayer().blockPosition().offset(4, 0, 0)));
         ctx.await("onBreakBlock", () -> count("onBreakBlock") >= 1, 200);
         ctx.check("onPlaceBlock", () -> count("onPlaceBlock") >= 1);
@@ -221,7 +221,7 @@ public class ListenerEventsSuite extends TestSuite {
             if (zombie != null && !interacted.get()) {
                 interacted.set(true);
                 ctx.bot().actions().lookAt(zombie);
-                ctx.bot().actions().interact(zombie);
+                ctx.bot().actions().use(zombie);
             }
             if (zombie != null && !attacked.get()) {
                 attacked.set(true);
@@ -314,13 +314,13 @@ public class ListenerEventsSuite extends TestSuite {
         ctx.run(() -> {
             if (!used.get()) {
                 used.set(true);
-                ctx.bot().actions().useItem(InteractionHand.MAIN_HAND);
+                ctx.bot().actions().use(InteractionHand.MAIN_HAND);
             }
         });
         ctx.await("onItemCooldown", () -> {
             if (count("onItemCooldown") >= 1 && !cooldown.get()) {
                 cooldown.set(true);
-                ctx.bot().actions().dropSelected();
+                ctx.bot().actions().drop();
             }
             return count("onDropItem") >= 1;
         }, 200);
@@ -379,7 +379,7 @@ public class ListenerEventsSuite extends TestSuite {
             if (villager != null && !interacted.get()) {
                 interacted.set(true);
                 ctx.bot().actions().lookAt(villager);
-                ctx.bot().actions().interact(villager);
+                ctx.bot().actions().use(villager);
             }
             return count("onMerchantOffersUpdated") >= 1;
         }, 200);

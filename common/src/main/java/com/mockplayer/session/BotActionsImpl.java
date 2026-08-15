@@ -133,13 +133,13 @@ public class BotActionsImpl implements BotActions {
     }
 
     @Override
-    public BotActions sustainedAttack(Entity target) {
+    public BotActions holdAttack(Entity target) {
         this.sustainedAttackTarget = target;
         return this;
     }
 
     @Override
-    public BotActions sustainedUse(Entity target) {
+    public BotActions holdUse(Entity target) {
         this.sustainedUseTarget = target;
         return this;
     }
@@ -154,10 +154,10 @@ public class BotActionsImpl implements BotActions {
         this.missTime = 0;
         this.rightClickDelay = 0;
         this.stopMining();
-        // 原版松开右键：正在使用物品（举盾/拉弓/吃东西）→ releaseUsingItem
+        // 原版松开右键：正在使用物品（举盾/拉弓/吃东西）→ releaseUse
         LocalPlayer usingPlayer = this.bot.getLocalPlayer();
         if (usingPlayer != null && usingPlayer.isUsingItem()) {
-            this.releaseUsingItem();
+            this.releaseUse();
         }
         return this;
     }
@@ -282,7 +282,7 @@ public class BotActionsImpl implements BotActions {
         }
         if (this.sustainedUseTarget != null) {
             if (this.sustainedUseTarget.isAlive()) {
-                this.interact(this.sustainedUseTarget);
+                this.use(this.sustainedUseTarget);
             } else {
                 this.sustainedUseTarget = null;
             }
@@ -318,13 +318,13 @@ public class BotActionsImpl implements BotActions {
         }
         // 连点左键：主手蓄力满（attack strength 1.0）才攻击一次（原版攻击节奏）
         if (this.rapidAttackLook && player.getAttackStrengthScale(0.0F) >= 1.0F) {
-            this.attackLook();
+            this.attack();
         }
         // 连点右键：每 20 tick（1 秒）使用一次
         if (this.rapidUseLook) {
             if (++this.rapidUseTicks >= 20) {
                 this.rapidUseTicks = 0;
-                this.useLook();
+                this.use();
             }
         }
     }
@@ -370,11 +370,11 @@ public class BotActionsImpl implements BotActions {
     }
 
     @Override
-    public void interact(Entity target) {
+    public void use(Entity target) {
         this.interactResult(target);
     }
 
-    /** 右键实体（交易/喂食/骑乘等），返回原版分发结果（useLook 需判断 fallthrough）。 */
+    /** 右键实体（交易/喂食/骑乘等），返回原版分发结果（use() 需判断 fallthrough）。 */
     private net.minecraft.world.InteractionResult interactResult(Entity target) {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null || target == null || this.bot.getGameMode() == null) {
@@ -394,7 +394,7 @@ public class BotActionsImpl implements BotActions {
     }
 
     @Override
-    public void attackLook() {
+    public void attack() {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null) {
             return;
@@ -405,29 +405,29 @@ public class BotActionsImpl implements BotActions {
         if (hit instanceof net.minecraft.world.phys.BlockHitResult blockHit
                 && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK
                 && !player.level().getBlockState(blockHit.getBlockPos()).isAir()) {
-            // 单点方块 = 打一下（事件语义与 attackBlock 一致）
+            // 单点方块 = 打一下（事件语义与 attack(BlockPos) 一致）
             this.bot.fireOnBreakBlock(blockHit.getBlockPos());
         }
         this.continueAttackLikeVanilla(false);
     }
 
     @Override
-    public void useLook() {
+    public void use() {
         if (this.bot.getLocalPlayer() == null) {
             return;
         }
-        // 单点右键 = 原版 startUseItem 一次（实体 interact fallthrough / 方块 useItemOn fallthrough / 空 useItem）
+        // 单点右键 = 原版 startUseItem 一次（实体 use(Entity) fallthrough / 方块 use(BlockPos, Direction) fallthrough / 空 use(hand)）
         this.startUseItemLikeVanilla();
     }
 
     @Override
-    public BotActions sustainedAttackLook() {
+    public BotActions holdAttack() {
         this.sustainedAttackLook = true;
         return this;
     }
 
     @Override
-    public BotActions sustainedUseLook() {
+    public BotActions holdUse() {
         this.sustainedUseLook = true;
         return this;
     }
@@ -447,17 +447,17 @@ public class BotActionsImpl implements BotActions {
     }
 
     @Override
-    public void attackBlock(BlockPos pos) {
+    public void attack(BlockPos pos) {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null || pos == null || this.bot.getGameMode() == null) {
             return;
         }
-        // 原版等价距离判断：与 mineBlock 同口径（blockInteractionRange，生存约 4.5 格），
+        // 原版等价距离判断：与 mine(BlockPos) 同口径（blockInteractionRange，生存约 4.5 格），
         // 超距不发包（服务端也会拒绝，客户端提前拦下避免无意义包）
         if (!player.isWithinBlockInteractionRange(pos, 0.0)) {
             return;
         }
-        // 26.2 无 attackBlock：用 startDestroyBlock + 立即 stopDestroyBlock 模拟一次左键点击
+        // 26.2 无 attack(BlockPos) 的原版等价：用 startDestroyBlock + 立即 stopDestroyBlock 模拟一次左键点击
         this.bot.getGameMode().startDestroyBlock(pos, Direction.UP);
         this.bot.getGameMode().stopDestroyBlock();
         player.swing(InteractionHand.MAIN_HAND);
@@ -465,7 +465,7 @@ public class BotActionsImpl implements BotActions {
     }
 
     @Override
-    public void mineBlock(BlockPos pos) {
+    public void mine(BlockPos pos) {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null || pos == null || this.bot.getGameMode() == null) {
             return;
@@ -513,7 +513,7 @@ public class BotActionsImpl implements BotActions {
     }
 
     @Override
-    public void useItem(InteractionHand hand) {
+    public void use(InteractionHand hand) {
         this.useItemResult(hand);
     }
 
@@ -533,7 +533,7 @@ public class BotActionsImpl implements BotActions {
     }
 
     @Override
-    public void releaseUsingItem() {
+    public void releaseUse() {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null || this.bot.getGameMode() == null) {
             return;
@@ -544,7 +544,7 @@ public class BotActionsImpl implements BotActions {
     }
 
     @Override
-    public void useItemOn(BlockPos pos, Direction side) {
+    public void use(BlockPos pos, Direction side) {
         this.useItemOnResult(pos, side);
     }
 
@@ -759,15 +759,15 @@ public class BotActionsImpl implements BotActions {
     }
 
     @Override
-    public void placeBlock(BlockPos pos, Direction side) {
+    public void place(BlockPos pos, Direction side) {
         // 点击 pos 的 side 面，实际放置位置由服务端 BlockPlaceContext 决定
         // （可替换方块 → pos 本身；实心方块 → pos.relative(side)）；朝向由外部调用者负责
-        this.useItemOn(pos, side);
+        this.use(pos, side);
         this.bot.fireOnPlaceBlock(pos);
     }
 
     @Override
-    public void placeBlockAt(BlockPos target) {
+    public void placeAt(BlockPos target) {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null || target == null || this.bot.getGameMode() == null) {
             return;
@@ -794,12 +794,12 @@ public class BotActionsImpl implements BotActions {
         if (support == null || supportSide == null) {
             return; // 无支撑块，不放置
         }
-        this.useItemOn(support, supportSide);
+        this.use(support, supportSide);
         this.bot.fireOnPlaceBlock(target);
     }
 
     @Override
-    public void dropSelected() {
+    public void drop() {
         LocalPlayer player = this.bot.getLocalPlayer();
         if (player == null) {
             return;
@@ -868,11 +868,6 @@ public class BotActionsImpl implements BotActions {
             return;
         }
         this.mount(closest);
-    }
-
-    @Override
-    public void mount() {
-        this.mount(true);
     }
 
     @Override

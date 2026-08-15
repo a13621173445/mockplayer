@@ -83,7 +83,7 @@ public class CombatStabSuite extends TestSuite {
             if (target != null) {
                 ctx.bot().actions().lookAt(target);
             }
-            ctx.bot().actions().attackLook();
+            ctx.bot().actions().attack();
         });
         ctx.await("gui left-click spear stabs", () -> {
             ctx.server().execute(() -> {
@@ -103,7 +103,7 @@ public class CombatStabSuite extends TestSuite {
             if (target != null) {
                 ctx.bot().actions().lookAt(target);
             }
-            ctx.bot().actions().useLook();
+            ctx.bot().actions().use();
         });
         AtomicBoolean using = new AtomicBoolean();
         ctx.await("gui right-click raises spear", () -> {

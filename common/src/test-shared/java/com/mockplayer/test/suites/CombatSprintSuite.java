@@ -64,7 +64,7 @@ public class CombatSprintSuite extends TestSuite {
                 ctx.bot().getLocalPlayer().getInventory().setSelectedSlot(0);
                 ctx.bot().actions().setForward(1.0F);
                 ctx.bot().actions().setSprint(true);
-                ctx.bot().actions().useItem(InteractionHand.MAIN_HAND);
+                ctx.bot().actions().use(InteractionHand.MAIN_HAND);
                 ctx.server().execute(() -> {
                     ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
                     if (sp != null) {
@@ -159,7 +159,7 @@ public class CombatSprintSuite extends TestSuite {
                 ctx.bot().actions().lookAt(target);
             }
             ctx.bot().getLocalPlayer().getInventory().setSelectedSlot(0);
-            ctx.bot().actions().sustainedUseLook();
+            ctx.bot().actions().holdUse();
             ctx.bot().actions().setForward(1.0F);
             ctx.bot().actions().setSprint(true);
         });
@@ -202,7 +202,7 @@ public class CombatSprintSuite extends TestSuite {
             if (!issued.get()) {
                 issued.set(true);
                 ctx.bot().actions().look(ctx.bot().getLocalPlayer().getYRot(), -45.0F);
-                ctx.bot().actions().sustainedUseLook();
+                ctx.bot().actions().holdUse();
             }
         });
         wait[0] = 0;

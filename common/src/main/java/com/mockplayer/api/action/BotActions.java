@@ -95,38 +95,38 @@ public interface BotActions {
     BotActions jump();
 
     /**
-     * 持续攻击目标（每 tick 自动 attack 一次，目标死亡自动停止；配合 {@link #stopSustained()}）。
+     * 按住左键持续攻击目标（每 tick 自动 attack 一次，目标死亡自动停止；配合 {@link #stopSustained()}）。
      *
      * <p>不自动转向，需要追踪目标朝向时由外部调用者按 tick 调 {@link #lookAt(Entity)}。
      *
      * @param target 攻击目标
      * @return this
      */
-    BotActions sustainedAttack(Entity target);
+    BotActions holdAttack(Entity target);
 
     /**
-     * 持续右键目标（每 tick 自动 interact 一次，目标死亡自动停止；配合 {@link #stopSustained()}）。
+     * 按住右键持续交互目标（每 tick 自动 use 一次，目标死亡自动停止；配合 {@link #stopSustained()}）。
      *
      * <p>不自动转向，需要追踪目标朝向时由外部调用者按 tick 调 {@link #lookAt(Entity)}。
      *
      * @param target 交互目标
      * @return this
      */
-    BotActions sustainedUse(Entity target);
+    BotActions holdUse(Entity target);
 
     /**
      * 沿假人视线射线执行一次原版左键动作（单点）：
-     * 命中实体 → {@link #attack(Entity)}；命中方块 → 打一下（attackBlock 等价，
+     * 命中实体 → {@link #attack(Entity)}；命中方块 → 打一下（{@link #attack(BlockPos)} 等价，
      * 不掉方块）；空 → 挥空。射线复用原版 pick（方块 4.5 / 实体 3.0，创造 +2）。
      */
-    void attackLook();
+    void attack();
 
     /**
      * 沿假人视线射线执行一次原版右键动作（单点）：
-     * 命中实体 → {@link #interact(Entity)}；命中方块 → {@link #useItemOn(BlockPos, Direction)}；
-     * 空 → {@link #useItem(InteractionHand)}。
+     * 命中实体 → {@link #use(Entity)}；命中方块 → {@link #use(BlockPos, Direction)}；
+     * 空 → {@link #use(InteractionHand)}。
      */
-    void useLook();
+    void use();
 
     /**
      * 长按左键（每 tick 沿射线）：实体 → 持续攻击；方块 → 持续挖掘；
@@ -134,19 +134,19 @@ public interface BotActions {
      *
      * @return this
      */
-    BotActions sustainedAttackLook();
+    BotActions holdAttack();
 
     /**
-     * 长按右键（每 tick 沿射线）：实体 → 持续交互；方块 → 首次 useItemOn，
-     * 之后持续 useItem（吃 / 拉弓 / 投掷的按住语义）；配合
+     * 长按右键（每 tick 沿射线）：实体 → 持续交互；方块 → 首次 {@link #use(BlockPos, Direction)}，
+     * 之后持续 {@link #use(InteractionHand)}（吃 / 拉弓 / 投掷的按住语义）；配合
      * {@link #stopSustained()} 停止。
      *
      * @return this
      */
-    BotActions sustainedUseLook();
+    BotActions holdUse();
 
     /**
-     * 停止持续攻击/使用（sustainedAttack/sustainedUse）。
+     * 停止持续攻击/使用（holdAttack/holdUse）。
      *
      * @return this
      */
@@ -191,10 +191,10 @@ public interface BotActions {
     /** 当前是否正在持续挖掘方块。 */
     boolean isMining();
 
-    /** 当前是否正在持续攻击（sustainedAttack / sustainedAttackLook）。 */
+    /** 当前是否正在持续攻击（holdAttack / holdAttack(Entity)）。 */
     boolean isSustainedAttacking();
 
-    /** 当前是否正在持续使用（sustainedUse / sustainedUseLook）。 */
+    /** 当前是否正在持续使用（holdUse / holdUse(Entity)）。 */
     boolean isSustainedUsing();
 
     /** 当前是否开启连点左键。 */
@@ -229,7 +229,7 @@ public interface BotActions {
      *
      * @param target 目标实体
      */
-    void interact(Entity target);
+    void use(Entity target);
 
     /**
      * 左键打方块（一次破坏进度）。
@@ -238,7 +238,7 @@ public interface BotActions {
      *
      * @param pos 方块位置
      */
-    void attackBlock(BlockPos pos);
+    void attack(BlockPos pos);
 
     /**
      * 开始挖掘方块（持续挖掘由 gameMode 自动累积进度并发 START/STOP 包）。
@@ -247,20 +247,20 @@ public interface BotActions {
      *
      * @param pos 方块位置
      */
-    void mineBlock(BlockPos pos);
+    void mine(BlockPos pos);
 
     /**
      * 使用手中物品（吃/拉弓/扔/喝药水等）。
      *
      * @param hand 使用的手
      */
-    void useItem(InteractionHand hand);
+    void use(InteractionHand hand);
 
     /**
      * 松开右键（结束使用物品）。长按场景：弓蓄满/提前放箭、投掷物抛出、盾牌解除格挡、
      * 吃食物提前取消——原版 releaseUsingItem 链路（发 RELEASE_USE_ITEM 包 + player.releaseUsingItem）。
      */
-    void releaseUsingItem();
+    void releaseUse();
 
     /**
      * 右键交互方块（开箱/点门/放方块前的位置）。
@@ -270,10 +270,10 @@ public interface BotActions {
      * @param pos  方块位置
      * @param side 交互的面
      */
-    void useItemOn(BlockPos pos, Direction side);
+    void use(BlockPos pos, Direction side);
 
     /**
-     * 放置方块（手持方块对准 pos 的 side 面放置；与 useItemOn 同通道，独立语义原语）。
+     * 放置方块（手持方块对准 pos 的 side 面放置；与 {@link #use(BlockPos, Direction)} 同通道，独立语义原语）。
      *
      * <p>实际放置位置与原版 BlockPlaceContext 一致：点击可替换方块（空气/水等）→ 放 pos 本身；
      * 点击实心方块 → 放 pos.relative(side)。不改变假人朝向，需要先看向目标请调用 {@link #lookAt(Vec3)}。
@@ -281,23 +281,23 @@ public interface BotActions {
      * @param pos  相邻方块位置
      * @param side 放置的面
      */
-    void placeBlock(BlockPos pos, Direction side);
+    void place(BlockPos pos, Direction side);
 
     /**
      * 直接指定被放置方块位置：内部自动找最近的不可替换相邻方块作支撑，点击其朝向
-     * target 的面完成放置（原语等价 placeBlock(支撑块, 反方向)）；找不到支撑块时
+     * target 的面完成放置（原语等价 place(支撑块, 反方向)）；找不到支撑块时
      * 不放置。
      *
      * <p>不改变假人朝向，需要先看向目标请调用 {@link #lookAt(Vec3)}。
      *
      * @param target 被放置方块的位置
      */
-    void placeBlockAt(BlockPos target);
+    void placeAt(BlockPos target);
 
     /**
-     * 丢弃当前选中槽位的物品（1 个）。
+     * 丢弃当前选中槽位的物品（1 个，等价原版 Q 键）。
      */
-    void dropSelected();
+    void drop();
 
     /**
      * 指定快捷栏槽位丢弃（1 个或整组）。
@@ -323,11 +323,6 @@ public interface BotActions {
      * @param onlyRideables true 只骑 Minecart/Boat/AbstractHorse，false 附近任意实体
      */
     void mount(boolean onlyRideables);
-
-    /**
-     * 骑乘附近最近的坐骑（只骑可骑乘实体）。
-     */
-    void mount();
 
     /**
      * 骑乘指定实体（右键坐骑等价，服务端决定能否上马）。

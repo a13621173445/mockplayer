@@ -49,7 +49,7 @@ public class MerchantSuite extends TestSuite {
                         .findFirst().orElse(null);
                 if (villager != null) {
                     ctx.bot().actions().lookAt(villager);
-                    ctx.bot().actions().interact(villager);
+                    ctx.bot().actions().use(villager);
                 }
             }
         });
