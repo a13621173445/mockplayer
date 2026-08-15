@@ -3,7 +3,6 @@ package com.mockplayer.session;
 
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 
-import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.network.chat.Component;

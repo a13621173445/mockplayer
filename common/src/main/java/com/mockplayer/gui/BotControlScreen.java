@@ -70,6 +70,10 @@ public class BotControlScreen extends Screen {
     public static final int PANEL_ACCENT = 0xB03A86FF;
     public static final int PANEL_DIVIDER = 0xB01B2537;
     public static final int PANEL_BORDER = 0x993A4A6A;
+    /** 假人名字最大长度（与 /newplayer 命令校验一致）。 */
+    private static final int MAX_NAME_LENGTH = 16;
+    /** 聊天输入框最大长度。 */
+    private static final int MAX_CHAT_LENGTH = 256;
     public static final int PANEL_BORDER_INNER = 0x99151C29;
     public static final int SLOT_BG = 0x8F222B3A;
     public static final int SLOT_BG_HOVER = 0x8F3E4C66;
@@ -246,7 +250,7 @@ public class BotControlScreen extends Screen {
         // 左栏底部：名字输入框一行，下面并排「+ 新建 / - 删除」
         this.nameBox = new EditBox(this.font, sx(LIST_X), sy(BOT_INPUT_Y), sw(LIST_W), sh(BOT_INPUT_H),
                 Component.translatable("gui.mockplayer.name_hint"));
-        this.nameBox.setMaxLength(16);
+        this.nameBox.setMaxLength(MAX_NAME_LENGTH);
         this.addRenderableWidget(this.nameBox);
         this.newButton = this.addButton(LIST_X, BOT_BTN_Y, 43, BOT_INPUT_H, "gui.mockplayer.new_bot",
                 () -> this.tryCreate());
@@ -349,7 +353,7 @@ public class BotControlScreen extends Screen {
 
         this.chatBox = new EditBox(this.font, sx(CONTENT_X), sy(actY), sw(CHAT_W), sh(BTN_H),
                 Component.translatable("gui.mockplayer.action.chat_hint"));
-        this.chatBox.setMaxLength(256);
+        this.chatBox.setMaxLength(MAX_CHAT_LENGTH);
         this.addRenderableWidget(this.chatBox);
         this.sendButton = this.addButton(CONTENT_X + SEND_X_OFF, actY, SEND_W, BTN_H, "gui.mockplayer.action.send",
                 () -> this.sendChat());
@@ -956,7 +960,9 @@ public class BotControlScreen extends Screen {
         if (!this.requireBot()) {
             return;
         }
-        int next = Math.max(1, Math.min(32, this.selected.getChunkRadius() + delta));
+        int next = Math.max(1, Math.min(
+                com.mockplayer.config.ModConfig.MAX_FAKE_PLAYER_CHUNK_RADIUS,
+                this.selected.getChunkRadius() + delta));
         this.selected.setChunkRadius(next);
         this.setFeedback(Component.translatable("gui.mockplayer.feedback.chunk_radius", next));
     }
@@ -985,7 +991,7 @@ public class BotControlScreen extends Screen {
 
     private void tryCreate() {
         String name = this.nameBox.getValue().trim();
-        if (name.isEmpty() || name.length() > 16) {
+        if (name.isEmpty() || name.length() > MAX_NAME_LENGTH) {
             this.setError(Component.translatable("gui.mockplayer.feedback.invalid_name"));
             return;
         }

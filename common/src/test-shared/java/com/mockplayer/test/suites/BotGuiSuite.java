@@ -19,7 +19,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.monster.zombie.Zombie;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -182,11 +181,8 @@ public class BotGuiSuite extends TestSuite {
             BotControlScreen screen = bgScreen();
             Button fwd = bgFindButton(screen, "gui.mockplayer.action.move_forward");
             if (fwd == null) {
-                System.out.println("[gui-diag] move_forward button not found, screen=" + (screen != null));
                 return;
             }
-            System.out.println("[gui-diag] move_forward button found at "
-                    + fwd.getX() + "," + fwd.getY());
             bgClick(fwd);
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(ctx.botName());
@@ -434,12 +430,10 @@ public class BotGuiSuite extends TestSuite {
         ctx.run(() -> {
             BotControlScreen screen = bgScreen();
             EditBox box = bgFindEditBox(screen, "gui.mockplayer.action.chat_hint");
-            System.out.println("[chat-diag] editBox=" + (box != null));
             if (box != null) {
                 box.setValue("mockplayer-gui-chat");
             }
             Button send = bgFindButton(screen, "gui.mockplayer.action.send");
-            System.out.println("[chat-diag] send=" + (send != null));
             if (send != null) {
                 bgClick(send);
             }

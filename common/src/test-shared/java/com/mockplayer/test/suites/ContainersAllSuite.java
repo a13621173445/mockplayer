@@ -5,7 +5,6 @@ import com.mockplayer.test.framework.TestContext;
 import com.mockplayer.test.framework.TestSuite;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.resources.Identifier;

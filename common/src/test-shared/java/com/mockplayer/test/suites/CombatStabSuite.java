@@ -6,7 +6,6 @@ import com.mockplayer.test.framework.TestContext;
 import com.mockplayer.test.framework.TestSuite;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.Items;

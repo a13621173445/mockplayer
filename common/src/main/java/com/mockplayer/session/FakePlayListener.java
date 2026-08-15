@@ -220,7 +220,7 @@ public class FakePlayListener extends ClientPacketListener {
             this.session.getState().recordReceivedModPayload(new com.mockplayer.api.ModPayloadInfo(
                     payload.type().id(),
                     namespace,
-                    com.mockplayer.platform.Services.PLATFORM.getModDisplayName(namespace),
+                    com.mockplayer.platform.ModNameCache.get(namespace),
                     this.minecraft.level != null ? this.minecraft.level.getGameTime() : 0L,
                     PayloadInspector.estimateSize(payload)), payload);
             return;
