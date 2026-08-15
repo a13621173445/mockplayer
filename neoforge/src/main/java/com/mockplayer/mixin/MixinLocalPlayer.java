@@ -9,7 +9,9 @@ import net.minecraft.client.player.LocalPlayer;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
+
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 
 /**
  * 拦截 LocalPlayer.aiStep 里对 MultiPlayerGameMode.isSpectator() 的调用。
@@ -17,11 +19,14 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * 原版 aiStep 用 this.minecraft.gameMode.isSpectator() 判断——读的是主玩家的游戏模式。
  * 对假人（FakeLocalPlayer）改用假人自己的 gameMode 判断，彻底与主玩家解耦；
  * 主玩家走原逻辑。
+ *
+ * 用 @WrapOperation 而非 @Redirect：同一调用点可多 mod 共存（handler 链），不与应用冲突
+ * （@Redirect 同一调用点只允许一个，第二个应用直接炸）。
  */
 @Mixin(LocalPlayer.class)
 public abstract class MixinLocalPlayer {
 
-    @Redirect(
+    @WrapOperation(
             method = "aiStep",
             at = @At(
                     value = "INVOKE",
@@ -29,12 +34,12 @@ public abstract class MixinLocalPlayer {
             ),
             require = 2
     )
-    private boolean mockplayer$isSpectator(MultiPlayerGameMode instance) {
+    private boolean mockplayer$isSpectator(MultiPlayerGameMode instance, Operation<Boolean> original) {
         // 若是假人，用假人自己的模式判断；否则原逻辑（读主玩家 gameMode）
         if ((Object) this instanceof FakeLocalPlayer fakePlayer) {
             return fakePlayer.isFakeSpectator();
         }
-        return instance.isSpectator();
+        return original.call(instance);
     }
 
     /**
@@ -43,7 +48,7 @@ public abstract class MixinLocalPlayer {
      * 原版 handlePortalTransitionEffect 在传传送门时会 this.minecraft.setScreen(null)
      * （关闭当前屏幕），假人传传送门不应关掉主玩家的暂停/容器界面。
      */
-    @Redirect(
+    @WrapOperation(
             method = "handlePortalTransitionEffect",
             at = @At(
                     value = "INVOKE",
@@ -51,9 +56,9 @@ public abstract class MixinLocalPlayer {
             ),
             require = 1
     )
-    private void mockplayer$portalSetScreen(Minecraft instance, Screen screen) {
+    private void mockplayer$portalSetScreen(Minecraft instance, Screen screen, Operation<Void> original) {
         if (!((Object) this instanceof FakeLocalPlayer)) {
-            instance.setScreen(screen);
+            original.call(instance, screen);
         }
     }
 }
