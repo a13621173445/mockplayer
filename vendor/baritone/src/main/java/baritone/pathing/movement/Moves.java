@@ -15,11 +15,11 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.pathing.movement;
+package com.mockplayer.baritone.pathing.movement;
 
-import baritone.api.utils.BetterBlockPos;
-import baritone.pathing.movement.movements.*;
-import baritone.utils.pathing.MutableMoveResult;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.pathing.movement.movements.*;
+import com.mockplayer.baritone.utils.pathing.MutableMoveResult;
 import net.minecraft.core.Direction;
 
 /**

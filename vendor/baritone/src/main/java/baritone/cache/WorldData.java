@@ -15,12 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.cache;
+package com.mockplayer.baritone.cache;
 
-import baritone.Baritone;
-import baritone.api.cache.ICachedWorld;
-import baritone.api.cache.IWaypointCollection;
-import baritone.api.cache.IWorldData;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.cache.ICachedWorld;
+import com.mockplayer.baritone.api.cache.IWaypointCollection;
+import com.mockplayer.baritone.api.cache.IWorldData;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.dimension.DimensionType;
@@ -49,7 +49,6 @@ public class WorldData implements IWorldData {
 
     public void onClose() {
         Baritone.getExecutor().execute(() -> {
-            System.out.println("Started saving the world in a new thread");
             cache.save();
         });
     }

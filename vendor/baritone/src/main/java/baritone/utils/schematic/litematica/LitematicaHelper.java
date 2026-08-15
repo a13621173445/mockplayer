@@ -15,12 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils.schematic.litematica;
+package com.mockplayer.baritone.utils.schematic.litematica;
 
-import baritone.api.schematic.CompositeSchematic;
-import baritone.api.schematic.IStaticSchematic;
-import baritone.api.utils.Pair;
-import baritone.utils.schematic.StaticSchematic;
+import com.mockplayer.baritone.api.schematic.CompositeSchematic;
+import com.mockplayer.baritone.api.schematic.IStaticSchematic;
+import com.mockplayer.baritone.api.utils.Pair;
+import com.mockplayer.baritone.utils.schematic.StaticSchematic;
 import fi.dy.masa.litematica.Litematica;
 import fi.dy.masa.litematica.data.DataManager;
 import fi.dy.masa.litematica.schematic.placement.SchematicPlacement;

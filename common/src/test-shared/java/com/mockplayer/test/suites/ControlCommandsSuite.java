@@ -106,7 +106,7 @@ public class ControlCommandsSuite extends TestSuite {
                     "placeBlock", "mineBlock", "attackBlock", "hotbar", "chunkRadius", "drop", "swapHands",
                     "mount", "dismount", "chat", "command", "wakeUp", "respawn", "editBook",
                     "close", "click", "button", "trade", "setSlot", "editSign", "setBeacon",
-                    "renameItem", "pickItemFromBlock", "help");
+                    "renameItem", "pickItemFromBlock", "goto", "goNear", "pathstop", "config", "help");
             List<String> missing = new ArrayList<>(actions);
             missing.removeAll(subs);
             List<String> leaked = subs.stream().filter(s -> !actions.contains(s)).toList();
@@ -135,7 +135,7 @@ public class ControlCommandsSuite extends TestSuite {
                     .collect(Collectors.toSet());
             List<String> queries = List.of(
                     "info", "inventory", "container", "near", "block", "chunk", "online", "chatlog",
-                    "listen", "events", "memory", "payload");
+                    "listen", "events", "memory", "payload", "path", "config");
             List<String> qMissing = new ArrayList<>(queries);
             qMissing.removeAll(qSubs);
             List<String> qLeaked = qSubs.stream().filter(s -> !queries.contains(s)).toList();

@@ -15,7 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.utils;
+package com.mockplayer.baritone.api.utils;
 
 import java.util.Objects;
 

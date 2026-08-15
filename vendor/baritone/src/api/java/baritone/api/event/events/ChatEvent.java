@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.event.events;
+package com.mockplayer.baritone.api.event.events;
 
-import baritone.api.event.events.type.Cancellable;
+import com.mockplayer.baritone.api.event.events.type.Cancellable;
 
 /**
  * @author Brady

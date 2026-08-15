@@ -15,12 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.behavior;
+package com.mockplayer.baritone.behavior;
 
-import baritone.Baritone;
-import baritone.api.event.events.TickEvent;
-import baritone.api.utils.Helper;
-import baritone.utils.ToolSet;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.event.events.TickEvent;
+import com.mockplayer.baritone.api.utils.Helper;
+import com.mockplayer.baritone.utils.ToolSet;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;

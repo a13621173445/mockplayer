@@ -15,11 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils.player;
+package com.mockplayer.baritone.utils.player;
 
-import baritone.api.utils.IPlayerController;
-import baritone.utils.accessor.IPlayerControllerMP;
+import com.mockplayer.baritone.api.utils.IPlayerController;
+import com.mockplayer.baritone.utils.accessor.IPlayerControllerMP;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -41,59 +42,75 @@ import net.minecraft.world.phys.BlockHitResult;
 public final class BaritonePlayerController implements IPlayerController {
 
     private final Minecraft mc;
+    /** 绑定的假人 gameMode（null = 用 mc.gameMode）。 */
+    private final MultiPlayerGameMode boundGameMode;
 
     public BaritonePlayerController(Minecraft mc) {
+        this(mc, null);
+    }
+
+    /**
+     * @param mc       Minecraft 单例
+     * @param gameMode 绑定的假人 gameMode（null = 用 mc.gameMode）
+     */
+    public BaritonePlayerController(Minecraft mc, MultiPlayerGameMode gameMode) {
         this.mc = mc;
+        this.boundGameMode = gameMode;
+    }
+
+    private MultiPlayerGameMode gameMode() {
+        MultiPlayerGameMode bound = this.boundGameMode;
+        return bound != null ? bound : this.mc.gameMode;
     }
 
     @Override
     public void syncHeldItem() {
-        ((IPlayerControllerMP) mc.gameMode).callSyncCurrentPlayItem();
+        ((IPlayerControllerMP) this.gameMode()).callSyncCurrentPlayItem();
     }
 
     @Override
     public boolean hasBrokenBlock() {
-        return !((IPlayerControllerMP) mc.gameMode).isHittingBlock();
+        return !((IPlayerControllerMP) this.gameMode()).isHittingBlock();
     }
 
     @Override
     public boolean onPlayerDamageBlock(BlockPos pos, Direction side) {
-        return mc.gameMode.continueDestroyBlock(pos, side);
+        return this.gameMode().continueDestroyBlock(pos, side);
     }
 
     @Override
     public void resetBlockRemoving() {
-        mc.gameMode.stopDestroyBlock();
+        this.gameMode().stopDestroyBlock();
     }
 
     @Override
     public void windowClick(int windowId, int slotId, int mouseButton, ContainerInput type, Player player) {
-        mc.gameMode.handleContainerInput(windowId, slotId, mouseButton, type, player);
+        this.gameMode().handleContainerInput(windowId, slotId, mouseButton, type, player);
     }
 
     @Override
     public GameType getGameType() {
-        return mc.gameMode.getPlayerMode();
+        return this.gameMode().getPlayerMode();
     }
 
     @Override
     public InteractionResult processRightClickBlock(LocalPlayer player, Level world, InteractionHand hand, BlockHitResult result) {
         // primaryplayercontroller is always in a ClientWorld so this is ok
-        return mc.gameMode.useItemOn(player, hand, result);
+        return this.gameMode().useItemOn(player, hand, result);
     }
 
     @Override
     public InteractionResult processRightClick(LocalPlayer player, Level world, InteractionHand hand) {
-        return mc.gameMode.useItem(player, hand);
+        return this.gameMode().useItem(player, hand);
     }
 
     @Override
     public boolean clickBlock(BlockPos loc, Direction face) {
-        return mc.gameMode.startDestroyBlock(loc, face);
+        return this.gameMode().startDestroyBlock(loc, face);
     }
 
     @Override
     public void setHittingBlock(boolean hittingBlock) {
-        ((IPlayerControllerMP) mc.gameMode).setIsHittingBlock(hittingBlock);
+        ((IPlayerControllerMP) this.gameMode()).setIsHittingBlock(hittingBlock);
     }
 }

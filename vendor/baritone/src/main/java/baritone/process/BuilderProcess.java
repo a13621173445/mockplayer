@@ -15,33 +15,33 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.process;
+package com.mockplayer.baritone.process;
 
-import baritone.Baritone;
-import baritone.api.Settings;
-import baritone.api.pathing.goals.Goal;
-import baritone.api.pathing.goals.GoalBlock;
-import baritone.api.pathing.goals.GoalComposite;
-import baritone.api.pathing.goals.GoalGetToBlock;
-import baritone.api.process.IBuilderProcess;
-import baritone.api.process.PathingCommand;
-import baritone.api.process.PathingCommandType;
-import baritone.api.schematic.*;
-import baritone.api.schematic.format.ISchematicFormat;
-import baritone.api.utils.*;
-import baritone.api.utils.Rotation;
-import baritone.api.utils.input.Input;
-import baritone.pathing.movement.CalculationContext;
-import baritone.pathing.movement.Movement;
-import baritone.pathing.movement.MovementHelper;
-import baritone.utils.BaritoneProcessHelper;
-import baritone.utils.BlockStateInterface;
-import baritone.utils.PathingCommandContext;
-import baritone.utils.schematic.MapArtSchematic;
-import baritone.utils.schematic.SchematicSystem;
-import baritone.utils.schematic.SelectionSchematic;
-import baritone.utils.schematic.litematica.LitematicaHelper;
-import baritone.utils.schematic.schematica.SchematicaHelper;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.Settings;
+import com.mockplayer.baritone.api.pathing.goals.Goal;
+import com.mockplayer.baritone.api.pathing.goals.GoalBlock;
+import com.mockplayer.baritone.api.pathing.goals.GoalComposite;
+import com.mockplayer.baritone.api.pathing.goals.GoalGetToBlock;
+import com.mockplayer.baritone.api.process.IBuilderProcess;
+import com.mockplayer.baritone.api.process.PathingCommand;
+import com.mockplayer.baritone.api.process.PathingCommandType;
+import com.mockplayer.baritone.api.schematic.*;
+import com.mockplayer.baritone.api.schematic.format.ISchematicFormat;
+import com.mockplayer.baritone.api.utils.*;
+import com.mockplayer.baritone.api.utils.Rotation;
+import com.mockplayer.baritone.api.utils.input.Input;
+import com.mockplayer.baritone.pathing.movement.CalculationContext;
+import com.mockplayer.baritone.pathing.movement.Movement;
+import com.mockplayer.baritone.pathing.movement.MovementHelper;
+import com.mockplayer.baritone.utils.BaritoneProcessHelper;
+import com.mockplayer.baritone.utils.BlockStateInterface;
+import com.mockplayer.baritone.utils.PathingCommandContext;
+import com.mockplayer.baritone.utils.schematic.MapArtSchematic;
+import com.mockplayer.baritone.utils.schematic.SchematicSystem;
+import com.mockplayer.baritone.utils.schematic.SelectionSchematic;
+import com.mockplayer.baritone.utils.schematic.litematica.LitematicaHelper;
+import com.mockplayer.baritone.utils.schematic.schematica.SchematicaHelper;
 import com.google.common.collect.ImmutableSet;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
@@ -67,7 +67,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static baritone.api.pathing.movement.ActionCosts.COST_INF;
+import static com.mockplayer.baritone.api.pathing.movement.ActionCosts.COST_INF;
 
 public final class BuilderProcess extends BaritoneProcessHelper implements IBuilderProcess {
 

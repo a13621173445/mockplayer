@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.utils;
+package com.mockplayer.baritone.api.utils;
 
-import baritone.api.cache.IWorldData;
-import baritone.api.Settings;
+import com.mockplayer.baritone.api.cache.IWorldData;
+import com.mockplayer.baritone.api.Settings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
@@ -67,7 +67,7 @@ public interface IPlayerContext {
      * @return settings
      */
     default Settings settings() {
-        return baritone.api.BaritoneAPI.getSettings();
+        return com.mockplayer.baritone.api.BaritoneAPI.getSettings();
     }
 
     HitResult objectMouseOver();

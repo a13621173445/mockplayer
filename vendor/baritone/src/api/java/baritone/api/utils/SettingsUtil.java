@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.utils;
+package com.mockplayer.baritone.api.utils;
 
-import baritone.api.BaritoneAPI;
-import baritone.api.Settings;
+import com.mockplayer.baritone.api.BaritoneAPI;
+import com.mockplayer.baritone.api.Settings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Vec3i;
@@ -120,7 +120,6 @@ public class SettingsUtil {
         List<Settings.Setting> modified = new ArrayList<>();
         for (Settings.Setting setting : settings.allSettings) {
             if (setting.value == null) {
-                System.out.println("NULL SETTING?" + setting.getName());
                 continue;
             }
             if (setting.isJavaOnly()) {

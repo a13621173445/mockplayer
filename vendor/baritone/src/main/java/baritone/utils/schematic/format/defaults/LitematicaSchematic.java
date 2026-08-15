@@ -15,11 +15,11 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils.schematic.format.defaults;
+package com.mockplayer.baritone.utils.schematic.format.defaults;
 
-import baritone.api.schematic.CompositeSchematic;
-import baritone.api.schematic.IStaticSchematic;
-import baritone.utils.schematic.StaticSchematic;
+import com.mockplayer.baritone.api.schematic.CompositeSchematic;
+import com.mockplayer.baritone.api.schematic.IStaticSchematic;
+import com.mockplayer.baritone.utils.schematic.StaticSchematic;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Vec3i;
 import net.minecraft.core.registries.BuiltInRegistries;

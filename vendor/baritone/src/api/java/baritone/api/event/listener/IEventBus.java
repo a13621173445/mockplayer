@@ -15,7 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.event.listener;
+package com.mockplayer.baritone.api.event.listener;
 
 /**
  * A type of {@link IGameEventListener} that can have additional listeners

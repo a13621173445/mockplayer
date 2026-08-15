@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.pathing.calc.openset;
+package com.mockplayer.baritone.pathing.calc.openset;
 
-import baritone.pathing.calc.PathNode;
+import com.mockplayer.baritone.pathing.calc.PathNode;
 
 /**
  * An open set for A* or similar graph search algorithm

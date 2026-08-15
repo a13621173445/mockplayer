@@ -15,12 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.launch.mixins;
+package com.mockplayer.baritone.launch.mixins;
 
-import baritone.api.BaritoneAPI;
-import baritone.api.IBaritone;
-import baritone.api.event.events.PacketEvent;
-import baritone.api.event.events.type.EventState;
+import com.mockplayer.baritone.api.BaritoneAPI;
+import com.mockplayer.baritone.api.IBaritone;
+import com.mockplayer.baritone.api.event.events.PacketEvent;
+import com.mockplayer.baritone.api.event.events.type.EventState;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;

@@ -1,9 +1,9 @@
-package baritone.selection;
+package com.mockplayer.baritone.selection;
 
-import baritone.Baritone;
-import baritone.api.selection.ISelection;
-import baritone.api.selection.ISelectionManager;
-import baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.selection.ISelection;
+import com.mockplayer.baritone.api.selection.ISelectionManager;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
 import java.util.LinkedList;
 import java.util.ListIterator;
 import net.minecraft.core.Direction;

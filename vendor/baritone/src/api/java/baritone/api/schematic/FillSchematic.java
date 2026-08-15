@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.schematic;
+package com.mockplayer.baritone.api.schematic;
 
-import baritone.api.utils.BlockOptionalMeta;
+import com.mockplayer.baritone.api.utils.BlockOptionalMeta;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 

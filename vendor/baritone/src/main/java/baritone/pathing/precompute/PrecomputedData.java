@@ -15,11 +15,11 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.pathing.precompute;
+package com.mockplayer.baritone.pathing.precompute;
 
-import baritone.api.Settings;
-import baritone.pathing.movement.MovementHelper;
-import baritone.utils.BlockStateInterface;
+import com.mockplayer.baritone.api.Settings;
+import com.mockplayer.baritone.pathing.movement.MovementHelper;
+import com.mockplayer.baritone.utils.BlockStateInterface;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 

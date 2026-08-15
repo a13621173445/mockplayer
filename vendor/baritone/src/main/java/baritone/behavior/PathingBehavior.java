@@ -15,27 +15,27 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.behavior;
+package com.mockplayer.baritone.behavior;
 
-import baritone.Baritone;
-import baritone.api.behavior.IPathingBehavior;
-import baritone.api.event.events.*;
-import baritone.api.pathing.calc.IPath;
-import baritone.api.pathing.goals.Goal;
-import baritone.api.pathing.goals.GoalXZ;
-import baritone.api.process.PathingCommand;
-import baritone.api.utils.BetterBlockPos;
-import baritone.api.utils.Helper;
-import baritone.api.utils.PathCalculationResult;
-import baritone.api.utils.interfaces.IGoalRenderPos;
-import baritone.pathing.calc.AStarPathFinder;
-import baritone.pathing.calc.AbstractNodeCostSearch;
-import baritone.pathing.movement.CalculationContext;
-import baritone.pathing.movement.MovementHelper;
-import baritone.pathing.path.PathExecutor;
-import baritone.utils.PathRenderer;
-import baritone.utils.PathingCommandContext;
-import baritone.utils.pathing.Favoring;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.behavior.IPathingBehavior;
+import com.mockplayer.baritone.api.event.events.*;
+import com.mockplayer.baritone.api.pathing.calc.IPath;
+import com.mockplayer.baritone.api.pathing.goals.Goal;
+import com.mockplayer.baritone.api.pathing.goals.GoalXZ;
+import com.mockplayer.baritone.api.process.PathingCommand;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.utils.Helper;
+import com.mockplayer.baritone.api.utils.PathCalculationResult;
+import com.mockplayer.baritone.api.utils.interfaces.IGoalRenderPos;
+import com.mockplayer.baritone.pathing.calc.AStarPathFinder;
+import com.mockplayer.baritone.pathing.calc.AbstractNodeCostSearch;
+import com.mockplayer.baritone.pathing.movement.CalculationContext;
+import com.mockplayer.baritone.pathing.movement.MovementHelper;
+import com.mockplayer.baritone.pathing.path.PathExecutor;
+import com.mockplayer.baritone.utils.PathRenderer;
+import com.mockplayer.baritone.utils.PathingCommandContext;
+import com.mockplayer.baritone.utils.pathing.Favoring;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;

@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.pathing.calc;
+package com.mockplayer.baritone.api.pathing.calc;
 
-import baritone.api.pathing.goals.Goal;
-import baritone.api.utils.PathCalculationResult;
+import com.mockplayer.baritone.api.pathing.goals.Goal;
+import com.mockplayer.baritone.api.utils.PathCalculationResult;
 
 import java.util.Optional;
 

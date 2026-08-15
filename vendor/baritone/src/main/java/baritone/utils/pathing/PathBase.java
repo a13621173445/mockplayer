@@ -15,14 +15,14 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils.pathing;
+package com.mockplayer.baritone.utils.pathing;
 
-import baritone.Baritone;
-import baritone.api.BaritoneAPI;
-import baritone.api.pathing.calc.IPath;
-import baritone.api.pathing.goals.Goal;
-import baritone.pathing.path.CutoffPath;
-import baritone.utils.BlockStateInterface;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.BaritoneAPI;
+import com.mockplayer.baritone.api.pathing.calc.IPath;
+import com.mockplayer.baritone.api.pathing.goals.Goal;
+import com.mockplayer.baritone.pathing.path.CutoffPath;
+import com.mockplayer.baritone.utils.BlockStateInterface;
 import net.minecraft.core.BlockPos;
 
 public abstract class PathBase implements IPath {

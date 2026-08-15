@@ -15,15 +15,17 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone;
+package com.mockplayer.baritone;
 
-import baritone.api.IBaritone;
-import baritone.api.IBaritoneProvider;
-import baritone.api.cache.IWorldScanner;
-import baritone.api.schematic.ISchematicSystem;
-import baritone.cache.FasterWorldScanner;
-import baritone.utils.schematic.SchematicSystem;
+import com.mockplayer.baritone.api.IBaritone;
+import com.mockplayer.baritone.api.IBaritoneProvider;
+import com.mockplayer.baritone.api.cache.IWorldScanner;
+import com.mockplayer.baritone.api.schematic.ISchematicSystem;
+import com.mockplayer.baritone.cache.FasterWorldScanner;
+import com.mockplayer.baritone.utils.schematic.SchematicSystem;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
+import net.minecraft.client.player.LocalPlayer;
 
 import java.util.Collections;
 import java.util.List;
@@ -41,13 +43,11 @@ public final class BaritoneProvider implements IBaritoneProvider {
     public BaritoneProvider() {
         this.all = new CopyOnWriteArrayList<>();
         this.allView = Collections.unmodifiableList(this.all);
-
-        final Baritone primary = (Baritone) this.createBaritone(Minecraft.getInstance());
     }
 
     @Override
     public IBaritone getPrimaryBaritone() {
-        return this.all.get(0);
+        return this.all.isEmpty() ? null : this.all.get(0);
     }
 
     @Override
@@ -57,16 +57,25 @@ public final class BaritoneProvider implements IBaritoneProvider {
 
     @Override
     public synchronized IBaritone createBaritone(Minecraft minecraft) {
-        IBaritone baritone = this.getBaritoneForMinecraft(minecraft);
+        return this.createBaritone(minecraft, null, null);
+    }
+
+    @Override
+    public synchronized IBaritone createBaritone(Minecraft minecraft,
+                                                 LocalPlayer player,
+                                                 MultiPlayerGameMode gameMode) {
+        IBaritone baritone = player != null
+                ? this.getBaritoneForPlayer(player)
+                : this.getBaritoneForMinecraft(minecraft);
         if (baritone == null) {
-            this.all.add(baritone = new Baritone(minecraft));
+            this.all.add(baritone = new Baritone(minecraft, player, gameMode));
         }
         return baritone;
     }
 
     @Override
     public synchronized boolean destroyBaritone(IBaritone baritone) {
-        return baritone != this.getPrimaryBaritone() && this.all.remove(baritone);
+        return this.all.remove(baritone);
     }
 
     @Override

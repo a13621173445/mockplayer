@@ -348,6 +348,27 @@ public class ControlCommands {
                             word("includeData", CommandSupport.fixed("true", "false")))),
                     ctx -> pickItemFromBlock(name(ctx), i(ctx, "x"), i(ctx, "y"), i(ctx, "z"),
                             "true".equals(str(ctx, "includeData")))),
+            spec("goto", variants(v(
+                            integer("x", CommandSupport.coordX("commands.mockplayer.control.suggest.x")),
+                            integer("y", CommandSupport.coordY("commands.mockplayer.control.suggest.y")),
+                            integer("z", CommandSupport.coordZ("commands.mockplayer.control.suggest.z")))),
+                    ctx -> gotoPos(name(ctx), i(ctx, "x"), i(ctx, "y"), i(ctx, "z"))),
+            spec("goNear", variants(v(
+                            integer("x", CommandSupport.coordX("commands.mockplayer.control.suggest.x")),
+                            integer("z", CommandSupport.coordZ("commands.mockplayer.control.suggest.z")),
+                            integer("radius", 0, 64))),
+                    ctx -> goNear(name(ctx), i(ctx, "x"), i(ctx, "z"), i(ctx, "radius"))),
+            spec("pathstop", variants(v()),
+                    ctx -> pathStop(name(ctx))),
+            spec("config", variants(
+                            v(word("mode", CommandSupport.fixed("list", "set", "reset"))),
+                            v(word("mode", CommandSupport.fixed("set")),
+                                    word("key", navigateKeys()),
+                                    greedy("value")),
+                            v(word("mode", CommandSupport.fixed("reset")),
+                                    word("key", navigateKeys()))),
+                    ctx -> configCmd(name(ctx), str(ctx, "mode"),
+                            strOrNull(ctx, "key"), strOrNull(ctx, "value"))),
             spec("help", variants(v()),
                     ctx -> help(name(ctx))));
 
@@ -370,6 +391,132 @@ public class ControlCommands {
                     Component.translatable("commands.mockplayer.control.action." + action)));
         }
         return out;
+    }
+
+    // ===== 寻路动作（2026-08-16：BotNavigator 接线，命令层先查 navigate.enabled）=====
+
+    /** /control goto：走到坐标（WALK 模式；模式切换走 config/API）。 */
+    private static Component gotoPos(String name, int x, int y, int z) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        Bot bot = findBot(name);
+        Component disabled = navigateDisabled(bot);
+        if (disabled != null) {
+            return disabled;
+        }
+        bot.navigate().goTo(new BlockPos(x, y, z));
+        return success("goto", name);
+    }
+
+    /** /control goNear：靠近坐标水平半径内（y 取假人当前高度）。 */
+    private static Component goNear(String name, int x, int z, int radius) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        Bot bot = findBot(name);
+        Component disabled = navigateDisabled(bot);
+        if (disabled != null) {
+            return disabled;
+        }
+        int y = bot.getLocalPlayer().blockPosition().getY();
+        bot.navigate().goNear(new BlockPos(x, y, z), radius);
+        return success("gonear", name);
+    }
+
+    /** /control pathstop：取消寻路（路径 + 输入接管复位）。 */
+    private static Component pathStop(String name) {
+        Component blocked = requirePlaying(name);
+        if (blocked != null) {
+            return blocked;
+        }
+        findBot(name).navigate().stop();
+        return success("pathstop", name);
+    }
+
+    /** /control config list|set|reset：per-bot 寻路行为配置（渲染三态全局，不走命令）。 */
+    private static Component configCmd(String name, String mode, String key, String value) {
+        Bot bot = findBot(name);
+        if (bot == null) {
+            return fail("commands.mockplayer.control.not_found", playerName(name));
+        }
+        if (bot.getLocalPlayer() == null) {
+            return fail("commands.mockplayer.control.not_playing", playerName(name));
+        }
+        FakeSession session = bot instanceof BotImpl impl ? impl.session() : null;
+        switch (mode == null ? "" : mode) {
+            case "list" -> {
+                return navigateConfigList(name);
+            }
+            case "set" -> {
+                if (key == null || value == null) {
+                    return fail("commands.mockplayer.control.config.usage", mode);
+                }
+                if (!com.mockplayer.session.NavigateSupport.CONFIG_KEYS.contains(key)) {
+                    return fail("commands.mockplayer.control.config.unknown_key", key,
+                            String.join(", ", com.mockplayer.session.NavigateSupport.CONFIG_KEYS));
+                }
+                Object parsed = com.mockplayer.session.NavigateSupport.parseValue(key, value);
+                if (parsed == null) {
+                    return fail("commands.mockplayer.control.config.invalid_value", key, value);
+                }
+                if (session != null) {
+                    session.setNavigateOverride(key, parsed);
+                    com.mockplayer.session.NavigateSupport.applyToSession(session);
+                }
+                return info("commands.mockplayer.control.config.set", playerName(name), key, parsed);
+            }
+            case "reset" -> {
+                if (key == null) {
+                    return fail("commands.mockplayer.control.config.usage", mode);
+                }
+                if (session != null) {
+                    session.setNavigateOverride(key, null);
+                    com.mockplayer.session.NavigateSupport.applyToSession(session);
+                }
+                return info("commands.mockplayer.control.config.reset", playerName(name), key);
+            }
+            default -> {
+                return fail("commands.mockplayer.control.config.usage", mode);
+            }
+        }
+    }
+
+    /** /control config list 与 /query config 共用：列出该假人生效寻路配置（* = per-bot 覆盖）。 */
+    public static Component navigateConfigList(String name) {
+        Bot bot = findBot(name);
+        if (bot == null) {
+            return fail("commands.mockplayer.control.not_found", playerName(name));
+        }
+        FakeSession session = bot instanceof BotImpl impl ? impl.session() : null;
+        MutableComponent out = info("commands.mockplayer.control.config.header", playerName(name));
+        for (String key : com.mockplayer.session.NavigateSupport.CONFIG_KEYS) {
+            Object value = com.mockplayer.session.NavigateSupport.effectiveValue(session, key);
+            boolean overridden = session != null && session.getNavigateOverride(key) != null;
+            out.append(Component.literal("\n")).append(info(
+                    "commands.mockplayer.control.config.entry", key, value,
+                    overridden ? Component.literal(" *") : Component.literal("")));
+        }
+        return out;
+    }
+
+    /** 假人寻路被禁用时的反馈（navigate.enabled=false，per-bot 或全局）。 */
+    private static Component navigateDisabled(Bot bot) {
+        if (bot instanceof BotImpl impl) {
+            if (!Boolean.TRUE.equals(com.mockplayer.session.NavigateSupport
+                    .effectiveValue(impl.session(), "enabled"))) {
+                return fail("commands.mockplayer.control.navigate.disabled", playerName(bot.getName()));
+            }
+        }
+        return null;
+    }
+
+    /** config set/reset 的 key Tab 补全（白名单）。 */
+    private static SuggestionProvider<?> navigateKeys() {
+        return CommandSupport.fixed(
+                com.mockplayer.session.NavigateSupport.CONFIG_KEYS.toArray(new String[0]));
     }
 
     // ===== 通用辅助 =====

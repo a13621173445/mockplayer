@@ -8,6 +8,7 @@ import dev.isxander.yacl3.api.OptionGroup;
 import dev.isxander.yacl3.api.YetAnotherConfigLib;
 import dev.isxander.yacl3.api.utils.OptionUtils;
 import dev.isxander.yacl3.api.controller.DoubleFieldControllerBuilder;
+import dev.isxander.yacl3.api.controller.EnumControllerBuilder;
 import dev.isxander.yacl3.api.controller.IntegerFieldControllerBuilder;
 import dev.isxander.yacl3.api.controller.StringControllerBuilder;
 import dev.isxander.yacl3.api.controller.TickBoxControllerBuilder;
@@ -18,6 +19,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -84,8 +86,10 @@ public final class ModConfigScreen extends YACLScreen {
                                 .build())
                         .group(OptionGroup.createBuilder()
                                 .name(Component.translatable("config.mockplayer.group.debug"))
-                                .option(booleanOption("debugOverlayEnabled", false,
-                                        cfg::isDebugOverlayEnabled, cfg::setDebugOverlayEnabled))
+                                .option(enumOption("debugOverlayMode", RenderMode.F3_ONLY,
+                                        cfg::getDebugOverlayMode, cfg::setDebugOverlayMode))
+                                .option(enumOption("navigateRenderMode", RenderMode.F3_ONLY,
+                                        cfg::getNavigateRenderMode, cfg::setNavigateRenderMode))
                                 .option(intOption("fakePlayerChunkRadius",
                                         ModConfig.DEFAULT_FAKE_PLAYER_CHUNK_RADIUS,
                                         ModConfig.MIN_FAKE_PLAYER_CHUNK_RADIUS, ModConfig.MAX_FAKE_PLAYER_CHUNK_RADIUS,
@@ -232,6 +236,21 @@ public final class ModConfigScreen extends YACLScreen {
                         Component.translatable("config.mockplayer.option." + key + ".description")))
                 .binding(fallback, getter, setter)
                 .controller(option -> TickBoxControllerBuilder.create(option))
+                .build();
+    }
+
+    /** 三态按钮（点击循环枚举值）：名称/描述/绑定/EnumController。 */
+    private static Option<RenderMode> enumOption(String key, RenderMode fallback,
+                                                 Supplier<RenderMode> getter, Consumer<RenderMode> setter) {
+        return Option.<RenderMode>createBuilder()
+                .name(Component.translatable("config.mockplayer.option." + key))
+                .description(OptionDescription.of(
+                        Component.translatable("config.mockplayer.option." + key + ".description")))
+                .binding(fallback, getter, setter)
+                .controller(option -> EnumControllerBuilder.create(option)
+                        .enumClass(RenderMode.class)
+                        .formatValue(mode -> Component.translatable(
+                                "config.mockplayer.renderMode." + mode.name().toLowerCase(Locale.ROOT))))
                 .build();
     }
 

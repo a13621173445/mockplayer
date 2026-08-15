@@ -1,7 +1,7 @@
-package baritone.selection;
+package com.mockplayer.baritone.selection;
 
-import baritone.api.selection.ISelection;
-import baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.selection.ISelection;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Vec3i;
 import net.minecraft.world.phys.AABB;

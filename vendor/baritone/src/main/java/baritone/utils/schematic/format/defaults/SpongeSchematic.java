@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils.schematic.format.defaults;
+package com.mockplayer.baritone.utils.schematic.format.defaults;
 
-import baritone.utils.schematic.StaticSchematic;
-import baritone.utils.type.VarInt;
+import com.mockplayer.baritone.utils.schematic.StaticSchematic;
+import com.mockplayer.baritone.utils.type.VarInt;
 import it.unimi.dsi.fastutil.ints.Int2ObjectArrayMap;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;

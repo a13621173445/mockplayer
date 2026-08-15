@@ -100,12 +100,24 @@ public class ConfigSuite extends TestSuite {
             writeConfigRaw("{\"commands\":[]}");
             ctx.checkNow("commands wrong type falls back",
                     "control".equals(ModConfigIO.load(cfgFile).getCommandName("control")));
-            ctx.checkNow("debug overlay default on", new ModConfig().isDebugOverlayEnabled());
-            writeConfigRaw("{\"debugOverlayEnabled\": false}");
-            ctx.checkNow("debug overlay hand-edit", !ModConfigIO.load(cfgFile).isDebugOverlayEnabled());
-            writeConfigRaw("{\"debugOverlayEnabled\": \"yes\"}");
-            ctx.checkNow("debug overlay non-boolean falls back",
-                    ModConfigIO.load(cfgFile).isDebugOverlayEnabled());
+            ctx.checkNow("debug overlay default f3-only", new ModConfig().getDebugOverlayMode()
+                    == com.mockplayer.config.RenderMode.F3_ONLY);
+            writeConfigRaw("{\"debugOverlayMode\": \"OFF\"}");
+            ctx.checkNow("debug overlay hand-edit", ModConfigIO.load(cfgFile).getDebugOverlayMode()
+                    == com.mockplayer.config.RenderMode.OFF);
+            writeConfigRaw("{\"debugOverlayMode\": \"yes\"}");
+            ctx.checkNow("debug overlay unknown enum falls back",
+                    ModConfigIO.load(cfgFile).getDebugOverlayMode()
+                            == com.mockplayer.config.RenderMode.F3_ONLY);
+            writeConfigRaw("{\"navigateRenderMode\": \"ALWAYS\", \"navigatePathTimeoutMs\": 12345}");
+            ModConfig navLoaded = ModConfigIO.load(cfgFile);
+            ctx.checkNow("navigate render mode hand-edit", navLoaded.getNavigateRenderMode()
+                    == com.mockplayer.config.RenderMode.ALWAYS);
+            ctx.checkNow("navigate timeout hand-edit", navLoaded.getNavigatePathTimeoutMs() == 12345);
+            writeConfigRaw("{\"navigatePathTimeoutMs\": 999999}");
+            ctx.checkNow("navigate timeout out-of-range falls back",
+                    ModConfigIO.load(cfgFile).getNavigatePathTimeoutMs()
+                            == ModConfig.DEFAULT_NAVIGATE_PATH_TIMEOUT_MS);
             writeConfigRaw("{\"payloadLogLimit\": 99999, \"payloadSendLogLimit\": 0,"
                     + "\"payloadInterceptEnabled\": \"x\", \"payloadSendLogEnabled\": \"x\","
                     + "\"payloadPassthroughNamespaces\": [\" mod_a \", \"mod_a\", \"\", 3]}");
@@ -149,7 +161,8 @@ public class ConfigSuite extends TestSuite {
             dev.isxander.yacl3.api.Option<Integer> intOption = firstIntegerOption(screen);
             dev.isxander.yacl3.api.Option<String> queryOption = findStringOption(screen, "query");
             dev.isxander.yacl3.api.Option<String> controlOption = findStringOption(screen, "control");
-            dev.isxander.yacl3.api.Option<Boolean> debugOption = findBooleanOption(screen);
+            dev.isxander.yacl3.api.Option<com.mockplayer.config.RenderMode> renderModeOption =
+                    findEnumOption(screen, "debugOverlayMode");
             dev.isxander.yacl3.api.Option<Double> opacityOption =
                     findDoubleOption(screen, (double) ModConfig.DEFAULT_GUI_OPACITY);
             dev.isxander.yacl3.api.Option<Integer> blurOption =
@@ -159,16 +172,16 @@ public class ConfigSuite extends TestSuite {
             ctx.checkNow("integer option found", intOption != null);
             ctx.checkNow("query option found", queryOption != null);
             ctx.checkNow("control option found", controlOption != null);
-            ctx.checkNow("debug option found", debugOption != null);
+            ctx.checkNow("debug render mode option found", renderModeOption != null);
             ctx.checkNow("opacity option found", opacityOption != null);
             ctx.checkNow("guiBlur option found", blurOption != null);
             ctx.checkNow("open controls button present", openControls != null);
-            if (intOption != null && queryOption != null && controlOption != null && debugOption != null
+            if (intOption != null && queryOption != null && controlOption != null && renderModeOption != null
                     && opacityOption != null && blurOption != null) {
                 int before = intOption.binding().getValue();
                 intOption.requestSet(before + 1);
                 queryOption.requestSet("qry");
-                debugOption.requestSet(false);
+                renderModeOption.requestSet(com.mockplayer.config.RenderMode.OFF);
                 opacityOption.requestSet(0.5D);
                 blurOption.requestSet(7);
                 ctx.checkNow("pending change registered", screen.pendingChanges());
@@ -176,15 +189,16 @@ public class ConfigSuite extends TestSuite {
                 ctx.checkNow("int option applied to config", intOption.binding().getValue() == before + 1);
                 ctx.checkNow("command rename applied to config",
                         MockplayerConfig.get().getCommandName("query").equals("qry"));
-                ctx.checkNow("debug overlay applied to config",
-                        !MockplayerConfig.get().isDebugOverlayEnabled());
+                ctx.checkNow("debug render mode applied to config",
+                        MockplayerConfig.get().getDebugOverlayMode()
+                                == com.mockplayer.config.RenderMode.OFF);
                 ctx.checkNow("opacity applied to config", Float.compare(
                         MockplayerConfig.get().getGuiOpacity(), 0.5F) == 0);
                 ctx.checkNow("guiBlur applied to config", MockplayerConfig.get().getGuiBlur() == 7);
                 ModConfig saved = ModConfigIO.load(MockplayerConfig.path());
                 ctx.checkNow("config file written", saved.getChatHistoryLimit() == before + 1
                         && "qry".equals(saved.getCommandName("query"))
-                        && !saved.isDebugOverlayEnabled()
+                        && saved.getDebugOverlayMode() == com.mockplayer.config.RenderMode.OFF
                         && Float.compare(saved.getGuiOpacity(), 0.5F) == 0
                         && saved.getGuiBlur() == 7);
                 ctx.checkNow("hot reload old root removed (active)", !ctx.platform().hasActiveRoot("query"));
@@ -270,7 +284,13 @@ public class ConfigSuite extends TestSuite {
                 && a.getEventSummaryMaxLength() == b.getEventSummaryMaxLength()
                 && a.getEventTickSampleInterval() == b.getEventTickSampleInterval()
                 && Double.compare(a.getEventMoveSampleDistance(), b.getEventMoveSampleDistance()) == 0
-                && a.isDebugOverlayEnabled() == b.isDebugOverlayEnabled()
+                && a.getDebugOverlayMode() == b.getDebugOverlayMode()
+                && a.isNavigateEnabled() == b.isNavigateEnabled()
+                && a.isNavigateAllowSprint() == b.isNavigateAllowSprint()
+                && a.isNavigateAllowBreak() == b.isNavigateAllowBreak()
+                && a.isNavigateAllowPlace() == b.isNavigateAllowPlace()
+                && a.getNavigatePathTimeoutMs() == b.getNavigatePathTimeoutMs()
+                && a.getNavigateRenderMode() == b.getNavigateRenderMode()
                 && a.getGuiBlur() == b.getGuiBlur()
                 && Float.compare(a.getGuiOpacity(), b.getGuiOpacity()) == 0
                 && a.isPayloadInterceptEnabled() == b.isPayloadInterceptEnabled()
@@ -380,6 +400,27 @@ public class ConfigSuite extends TestSuite {
                         continue;
                     }
                     if (option.binding().getValue() instanceof Boolean) {
+                        return (dev.isxander.yacl3.api.Option) option;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** 按名称翻译 key 找 RenderMode 三态选项。 */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private dev.isxander.yacl3.api.Option<com.mockplayer.config.RenderMode> findEnumOption(
+            ModConfigScreen screen, String nameKey) {
+        for (dev.isxander.yacl3.api.ConfigCategory category : screen.config.categories()) {
+            for (dev.isxander.yacl3.api.OptionGroup group : category.groups()) {
+                for (dev.isxander.yacl3.api.Option<?> option : group.options()) {
+                    if (option instanceof dev.isxander.yacl3.api.ButtonOption) {
+                        continue;
+                    }
+                    if (option.binding().getValue() instanceof com.mockplayer.config.RenderMode
+                            && Component.translatable("config.mockplayer.option." + nameKey)
+                            .equals(option.name())) {
                         return (dev.isxander.yacl3.api.Option) option;
                     }
                 }

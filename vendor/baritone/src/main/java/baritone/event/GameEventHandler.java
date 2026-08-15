@@ -15,18 +15,18 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.event;
+package com.mockplayer.baritone.event;
 
-import baritone.Baritone;
-import baritone.api.event.events.*;
-import baritone.api.event.events.type.EventState;
-import baritone.api.event.listener.IEventBus;
-import baritone.api.event.listener.IGameEventListener;
-import baritone.api.utils.Helper;
-import baritone.api.utils.Pair;
-import baritone.cache.CachedChunk;
-import baritone.cache.WorldProvider;
-import baritone.utils.BlockStateInterface;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.event.events.*;
+import com.mockplayer.baritone.api.event.events.type.EventState;
+import com.mockplayer.baritone.api.event.listener.IEventBus;
+import com.mockplayer.baritone.api.event.listener.IGameEventListener;
+import com.mockplayer.baritone.api.utils.Helper;
+import com.mockplayer.baritone.api.utils.Pair;
+import com.mockplayer.baritone.cache.CachedChunk;
+import com.mockplayer.baritone.cache.WorldProvider;
+import com.mockplayer.baritone.utils.BlockStateInterface;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;

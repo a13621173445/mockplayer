@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.behavior.look;
+package com.mockplayer.baritone.api.behavior.look;
 
-import baritone.api.utils.Rotation;
+import com.mockplayer.baritone.api.utils.Rotation;
 
 /**
  * @author Brady

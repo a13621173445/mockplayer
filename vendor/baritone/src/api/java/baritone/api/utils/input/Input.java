@@ -15,7 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.utils.input;
+package com.mockplayer.baritone.api.utils.input;
 
 /**
  * An {@link Enum} representing the inputs that control the player's

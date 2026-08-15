@@ -15,18 +15,19 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api;
+package com.mockplayer.baritone.api;
 
-import baritone.api.behavior.ILookBehavior;
-import baritone.api.behavior.IPathingBehavior;
-import baritone.api.cache.IWorldProvider;
-import baritone.api.Settings;
-import baritone.api.event.listener.IEventBus;
-import baritone.api.pathing.calc.IPathingControlManager;
-import baritone.api.process.*;
-import baritone.api.selection.ISelectionManager;
-import baritone.api.utils.IInputOverrideHandler;
-import baritone.api.utils.IPlayerContext;
+import com.mockplayer.baritone.api.behavior.ILookBehavior;
+import com.mockplayer.baritone.api.behavior.IPathingBehavior;
+import com.mockplayer.baritone.api.cache.IWorldProvider;
+import com.mockplayer.baritone.api.Settings;
+import com.mockplayer.baritone.api.event.listener.IEventBus;
+import com.mockplayer.baritone.api.pathing.calc.IPathingControlManager;
+import com.mockplayer.baritone.api.process.*;
+import com.mockplayer.baritone.api.selection.ISelectionManager;
+import com.mockplayer.baritone.api.utils.IInputOverrideHandler;
+import com.mockplayer.baritone.api.utils.IPlayerContext;
+import net.minecraft.client.player.LocalPlayer;
 
 /**
  * @author Brady
@@ -128,7 +129,7 @@ public interface IBaritone {
      * @return settings
      */
     default Settings settings() {
-        return baritone.api.BaritoneAPI.getSettings();
+        return com.mockplayer.baritone.api.BaritoneAPI.getSettings();
     }
 
     /**
@@ -146,5 +147,25 @@ public interface IBaritone {
     /**
      * Open click
      */
-    void openClick();
+    /**
+     * 更新绑定的假人 player（假人重生/切换 player 后调用；primary 实例无操作）。
+     *
+     * @param player 新的假人 LocalPlayer
+     */
+    default void updateBoundPlayer(LocalPlayer player) {
+    }
+
+    /**
+     * 关闭并保存当前世界缓存（假人销毁时调用；实现类负责引用清理）。
+     */
+    default void closeWorldCache() {
+    }
+
+    /**
+     * 设置假人连接的服务器标识（缓存目录键；"singleplayer" = 本机单机/局域网）。
+     *
+     * @param serverKey 服务器标识
+     */
+    default void updateServerKey(String serverKey) {
+    }
 }

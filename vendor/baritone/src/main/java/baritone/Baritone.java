@@ -15,27 +15,28 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone;
+package com.mockplayer.baritone;
 
-import baritone.api.BaritoneAPI;
-import baritone.api.IBaritone;
-import baritone.api.Settings;
-import baritone.api.behavior.IBehavior;
-import baritone.api.event.listener.IEventBus;
-import baritone.api.process.IBaritoneProcess;
-import baritone.api.process.IElytraProcess;
-import baritone.api.utils.IPlayerContext;
-import baritone.behavior.*;
-import baritone.cache.WorldProvider;
-import baritone.event.GameEventHandler;
-import baritone.process.*;
-import baritone.selection.SelectionManager;
-import baritone.utils.BlockStateInterface;
-import baritone.utils.GuiClick;
-import baritone.utils.InputOverrideHandler;
-import baritone.utils.PathingControlManager;
-import baritone.utils.player.BaritonePlayerContext;
+import com.mockplayer.baritone.api.BaritoneAPI;
+import com.mockplayer.baritone.api.IBaritone;
+import com.mockplayer.baritone.api.Settings;
+import com.mockplayer.baritone.api.behavior.IBehavior;
+import com.mockplayer.baritone.api.event.listener.IEventBus;
+import com.mockplayer.baritone.api.process.IBaritoneProcess;
+import com.mockplayer.baritone.api.process.IElytraProcess;
+import com.mockplayer.baritone.api.utils.IPlayerContext;
+import com.mockplayer.baritone.behavior.*;
+import com.mockplayer.baritone.cache.WorldProvider;
+import com.mockplayer.baritone.event.GameEventHandler;
+import com.mockplayer.baritone.process.*;
+import com.mockplayer.baritone.selection.SelectionManager;
+import com.mockplayer.baritone.utils.BlockStateInterface;
+import com.mockplayer.baritone.utils.InputOverrideHandler;
+import com.mockplayer.baritone.utils.PathingControlManager;
+import com.mockplayer.baritone.utils.player.BaritonePlayerContext;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
+import net.minecraft.client.player.LocalPlayer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -90,8 +91,19 @@ public class Baritone implements IBaritone {
 
     /** 本实例自己的设置（per-instance，假人之间配置独立；不再用全局静态单例） */
     public final Settings settings = new Settings();
+    /** 假人连接的服务器标识（null = 主玩家语义；非 null 时做缓存目录键）。 */
+    private volatile String serverKey;
 
     Baritone(Minecraft mc) {
+        this(mc, null, null);
+    }
+
+    /**
+     * @param mc       Minecraft 单例
+     * @param player   绑定的假人 player（null = 动态 mc.player）
+     * @param gameMode 绑定的假人 gameMode（null = 用 mc.gameMode）
+     */
+    Baritone(Minecraft mc, LocalPlayer player, MultiPlayerGameMode gameMode) {
         this.mc = mc;
         this.gameEventHandler = new GameEventHandler(this);
 
@@ -103,7 +115,7 @@ public class Baritone implements IBaritone {
         }
 
         // Define this before behaviors try and get it, or else it will be null and the builds will fail!
-        this.playerContext = new BaritonePlayerContext(this, mc);
+        this.playerContext = new BaritonePlayerContext(this, mc, player, gameMode);
 
         {
             this.lookBehavior         = this.registerBehavior(LookBehavior::new);
@@ -235,22 +247,39 @@ public class Baritone implements IBaritone {
         return this.elytraProcess;
     }
 
-    @Override
-    public void openClick() {
-        new Thread(() -> {
-            try {
-                Thread.sleep(100);
-                mc.execute(() -> mc.gui.setScreen(new GuiClick()));
-            } catch (Exception ignored) {}
-        }).start();
-    }
-
     public Path getDirectory() {
         return this.directory;
     }
 
     public Settings settings() {
         return this.settings;
+    }
+
+    /** 设置服务器标识（mockplayer 假人创建时写入；"singleplayer" = 本机单机/局域网）。 */
+    public void setServerKey(String serverKey) {
+        this.serverKey = serverKey;
+    }
+
+    /** 服务器标识（null = 未设置，走主玩家语义）。 */
+    public String getServerKey() {
+        return this.serverKey;
+    }
+
+    /** 假人重生/切换 player 后更新绑定引用（primary 实例是空操作）。 */
+    @Override
+    public void updateBoundPlayer(LocalPlayer player) {
+        ((BaritonePlayerContext) this.playerContext).setPlayer(player);
+    }
+
+    /** 关闭并保存当前世界缓存（假人销毁时调用；无其他实例引用时从静态 map 移除）。 */
+    @Override
+    public void closeWorldCache() {
+        this.worldProvider.closeWorld();
+    }
+
+    @Override
+    public void updateServerKey(String serverKey) {
+        this.serverKey = serverKey;
     }
 
     public static Executor getExecutor() {

@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils.schematic.schematica;
+package com.mockplayer.baritone.utils.schematic.schematica;
 
-import baritone.api.schematic.IStaticSchematic;
-import baritone.api.utils.Pair;
+import com.mockplayer.baritone.api.schematic.IStaticSchematic;
+import com.mockplayer.baritone.api.utils.Pair;
 import com.github.lunatrius.schematica.Schematica;
 import com.github.lunatrius.schematica.proxy.ClientProxy;
 import net.minecraft.core.BlockPos;

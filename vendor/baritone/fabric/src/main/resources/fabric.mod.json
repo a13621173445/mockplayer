@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "id": "baritone",
+  "id": "mockplayer_baritone",
   "version": "${version}",
 
   "name": "Baritone",

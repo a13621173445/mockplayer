@@ -15,7 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.pathing.goals;
+package com.mockplayer.baritone.api.pathing.goals;
 
 import net.minecraft.core.BlockPos;
 

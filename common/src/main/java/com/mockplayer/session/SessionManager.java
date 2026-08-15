@@ -40,6 +40,8 @@ public class SessionManager {
     public void tick() {
         this.manager.tick();
         BatchCommands.tick(); // 批量创建队列（tick 驱动）
+        // 寻路渲染三态（全局，F3_ONLY 需每 tick 跟随 F3 开关；值未变时零开销跳过）
+        NavigateSupport.syncRender();
     }
 
     /**
@@ -56,6 +58,11 @@ public class SessionManager {
      */
     public FakeSession getSession(String name) {
         return this.manager.getSession(name);
+    }
+
+    /** 当前在线假人名字（寻路配置批量应用/渲染同步用）。 */
+    public java.util.Collection<String> getSessionNames() {
+        return this.manager.getFakePlayerNames();
     }
 
     /** 假人粒子：记录到对应假人 state，不加入主玩家 particleEngine。 */

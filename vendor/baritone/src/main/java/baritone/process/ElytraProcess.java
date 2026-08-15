@@ -15,33 +15,33 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.process;
+package com.mockplayer.baritone.process;
 
-import baritone.Baritone;
-import baritone.api.Settings;
-import baritone.api.IBaritone;
-import baritone.api.event.events.*;
-import baritone.api.event.events.type.EventState;
-import baritone.api.event.listener.AbstractGameEventListener;
-import baritone.api.pathing.goals.Goal;
-import baritone.api.pathing.goals.GoalBlock;
-import baritone.api.pathing.goals.GoalXZ;
-import baritone.api.pathing.goals.GoalYLevel;
-import baritone.api.pathing.movement.IMovement;
-import baritone.api.pathing.path.IPathExecutor;
-import baritone.api.process.IBaritoneProcess;
-import baritone.api.process.IElytraProcess;
-import baritone.api.process.PathingCommand;
-import baritone.api.process.PathingCommandType;
-import baritone.api.utils.BetterBlockPos;
-import baritone.api.utils.Rotation;
-import baritone.api.utils.RotationUtils;
-import baritone.api.utils.input.Input;
-import baritone.pathing.movement.CalculationContext;
-import baritone.pathing.movement.movements.MovementFall;
-import baritone.process.elytra.*;
-import baritone.utils.BaritoneProcessHelper;
-import baritone.utils.PathingCommandContext;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.Settings;
+import com.mockplayer.baritone.api.IBaritone;
+import com.mockplayer.baritone.api.event.events.*;
+import com.mockplayer.baritone.api.event.events.type.EventState;
+import com.mockplayer.baritone.api.event.listener.AbstractGameEventListener;
+import com.mockplayer.baritone.api.pathing.goals.Goal;
+import com.mockplayer.baritone.api.pathing.goals.GoalBlock;
+import com.mockplayer.baritone.api.pathing.goals.GoalXZ;
+import com.mockplayer.baritone.api.pathing.goals.GoalYLevel;
+import com.mockplayer.baritone.api.pathing.movement.IMovement;
+import com.mockplayer.baritone.api.pathing.path.IPathExecutor;
+import com.mockplayer.baritone.api.process.IBaritoneProcess;
+import com.mockplayer.baritone.api.process.IElytraProcess;
+import com.mockplayer.baritone.api.process.PathingCommand;
+import com.mockplayer.baritone.api.process.PathingCommandType;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.utils.Rotation;
+import com.mockplayer.baritone.api.utils.RotationUtils;
+import com.mockplayer.baritone.api.utils.input.Input;
+import com.mockplayer.baritone.pathing.movement.CalculationContext;
+import com.mockplayer.baritone.pathing.movement.movements.MovementFall;
+import com.mockplayer.baritone.process.elytra.*;
+import com.mockplayer.baritone.utils.BaritoneProcessHelper;
+import com.mockplayer.baritone.utils.PathingCommandContext;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -66,7 +66,7 @@ import java.util.*;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
-import static baritone.api.pathing.movement.ActionCosts.COST_INF;
+import static com.mockplayer.baritone.api.pathing.movement.ActionCosts.COST_INF;
 
 public class ElytraProcess extends BaritoneProcessHelper implements IBaritoneProcess, IElytraProcess, AbstractGameEventListener {
     public State state;

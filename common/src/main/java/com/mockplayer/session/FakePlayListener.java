@@ -319,6 +319,26 @@ public class FakePlayListener extends ClientPacketListener {
         // 4. 存进 session（供 tick 驱动物理）
         this.session.setFakePlayer(this.fakePlayer);
         this.session.setPlayListener(this);
+        // 5. 假人专属 Baritone 实例：绑定假人 player/gameMode（隔离铁律：交互走假人
+        //    gameMode，不碰主玩家）；tick 由 Baritone 全局 mixin 自动驱动（MixinMinecraft
+        //    广播 TickEvent + MixinClientPlayerEntity 按玩家匹配 PlayerUpdateEvent）
+        com.mockplayer.baritone.api.IBaritone botBaritone = com.mockplayer.baritone.api.BaritoneAPI.getProvider()
+                .createBaritone(mc, this.fakePlayer, this.fakeGameMode);
+        this.session.setBaritone(botBaritone);
+        // 服务器标识 → 缓存目录键（"singleplayer" 共享主世界缓存，host:port 独立）
+        botBaritone.updateServerKey(this.session.getServerKey());
+        // 世界加载事件（LookBehavior/ElytraProcess 状态初始化；WorldProvider 靠
+        // detectAndHandleBrokenLoading 轮询自愈，不依赖此事件）
+        botBaritone.getGameEventHandler().onWorldEvent(
+                new com.mockplayer.baritone.api.event.events.WorldEvent(
+                        self.mockplayer$getLevel(),
+                        com.mockplayer.baritone.api.event.events.type.EventState.PRE));
+        botBaritone.getGameEventHandler().onWorldEvent(
+                new com.mockplayer.baritone.api.event.events.WorldEvent(
+                        self.mockplayer$getLevel(),
+                        com.mockplayer.baritone.api.event.events.type.EventState.POST));
+        // 应用寻路配置（全局 + per-bot 覆盖 → 该实例 Settings）
+        com.mockplayer.session.NavigateSupport.applyToSession(this.session);
         // 重置登录后首包血量检查标志（服务端若认为假人已死，登录后第一个 setHealth 包血量 <= 0）
         this.checkDeathOnLogin = true;
         // 标记已连接（消除 connected 与 PLAYING 的跨线程竞态，见 FakeSession.doConnectTcp 注释）
@@ -1033,6 +1053,11 @@ public class FakePlayListener extends ClientPacketListener {
         this.fakePlayer = newPlayer;
         // 关键：同步到 session，否则 FakeSession.tick() 仍驱动旧 player（旧 level）→ 传送后失去物理/位置错乱
         this.session.setFakePlayer(newPlayer);
+        // 同步 Baritone 绑定（假人重生/换维重建 player；gameMode 不重建无需更新）
+        com.mockplayer.baritone.api.IBaritone botBaritone = this.session.getBaritone();
+        if (botBaritone != null) {
+            botBaritone.updateBoundPlayer(newPlayer);
+        }
         if (packet.shouldKeep((byte) 2)) {
             java.util.List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> data =
                     oldPlayer.getEntityData().getNonDefaultValues();
@@ -1091,6 +1116,18 @@ public class FakePlayListener extends ClientPacketListener {
     public void handleLevelChunkWithLight(net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket packet) {
         super.handleLevelChunkWithLight(packet);
         MockplayerClientPacketListenerAccessor self = (MockplayerClientPacketListenerAccessor) this;
+        // 假人区块事件（激进改造：替代 MixinClientPlayNetHandler 的 chunk 广播；
+        // CachedWorld.queueForPacking 由 GameEventHandler.onChunkEvent 处理）
+        com.mockplayer.baritone.api.IBaritone botBaritone = this.session.getBaritone();
+        if (botBaritone != null) {
+            botBaritone.getGameEventHandler().onChunkEvent(
+                    new com.mockplayer.baritone.api.event.events.ChunkEvent(
+                            com.mockplayer.baritone.api.event.events.type.EventState.POST,
+                            !packet.isSkippable()
+                                    ? com.mockplayer.baritone.api.event.events.ChunkEvent.Type.POPULATE_FULL
+                                    : com.mockplayer.baritone.api.event.events.ChunkEvent.Type.POPULATE_PARTIAL,
+                            packet.getX(), packet.getZ()));
+        }
         if (!this.hasClientLoaded()) {
             self.mockplayer$notifyPlayerLoaded();
         }

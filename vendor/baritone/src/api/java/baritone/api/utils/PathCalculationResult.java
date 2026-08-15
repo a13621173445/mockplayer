@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.utils;
+package com.mockplayer.baritone.api.utils;
 
-import baritone.api.pathing.calc.IPath;
+import com.mockplayer.baritone.api.pathing.calc.IPath;
 
 import java.util.Objects;
 import java.util.Optional;

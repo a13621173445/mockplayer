@@ -15,7 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.cache;
+package com.mockplayer.baritone.api.cache;
 
 import java.util.ArrayList;
 import net.minecraft.core.BlockPos;

@@ -4,6 +4,7 @@ import com.mockplayer.api.BotLifecycle;
 import com.mockplayer.api.MockplayerApi;
 import com.mockplayer.config.ModConfig;
 import com.mockplayer.config.MockplayerConfig;
+import com.mockplayer.config.RenderMode;
 import com.mockplayer.session.DebugNameTagInfo;
 import com.mockplayer.test.framework.TestContext;
 import com.mockplayer.test.framework.TestSuite;
@@ -67,14 +68,17 @@ public class DebugNameTagSuite extends TestSuite {
             }
             ctx.checkNow("debug tag null for null bot", DebugNameTagInfo.format(null) == null);
             Minecraft mc = Minecraft.getInstance();
-            mc.debugEntries.setOverlayVisible(true);
-            ctx.checkNow("shouldShow true by default (F3 + config on)",
-                    DebugNameTagInfo.shouldShow());
-            MockplayerConfig.get().setDebugOverlayEnabled(false);
-            ctx.checkNow("shouldShow false when config off", !DebugNameTagInfo.shouldShow());
-            MockplayerConfig.get().setDebugOverlayEnabled(true);
+            // 三态（2026-08-16）：ALWAYS 恒显示；F3_ONLY 跟随 F3；OFF 恒不显示
+            MockplayerConfig.get().setDebugOverlayMode(RenderMode.ALWAYS);
             mc.debugEntries.setOverlayVisible(false);
-            ctx.checkNow("shouldShow false when F3 off", !DebugNameTagInfo.shouldShow());
+            ctx.checkNow("ALWAYS shows even when F3 off", DebugNameTagInfo.shouldShow());
+            MockplayerConfig.get().setDebugOverlayMode(RenderMode.OFF);
+            mc.debugEntries.setOverlayVisible(true);
+            ctx.checkNow("OFF hides even when F3 on", !DebugNameTagInfo.shouldShow());
+            MockplayerConfig.get().setDebugOverlayMode(RenderMode.F3_ONLY);
+            ctx.checkNow("F3_ONLY shows when F3 on", DebugNameTagInfo.shouldShow());
+            mc.debugEntries.setOverlayVisible(false);
+            ctx.checkNow("F3_ONLY hides when F3 off", !DebugNameTagInfo.shouldShow());
             MockplayerConfig.save(new ModConfig());
             mc.debugEntries.setOverlayVisible(true);
         });

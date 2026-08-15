@@ -15,12 +15,13 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api;
+package com.mockplayer.baritone.api;
 
-import baritone.api.cache.IWorldScanner;
-import baritone.api.schematic.ISchematicSystem;
+import com.mockplayer.baritone.api.cache.IWorldScanner;
+import com.mockplayer.baritone.api.schematic.ISchematicSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 
 import java.util.List;
@@ -105,6 +106,17 @@ public interface IBaritoneProvider {
      * @return The {@link IBaritone} instance
      */
     IBaritone createBaritone(Minecraft minecraft);
+
+    /**
+     * Creates and registers a new {@link IBaritone} instance bound to the specified
+     * fake player and game mode (used by bot mods).
+     *
+     * @param minecraft The minecraft
+     * @param player    The fake player to bind (may be null)
+     * @param gameMode  The fake player's game mode (may be null)
+     * @return The {@link IBaritone} instance
+     */
+    IBaritone createBaritone(Minecraft minecraft, LocalPlayer player, MultiPlayerGameMode gameMode);
 
     /**
      * Destroys and removes the specified {@link IBaritone} instance. If the specified instance is the

@@ -16,7 +16,7 @@
  */
 
 
-package baritone.process.elytra;
+package com.mockplayer.baritone.process.elytra;
 
 /**
  * @author Brady

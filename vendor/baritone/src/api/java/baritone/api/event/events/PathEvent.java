@@ -15,7 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.event.events;
+package com.mockplayer.baritone.api.event.events;
 
 public enum PathEvent {
     CALC_STARTED,

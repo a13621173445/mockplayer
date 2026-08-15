@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.schematic.format;
+package com.mockplayer.baritone.api.schematic.format;
 
-import baritone.api.schematic.ISchematic;
-import baritone.api.schematic.IStaticSchematic;
+import com.mockplayer.baritone.api.schematic.ISchematic;
+import com.mockplayer.baritone.api.schematic.IStaticSchematic;
 
 import java.io.File;
 import java.io.IOException;

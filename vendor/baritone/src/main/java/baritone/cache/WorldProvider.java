@@ -15,12 +15,14 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.cache;
+package com.mockplayer.baritone.cache;
 
-import baritone.Baritone;
-import baritone.api.cache.IWorldProvider;
-import baritone.api.utils.IPlayerContext;
-import baritone.api.utils.Pair;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.BaritoneAPI;
+import com.mockplayer.baritone.api.cache.IWorldProvider;
+import com.mockplayer.baritone.api.utils.IPlayerContext;
+import com.mockplayer.baritone.api.utils.Pair;
+import com.mockplayer.baritone.api.utils.Pair;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.Level;
@@ -90,7 +92,6 @@ public class WorldProvider implements IWorldProvider {
                 Files.createDirectories(worldDataDir);
             } catch (IOException ignored) {}
 
-            System.out.println("Baritone world data dir: " + worldDataDir);
             synchronized (worldCache) {
                 this.currentWorld = worldCache.computeIfAbsent(worldDataDir, d -> new WorldData(d, world.dimensionType(), world.dimension()));
             }
@@ -106,6 +107,15 @@ public class WorldProvider implements IWorldProvider {
             return;
         }
         world.onClose();
+        // 无其他实例引用同一 WorldData 时从静态 map 移除
+        synchronized (worldCache) {
+            boolean referenced = BaritoneAPI.getProvider().getAllBaritones().stream()
+                    .anyMatch(b -> b.getWorldProvider() instanceof WorldProvider wp
+                            && wp.currentWorld == world);
+            if (!referenced) {
+                worldCache.entrySet().removeIf(e -> e.getValue() == world);
+            }
+        }
     }
 
     private Path getWorldDataDirectory(Path parent, Level world) {
@@ -122,6 +132,18 @@ public class WorldProvider implements IWorldProvider {
     private Optional<Pair<Path, Path>> getSaveDirectories(Level world) {
         Path worldDir;
         Path readmeDir;
+
+        // mockplayer 假人显式服务器标识（"singleplayer" = 本机单机/局域网共享主世界
+        // 缓存；host:port = 独立服务器独立缓存，不读主玩家 currentServer）
+        String serverKey = baritone.getServerKey();
+        if (serverKey != null && !"singleplayer".equals(serverKey)) {
+            if (SystemUtils.IS_OS_WINDOWS) {
+                serverKey = serverKey.replace(":", "_");
+            }
+            worldDir = baritone.getDirectory().resolve(serverKey);
+            readmeDir = baritone.getDirectory();
+            return Optional.of(new Pair<>(worldDir, readmeDir));
+        }
 
         // If there is an integrated server running (Aka Singleplayer) then do magic to find the world save file
         if (ctx.minecraft().hasSingleplayerServer()) {
@@ -142,7 +164,6 @@ public class WorldProvider implements IWorldProvider {
                 folderName = serverData.isRealm() ? "realms" : serverData.ip;
             } else {
                 //replaymod causes null currentServer and false singleplayer.
-                System.out.println("World seems to be a replay. Not loading Baritone cache.");
                 currentWorld = null;
                 mcWorld = ctx.world();
                 return Optional.empty();
@@ -165,15 +186,12 @@ public class WorldProvider implements IWorldProvider {
     private void detectAndHandleBrokenLoading() {
         if (this.mcWorld != ctx.world()) {
             if (this.currentWorld != null) {
-                System.out.println("mc.world unloaded unnoticed! Unloading Baritone cache now.");
                 closeWorld();
             }
             if (ctx.world() != null) {
-                System.out.println("mc.world loaded unnoticed! Loading Baritone cache now.");
                 initWorld(ctx.world());
             }
         } else if (this.currentWorld == null && ctx.world() != null && (ctx.minecraft().hasSingleplayerServer() || ctx.minecraft().getCurrentServer() != null)) {
-            System.out.println("Retrying to load Baritone cache");
             initWorld(ctx.world());
         }
     }

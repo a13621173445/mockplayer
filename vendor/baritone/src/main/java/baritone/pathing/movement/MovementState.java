@@ -15,11 +15,11 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.pathing.movement;
+package com.mockplayer.baritone.pathing.movement;
 
-import baritone.api.pathing.movement.MovementStatus;
-import baritone.api.utils.Rotation;
-import baritone.api.utils.input.Input;
+import com.mockplayer.baritone.api.pathing.movement.MovementStatus;
+import com.mockplayer.baritone.api.utils.Rotation;
+import com.mockplayer.baritone.api.utils.input.Input;
 
 import java.util.HashMap;
 import java.util.Map;

@@ -15,21 +15,21 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.pathing.movement;
+package com.mockplayer.baritone.pathing.movement;
 
-import baritone.Baritone;
-import baritone.api.Settings;
-import baritone.api.BaritoneAPI;
-import baritone.api.IBaritone;
-import baritone.api.pathing.movement.ActionCosts;
-import baritone.api.pathing.movement.MovementStatus;
-import baritone.api.utils.*;
-import baritone.api.utils.Rotation;
-import baritone.api.utils.input.Input;
-import baritone.pathing.movement.MovementState.MovementTarget;
-import baritone.pathing.precompute.Ternary;
-import baritone.utils.BlockStateInterface;
-import baritone.utils.ToolSet;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.Settings;
+import com.mockplayer.baritone.api.BaritoneAPI;
+import com.mockplayer.baritone.api.IBaritone;
+import com.mockplayer.baritone.api.pathing.movement.ActionCosts;
+import com.mockplayer.baritone.api.pathing.movement.MovementStatus;
+import com.mockplayer.baritone.api.utils.*;
+import com.mockplayer.baritone.api.utils.Rotation;
+import com.mockplayer.baritone.api.utils.input.Input;
+import com.mockplayer.baritone.pathing.movement.MovementState.MovementTarget;
+import com.mockplayer.baritone.pathing.precompute.Ternary;
+import com.mockplayer.baritone.utils.BlockStateInterface;
+import com.mockplayer.baritone.utils.ToolSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
@@ -56,9 +56,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
-import static baritone.api.utils.RotationUtils.DEG_TO_RAD_F;
-import static baritone.pathing.movement.Movement.HORIZONTALS_BUT_ALSO_DOWN_____SO_EVERY_DIRECTION_EXCEPT_UP;
-import static baritone.pathing.precompute.Ternary.*;
+import static com.mockplayer.baritone.api.utils.RotationUtils.DEG_TO_RAD_F;
+import static com.mockplayer.baritone.pathing.movement.Movement.HORIZONTALS_BUT_ALSO_DOWN_____SO_EVERY_DIRECTION_EXCEPT_UP;
+import static com.mockplayer.baritone.pathing.precompute.Ternary.*;
 
 /**
  * Static helpers for cost calculation

@@ -15,15 +15,15 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.cache;
+package com.mockplayer.baritone.cache;
 
-import baritone.api.cache.ICachedWorld;
-import baritone.api.cache.IWorldScanner;
-import baritone.api.utils.BetterBlockPos;
-import baritone.api.utils.BlockOptionalMeta;
-import baritone.api.utils.BlockOptionalMetaLookup;
-import baritone.api.utils.IPlayerContext;
-import baritone.utils.accessor.IPalettedContainer;
+import com.mockplayer.baritone.api.cache.ICachedWorld;
+import com.mockplayer.baritone.api.cache.IWorldScanner;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.utils.BlockOptionalMeta;
+import com.mockplayer.baritone.api.utils.BlockOptionalMetaLookup;
+import com.mockplayer.baritone.api.utils.IPlayerContext;
+import com.mockplayer.baritone.utils.accessor.IPalettedContainer;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;

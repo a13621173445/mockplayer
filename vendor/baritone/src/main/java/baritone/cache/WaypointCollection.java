@@ -15,12 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.cache;
+package com.mockplayer.baritone.cache;
 
-import baritone.api.cache.IWaypoint;
-import baritone.api.cache.IWaypointCollection;
-import baritone.api.cache.Waypoint;
-import baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.cache.IWaypoint;
+import com.mockplayer.baritone.api.cache.IWaypointCollection;
+import com.mockplayer.baritone.api.cache.Waypoint;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -50,7 +50,6 @@ public class WaypointCollection implements IWaypointCollection {
                 Files.createDirectories(directory);
             } catch (IOException ignored) {}
         }
-        System.out.println("Would save waypoints to " + directory);
         this.waypoints = new HashMap<>();
         load();
     }

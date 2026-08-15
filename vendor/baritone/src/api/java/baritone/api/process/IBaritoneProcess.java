@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.process;
+package com.mockplayer.baritone.api.process;
 
-import baritone.api.behavior.IPathingBehavior;
-import baritone.api.event.events.PathEvent;
+import com.mockplayer.baritone.api.behavior.IPathingBehavior;
+import com.mockplayer.baritone.api.event.events.PathEvent;
 
 /**
  * A process that can control the PathingBehavior.
