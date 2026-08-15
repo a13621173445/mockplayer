@@ -58,6 +58,14 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      # vendored Baritone 是独立 gradle 项目：先构建出 fabric/neoforge jar
+      # （主项目 flatDir 依赖），再构建主项目
+      - name: Build vendored Baritone
+        run: |
+          chmod +x vendor/baritone/gradlew
+          cd vendor/baritone
+          ./gradlew :fabric:remapJar :neoforge:remapJar --no-daemon
+
       - name: Build project
         run: ./gradlew build --stacktrace
 
@@ -141,6 +149,12 @@ jobs:
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
+
+      - name: Build vendored Baritone
+        run: |
+          chmod +x vendor/baritone/gradlew
+          cd vendor/baritone
+          ./gradlew :fabric:remapJar :neoforge:remapJar --no-daemon
 
       - name: Download merged jar
         uses: actions/download-artifact@v7
