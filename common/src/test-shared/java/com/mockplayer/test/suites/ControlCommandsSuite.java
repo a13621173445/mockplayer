@@ -760,7 +760,7 @@ public class ControlCommandsSuite extends TestSuite {
         ctx.await("dirt in hand 2", () -> ctx.bot().getLocalPlayer().getMainHandItem().is(Items.DIRT), 200);
         ctx.run(() -> {
             ctx.bot().actions().lookAt(Vec3.atCenterOf(placeAt.get()));
-            ctx.bot().actions().placeBlockAt(placeAt.get());
+            ctx.bot().actions().placeAt(placeAt.get());
         });
         ctx.await("placeBlockAt placed dirt", () -> {
             ctx.server().execute(() -> {

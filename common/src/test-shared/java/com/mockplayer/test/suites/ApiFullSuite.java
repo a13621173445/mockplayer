@@ -286,7 +286,7 @@ public class ApiFullSuite extends TestSuite {
             if (!placed.get()) {
                 placed.set(true);
                 ctx.bot().actions().lookAt(Vec3.atCenterOf(pos.get()));
-                ctx.bot().actions().placeBlock(pos.get(), Direction.UP);
+                ctx.bot().actions().place(pos.get(), Direction.UP);
             }
         });
         ctx.await("placeBlock placed dirt (server)", () -> {
@@ -299,7 +299,7 @@ public class ApiFullSuite extends TestSuite {
             if (!mined.get()) {
                 mined.set(true);
                 ctx.bot().actions().lookAt(Vec3.atCenterOf(pos.get()));
-                ctx.bot().actions().mineBlock(pos.get());
+                ctx.bot().actions().mine(pos.get());
             }
         });
         ctx.await("mineBlock broke dirt (server)", () -> {

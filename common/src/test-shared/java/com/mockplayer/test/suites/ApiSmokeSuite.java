@@ -127,8 +127,8 @@ public class ApiSmokeSuite extends TestSuite {
             ctx.bot().actions().drop(0, false);
             ctx.bot().actions().mount(true);
             ctx.bot().actions().dismount();
-            ctx.bot().actions().sustainedAttack(null);
-            ctx.bot().actions().sustainedUse(null);
+            ctx.bot().actions().holdAttack(null);
+            ctx.bot().actions().holdUse(null);
             ctx.bot().actions().stopSustained();
         });
         ctx.check("new primitives no-crash", () -> true);

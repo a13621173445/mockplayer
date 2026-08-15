@@ -620,7 +620,7 @@ public class ControlCommands {
         return runEntity("sustainedAttack", name, target,
                 (b, e) -> {
                     b.actions().lookAt(e);
-                    b.actions().sustainedAttack(e);
+                    b.actions().holdAttack(e);
                 });
     }
 
@@ -628,24 +628,24 @@ public class ControlCommands {
         return runEntity("sustainedUse", name, target,
                 (b, e) -> {
                     b.actions().lookAt(e);
-                    b.actions().sustainedUse(e);
+                    b.actions().holdUse(e);
                 });
     }
 
     public static Component attackLook(String name) {
-        return run("attackLook", name, b -> b.actions().attackLook());
+        return run("attackLook", name, b -> b.actions().attack());
     }
 
     public static Component useLook(String name) {
-        return run("useLook", name, b -> b.actions().useLook());
+        return run("useLook", name, b -> b.actions().use());
     }
 
     public static Component sustainedAttackLook(String name) {
-        return run("sustainedAttackLook", name, b -> b.actions().sustainedAttackLook());
+        return run("sustainedAttackLook", name, b -> b.actions().holdAttack());
     }
 
     public static Component sustainedUseLook(String name) {
-        return run("sustainedUseLook", name, b -> b.actions().sustainedUseLook());
+        return run("sustainedUseLook", name, b -> b.actions().holdUse());
     }
 
     public static Component stopSustained(String name) {
@@ -656,7 +656,7 @@ public class ControlCommands {
         return runEntity("interact", name, target,
                 (b, e) -> {
                     b.actions().lookAt(e);
-                    b.actions().interact(e);
+                    b.actions().use(e);
                 });
     }
 
@@ -669,14 +669,14 @@ public class ControlCommands {
         if (h == null) {
             return fail("commands.mockplayer.control.invalid_hand", hand == null ? "" : hand);
         }
-        return run("useItem", name, b -> b.actions().useItem(h),
+        return run("useItem", name, b -> b.actions().use(h),
                 h == InteractionHand.MAIN_HAND
                         ? Component.translatable("commands.mockplayer.control.hand.main")
                         : Component.translatable("commands.mockplayer.control.hand.off"));
     }
 
     public static Component releaseUsingItem(String name) {
-        return run("releaseUsingItem", name, b -> b.actions().releaseUsingItem());
+        return run("releaseUsingItem", name, b -> b.actions().releaseUse());
     }
 
     public static Component useItemOn(String name, int x, int y, int z, String side) {
@@ -691,7 +691,7 @@ public class ControlCommands {
         return run("useItemOn", name,
                 b -> {
                     b.actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
-                    b.actions().useItemOn(new BlockPos(x, y, z), dir);
+                    b.actions().use(new BlockPos(x, y, z), dir);
                 }, x + " " + y + " " + z + " " + dir.getName());
     }
 
@@ -707,7 +707,7 @@ public class ControlCommands {
         return run("placeBlock", name,
                 b -> {
                     b.actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
-                    b.actions().placeBlock(new BlockPos(x, y, z), dir);
+                    b.actions().place(new BlockPos(x, y, z), dir);
                 }, x + " " + y + " " + z + " " + dir.getName());
     }
 
@@ -715,7 +715,7 @@ public class ControlCommands {
         return run("mineBlock", name,
                 b -> {
                     b.actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
-                    b.actions().mineBlock(new BlockPos(x, y, z));
+                    b.actions().mine(new BlockPos(x, y, z));
                 }, x + " " + y + " " + z);
     }
 
@@ -723,7 +723,7 @@ public class ControlCommands {
         return run("attackBlock", name,
                 b -> {
                     b.actions().lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
-                    b.actions().attackBlock(new BlockPos(x, y, z));
+                    b.actions().attack(new BlockPos(x, y, z));
                 }, x + " " + y + " " + z);
     }
 
@@ -747,7 +747,7 @@ public class ControlCommands {
     public static Component drop(String name, Integer slot, Boolean all) {
         return run("drop", name, bot -> {
             if (slot == null || slot < 0) {
-                bot.actions().dropSelected();
+                bot.actions().drop();
             } else {
                 bot.actions().drop(Math.min(8, slot), all != null && all);
             }

@@ -118,7 +118,7 @@ public class UseItemsSuite extends TestSuite {
         awaitServerHolds(ctx, Items.BREAD, "bread", st);
         ctx.run(() -> {
             ctx.bot().getLocalPlayer().getInventory().setSelectedSlot(0);
-            ctx.bot().actions().useItem(InteractionHand.MAIN_HAND);
+            ctx.bot().actions().use(InteractionHand.MAIN_HAND);
         });
         ctx.await("bread auto-eaten + hunger (server)", () -> {
             ctx.server().execute(() -> {
@@ -145,7 +145,7 @@ public class UseItemsSuite extends TestSuite {
         SuitesSupport.awaitChunkLoaded(ctx, 600);
         ctx.run(() -> giveMain(ctx, "minecraft:shield"));
         awaitServerHolds(ctx, Items.SHIELD, "shield", st);
-        ctx.run(() -> ctx.bot().actions().useItem(InteractionHand.MAIN_HAND));
+        ctx.run(() -> ctx.bot().actions().use(InteractionHand.MAIN_HAND));
         ctx.await("shield blocking (server isUsingItem)", () -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
@@ -159,7 +159,7 @@ public class UseItemsSuite extends TestSuite {
         ctx.check("shield blocking (server isUsingItem)", () -> st.using.get());
         ctx.check("shield held 10+ ticks (sustained)", () -> st.holdTicks.get() >= 10);
         ctx.check("shield action visible to main player", () -> st.visible.get());
-        ctx.run(() -> ctx.bot().actions().releaseUsingItem());
+        ctx.run(() -> ctx.bot().actions().releaseUse());
         ctx.await("shield released (server)", () -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
@@ -195,7 +195,7 @@ public class UseItemsSuite extends TestSuite {
             ctx.bot().getLocalPlayer().getInventory().setSelectedSlot(0);
         });
         awaitServerHolds(ctx, Items.BOW, "bow", st);
-        ctx.run(() -> ctx.bot().actions().useItem(InteractionHand.MAIN_HAND));
+        ctx.run(() -> ctx.bot().actions().use(InteractionHand.MAIN_HAND));
         ctx.await("bow charging (server isUsingItem)", () -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
@@ -212,7 +212,7 @@ public class UseItemsSuite extends TestSuite {
         ctx.run(() -> {
             if (!released.get()) {
                 released.set(true);
-                ctx.bot().actions().releaseUsingItem();
+                ctx.bot().actions().releaseUse();
             }
         });
         ctx.await("bow released arrow (server)", () -> {
@@ -236,7 +236,7 @@ public class UseItemsSuite extends TestSuite {
         SuitesSupport.awaitChunkLoaded(ctx, 600);
         ctx.run(() -> giveMain(ctx, "minecraft:snowball"));
         awaitServerHolds(ctx, Items.SNOWBALL, "snowball", st);
-        ctx.run(() -> ctx.bot().actions().useItem(InteractionHand.MAIN_HAND));
+        ctx.run(() -> ctx.bot().actions().use(InteractionHand.MAIN_HAND));
         ctx.await("snowball thrown (server)", () -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
@@ -276,7 +276,7 @@ public class UseItemsSuite extends TestSuite {
                 .getOffhandItem().is(Items.SHIELD), 400);
         ctx.check("client holds offhand shield", () -> ctx.bot().getLocalPlayer()
                 .getOffhandItem().is(Items.SHIELD));
-        ctx.run(() -> ctx.bot().actions().useItem(InteractionHand.OFF_HAND));
+        ctx.run(() -> ctx.bot().actions().use(InteractionHand.OFF_HAND));
         ctx.await("offhand shield blocking (server)", () -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
@@ -287,7 +287,7 @@ public class UseItemsSuite extends TestSuite {
             return st.using.get();
         }, 200);
         ctx.check("offhand shield blocking (server)", () -> st.using.get());
-        ctx.run(() -> ctx.bot().actions().releaseUsingItem());
+        ctx.run(() -> ctx.bot().actions().releaseUse());
         ctx.check("offhand released", () -> true);
         ctx.run(() -> MockplayerApi.bots().removeBot(BOT, "command"));
     }
@@ -300,7 +300,7 @@ public class UseItemsSuite extends TestSuite {
         SuitesSupport.awaitChunkLoaded(ctx, 600);
         ctx.run(() -> giveMain(ctx, "minecraft:trident"));
         awaitServerHolds(ctx, Items.TRIDENT, "trident", st);
-        ctx.run(() -> ctx.bot().actions().useItem(InteractionHand.MAIN_HAND));
+        ctx.run(() -> ctx.bot().actions().use(InteractionHand.MAIN_HAND));
         ctx.await("trident charging (server isUsingItem)", () -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
@@ -312,7 +312,7 @@ public class UseItemsSuite extends TestSuite {
             if (!released.get()) {
                 released.set(true);
                 ctx.checkNow("trident charging (server isUsingItem)", st.using.get());
-                ctx.bot().actions().releaseUsingItem();
+                ctx.bot().actions().releaseUse();
             }
         });
         ctx.await("trident thrown (server)", () -> {
@@ -355,7 +355,7 @@ public class UseItemsSuite extends TestSuite {
             ctx.bot().getLocalPlayer().getInventory().setSelectedSlot(0);
         });
         awaitServerHolds(ctx, Items.CROSSBOW, "crossbow", st);
-        ctx.run(() -> ctx.bot().actions().useItem(InteractionHand.MAIN_HAND));
+        ctx.run(() -> ctx.bot().actions().use(InteractionHand.MAIN_HAND));
         ctx.await("crossbow charging (server isUsingItem)", () -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
@@ -376,7 +376,7 @@ public class UseItemsSuite extends TestSuite {
         ctx.run(() -> {
             if (!released.get()) {
                 released.set(true);
-                ctx.bot().actions().useItem(InteractionHand.MAIN_HAND);
+                ctx.bot().actions().use(InteractionHand.MAIN_HAND);
             }
         });
         ctx.await("crossbow fired arrow (server)", () -> {
@@ -400,7 +400,7 @@ public class UseItemsSuite extends TestSuite {
         SuitesSupport.awaitChunkLoaded(ctx, 600);
         ctx.run(() -> giveMain(ctx, "minecraft:splash_potion"));
         awaitServerHolds(ctx, Items.SPLASH_POTION, "splash potion", st);
-        ctx.run(() -> ctx.bot().actions().useItem(InteractionHand.MAIN_HAND));
+        ctx.run(() -> ctx.bot().actions().use(InteractionHand.MAIN_HAND));
         ctx.await("splash potion thrown (server)", () -> {
             ctx.server().execute(() -> {
                 ServerPlayer sp = ctx.server().getPlayerList().getPlayerByName(BOT);
