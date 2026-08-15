@@ -71,4 +71,13 @@ public final class NeoForgeTestPlatform implements TestPlatform {
         return "NeoForge";
     }
 
+    @Override
+    public void kickBot(String botName) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        var sp = mc.getSingleplayerServer().getPlayerList().getPlayerByName(botName);
+        if (sp != null) {
+            sp.connection.disconnect(net.minecraft.network.chat.Component.literal("kicked by mocktest"));
+        }
+    }
+
 }

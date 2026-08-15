@@ -45,7 +45,40 @@ public class ApiFullSuite extends TestSuite {
         test("容器接口", this::containerApi);
         test("BotManager API", this::managerApi);
         test("连接失败派发 onDisconnected", this::connectFailEvent);
+        test("服务端踢出派发 onDisconnected + 移除", this::kickedEvent);
         test("删除后引用释放", this::releaseRefsOnDelete);
+    }
+
+    /**
+     * 服务端踢出假人：客户端 handleDisconnect（服务端原因）→ 主玩家聊天栏通知 →
+     * 假人移除 + onDisconnected 事件（通知文本为 UI 层，事件/移除可硬断言）。
+     */
+    private void kickedEvent(TestContext ctx) {
+        String kickedName = "tbot-kicked";
+        AtomicBoolean disconnected = new AtomicBoolean();
+        AtomicReference<net.minecraft.network.DisconnectionDetails> details = new AtomicReference<>();
+        BotListener listener = new BotListener() {
+            @Override
+            public void onDisconnected(Bot bot, net.minecraft.network.DisconnectionDetails d) {
+                if (kickedName.equals(bot.getName())) {
+                    disconnected.set(true);
+                    details.set(d);
+                }
+            }
+        };
+        ctx.run(() -> SuitesSupport.createBot(ctx, kickedName));
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 300);
+        ctx.run(() -> {
+            if (ctx.bot() instanceof BotImpl impl) {
+                impl.events().addListener(listener);
+            }
+        });
+        ctx.server(() -> ctx.platform().kickBot(kickedName));
+        ctx.await("kicked onDisconnected", disconnected::get, 300);
+        ctx.check("kicked onDisconnected", disconnected::get);
+        ctx.check("kicked details non-null", () -> details.get() != null);
+        ctx.check("kicked bot removed", () -> MockplayerApi.bots().getBot(kickedName).isEmpty());
     }
 
     private void connectFailEvent(TestContext ctx) {

@@ -43,4 +43,7 @@ public interface TestPlatform {
     /** 当前物理端名（"Fabric" / "NeoForge"，与 {@code Services.PLATFORM.getPlatformName()} 对照）。 */
     String platformName();
 
+    /** 服务端踢出指定假人（模拟服务端 disconnect，客户端走 handleDisconnect 通知主玩家）。 */
+    void kickBot(String botName);
+
 }

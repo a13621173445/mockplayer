@@ -48,6 +48,7 @@ public class BotGuiSuite extends TestSuite {
         test("左键攻击 husk", this::attackLook);
         test("右键开箱", this::useLook);
         test("区块半径", this::chunkButtons);
+        test("空输入删除选中假人", this::chatEmptyDeletes);
         test("聊天", this::chat);
         test("自动重生开关", this::autoRespawn);
         test("KeyMapping 门禁", this::keyMapping);
@@ -388,6 +389,31 @@ public class BotGuiSuite extends TestSuite {
         });
         ctx.await("chunk -1 applied", () -> ctx.bot().getChunkRadius() == before[0], 100);
         ctx.check("chunk -1 applied", () -> ctx.bot().getChunkRadius() == before[0]);
+    }
+
+    /**
+     * 聊天输入框为空时点发送 = 删除当前选中的假人（主人 2026-08-15 需求）。
+     * 断言：选中假人（lastBotName）从管理器移除。
+     */
+    private void chatEmptyDeletes(TestContext ctx) {
+        createBot(ctx);
+        ctx.await("lifecycle PLAYING", () -> ctx.bot() != null
+                && ctx.bot().getLifecycle() == BotLifecycle.PLAYING, 200);
+        SuitesSupport.awaitChunkLoaded(ctx);
+        ensureTab(ctx, "gui.mockplayer.tab.actions");
+        ctx.run(() -> {
+            BotControlScreen screen = bgScreen();
+            EditBox box = bgFindEditBox(screen, "gui.mockplayer.action.chat_hint");
+            if (box != null) {
+                box.setValue("");
+            }
+            Button send = bgFindButton(screen, "gui.mockplayer.action.send");
+            if (send != null) {
+                bgClick(send);
+            }
+        });
+        ctx.await("选中假人被删除", () -> MockplayerApi.bots().getBot(lastBotName).isEmpty(), 200);
+        ctx.check("空输入删除选中假人", () -> MockplayerApi.bots().getBot(lastBotName).isEmpty());
     }
 
     private void chat(TestContext ctx) {
