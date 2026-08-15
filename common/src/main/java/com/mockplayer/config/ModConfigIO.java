@@ -66,11 +66,19 @@ public final class ModConfigIO {
                     ModConfig.DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE,
                     ModConfig.MIN_EVENT_MOVE_SAMPLE_DISTANCE, ModConfig.MAX_EVENT_MOVE_SAMPLE_DISTANCE));
             config.setCommands(readCommands(root));
-            // 缺失/非法 → 保持构造默认（true，功能默认启用）
-            if (root.has("debugOverlayEnabled") && root.get("debugOverlayEnabled").isJsonPrimitive()
-                    && root.get("debugOverlayEnabled").getAsJsonPrimitive().isBoolean()) {
-                config.setDebugOverlayEnabled(root.get("debugOverlayEnabled").getAsBoolean());
-            }
+            // 假人显示三态（新字段；旧布尔 debugOverlayEnabled 已废弃，读不到不影响）
+            config.setDebugOverlayMode(readEnum(root, "debugOverlayMode", RenderMode.F3_ONLY));
+            // 寻路段（行为项 per-bot 覆盖 + 渲染三态全局）
+            config.setNavigateEnabled(readBool(root, "navigateEnabled",
+                    ModConfig.DEFAULT_NAVIGATE_ENABLED));
+            config.setNavigateAllowSprint(readBool(root, "navigateAllowSprint", true));
+            config.setNavigateAllowBreak(readBool(root, "navigateAllowBreak", true));
+            config.setNavigateAllowPlace(readBool(root, "navigateAllowPlace", true));
+            config.setNavigatePathTimeoutMs(readInt(root, "navigatePathTimeoutMs",
+                    ModConfig.DEFAULT_NAVIGATE_PATH_TIMEOUT_MS,
+                    ModConfig.MIN_NAVIGATE_PATH_TIMEOUT_MS,
+                    ModConfig.MAX_NAVIGATE_PATH_TIMEOUT_MS));
+            config.setNavigateRenderMode(readEnum(root, "navigateRenderMode", RenderMode.F3_ONLY));
             // GUI 开关：缺失/非布尔 → 默认 true
             if (root.has("guiEnabled") && root.get("guiEnabled").isJsonPrimitive()
                     && root.get("guiEnabled").getAsJsonPrimitive().isBoolean()) {
@@ -127,7 +135,13 @@ public final class ModConfigIO {
         normalized.setEventTickSampleInterval(config.getEventTickSampleInterval());
         normalized.setEventMoveSampleDistance(config.getEventMoveSampleDistance());
         normalized.setCommands(config.getCommands());
-        normalized.setDebugOverlayEnabled(config.isDebugOverlayEnabled());
+        normalized.setDebugOverlayMode(config.getDebugOverlayMode());
+        normalized.setNavigateEnabled(config.isNavigateEnabled());
+        normalized.setNavigateAllowSprint(config.isNavigateAllowSprint());
+        normalized.setNavigateAllowBreak(config.isNavigateAllowBreak());
+        normalized.setNavigateAllowPlace(config.isNavigateAllowPlace());
+        normalized.setNavigatePathTimeoutMs(config.getNavigatePathTimeoutMs());
+        normalized.setNavigateRenderMode(config.getNavigateRenderMode());
         normalized.setGuiEnabled(config.isGuiEnabled());
         normalized.setGuiOpacity(config.getGuiOpacity());
         normalized.setGuiBlur(config.getGuiBlur());
@@ -194,6 +208,19 @@ public final class ModConfigIO {
             return fallback;
         }
         return root.get(key).getAsBoolean();
+    }
+
+    /** 读枚举字段：缺失/非字符串/未知值 → 默认值。 */
+    private static RenderMode readEnum(JsonObject root, String key, RenderMode fallback) {
+        if (!root.has(key) || !root.get(key).isJsonPrimitive()
+                || !root.get(key).getAsJsonPrimitive().isString()) {
+            return fallback;
+        }
+        try {
+            return RenderMode.valueOf(root.get(key).getAsString().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return fallback;
+        }
     }
 
     /** 读字符串列表字段：缺失/非数组/含非字符串元素 → 回退默认（空列表）。 */

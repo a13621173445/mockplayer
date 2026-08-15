@@ -39,6 +39,8 @@ public class MockplayerClient implements ClientModInitializer {
     public void onInitializeClient() {
         // 配置保存/重载后立即重建命令树（GUI 保存即热重载）
         MockplayerConfig.onReload(MockplayerClient::reloadCommands);
+        // 配置热重载 → 重应用全部假人 baritone settings（含渲染三态全局同步）
+        MockplayerConfig.onReload(com.mockplayer.session.NavigateSupport::applyAll);
         // 原版按键注册：GUI 快捷键（配置 guiEnabled/guiKeyName 由 BotGui 静态块同步）
         KeyMappingHelper.registerKeyMapping(BotGui.KEY_BINDING);
         registerCommands();

@@ -61,10 +61,18 @@ public class FakeSession {
     private volatile com.mockplayer.api.BotSource source = com.mockplayer.api.BotSource.API;
     /** 关联的 Bot 实现（BotManagerImpl 创建时写入，驱动事件/动作） */
     private BotImpl bot;
+    /** 假人专属 Baritone 实例（handleLogin 创建并绑定假人 player/gameMode；
+     *  disconnect 销毁；重生只更新 player 绑定）。 */
+    private volatile com.mockplayer.baritone.api.IBaritone botBaritone;
     /** 死亡后是否自动重生（默认 true = 产品行为不变；测试可关闭以验证 respawn 命令） */
     private volatile boolean autoRespawn = true;
     /** 会话是否已被删除（BotManager 移除后置位；in-flight 登录据此放弃，防孤儿 level 泄漏）。 */
     private volatile boolean disposed;
+    /** 假人 tick 计数（喂 Baritone 事件的 tick 序号，官方 TickEvent.count 等价）。 */
+    private int baritoneTickCount;
+    /** 假人连接的服务器标识（"singleplayer" = 本机单机/局域网，共享主世界缓存；
+     *  否则 host:port = 独立服务器，独立缓存目录）。 */
+    private volatile String serverKey = "singleplayer";
 
     public FakeSession(String name) {
         this.name = name;
@@ -181,6 +189,38 @@ public class FakeSession {
         return this.fakePlayer;
     }
 
+    /** 假人专属 Baritone 实例（未 PLAYING 时为 null）。 */
+    public com.mockplayer.baritone.api.IBaritone getBaritone() {
+        return this.botBaritone;
+    }
+
+    /** 设置假人专属 Baritone 实例（FakePlayListener.handleLogin 调用）。 */
+    public void setBaritone(com.mockplayer.baritone.api.IBaritone baritone) {
+        this.botBaritone = baritone;
+    }
+
+    /** 假人寻路配置覆盖项（/control config set 写入；命中优先于全局配置）。 */
+    private final java.util.Map<String, Object> navigateOverrides = new java.util.HashMap<>();
+
+    /** 取寻路配置覆盖项（无返回 null）。 */
+    public Object getNavigateOverride(String key) {
+        return this.navigateOverrides.get(key);
+    }
+
+    /** 写入寻路配置覆盖项（null = 清除）。 */
+    public void setNavigateOverride(String key, Object value) {
+        if (value == null) {
+            this.navigateOverrides.remove(key);
+        } else {
+            this.navigateOverrides.put(key, value);
+        }
+    }
+
+    /** 全部寻路配置覆盖项（只读快照；命令/查询用）。 */
+    public java.util.Map<String, Object> getNavigateOverrides() {
+        return java.util.Map.copyOf(this.navigateOverrides);
+    }
+
     /** 假人 level（假人 player 所在 level）——假人 gameMode 操作（挖矿/交互）隔离用，绝不返回主玩家 level */
     public net.minecraft.client.multiplayer.ClientLevel getFakeLevel() {
         return this.fakePlayer != null ? (net.minecraft.client.multiplayer.ClientLevel) this.fakePlayer.level() : null;
@@ -278,6 +318,10 @@ public class FakeSession {
         }
 
         connectTo(host, port, null);
+        if (singleplayer != null) {
+            // 单机/局域网：共享主世界缓存目录（同服务器同维度共享 CachedWorld）
+            this.serverKey = "singleplayer";
+        }
     }
 
     /**
@@ -288,6 +332,8 @@ public class FakeSession {
      * @param transferState 跟随传送时的 cookies（原版一致），普通连接传 null
      */
     public void connectTo(String host, int port, net.minecraft.client.multiplayer.TransferState transferState) {
+        // 独立服务器（含 transfer 跟随）：独立缓存目录（同服务器同维度共享）
+        this.serverKey = host + ":" + port;
         // 新连接开始时清除删除标记（transfer 跟随重连等合法路径）
         this.disposed = false;
         this.pendingTransfer = transferState;
@@ -364,6 +410,22 @@ public class FakeSession {
      * 同时驱动假人 LocalPlayer 物理（重力/移动/碰撞 + 发移动包），反作弊合规。
      */
     public void tick() {
+        // 假人专属 Baritone 事件驱动（2026-08-16 激进改造：不依赖 Baritone 全局
+        // mixin，FakeSession 手动喂；顺序对齐官方 Minecraft.tick）：
+        // Tick IN（PathingBehavior 处理路径命令 + 重建 bsi）→ PlayerUpdate PRE
+        // （在假人 LocalPlayer.tick 之前）→ …物理… → PlayerUpdate POST → Tick OUT
+        com.mockplayer.baritone.api.IBaritone botBaritone = this.botBaritone;
+        boolean feedBaritone = botBaritone != null && this.playListener != null && this.fakePlayer != null;
+        if (feedBaritone) {
+            int count = this.baritoneTickCount++;
+            botBaritone.getGameEventHandler().onTick(
+                    new com.mockplayer.baritone.api.event.events.TickEvent(
+                            com.mockplayer.baritone.api.event.events.type.EventState.PRE,
+                            com.mockplayer.baritone.api.event.events.TickEvent.Type.IN, count));
+            botBaritone.getGameEventHandler().onPlayerUpdate(
+                    new com.mockplayer.baritone.api.event.events.PlayerUpdateEvent(
+                            com.mockplayer.baritone.api.event.events.type.EventState.PRE));
+        }
         if (connection != null) {
             connection.tick();
         }
@@ -396,6 +458,12 @@ public class FakeSession {
                 LOG.error("[{}] 假人 level 实体 tick 出错", name, e);
             }
         }
+        // PlayerUpdate POST（官方 MixinMinecraft.postUpdateEntities 等价：实体 tick 完成后）
+        if (feedBaritone) {
+            botBaritone.getGameEventHandler().onPlayerUpdate(
+                    new com.mockplayer.baritone.api.event.events.PlayerUpdateEvent(
+                            com.mockplayer.baritone.api.event.events.type.EventState.POST));
+        }
 
         // 同步假人位置/着地状态到 FakePlayerState（铁律：假人状态不丢位置信息；
         // 本地预测位置与服务端权威一致，覆盖移动/传送/重生后的最新值）
@@ -411,6 +479,14 @@ public class FakeSession {
             } catch (Exception e) {
                 LOG.error("[{}] 假人 bot tick 出错", name, e);
             }
+        }
+        // Tick OUT（官方 MixinMinecraft.postRunTick 等价：tick 末尾）
+        if (feedBaritone) {
+            botBaritone.getGameEventHandler().onPostTick(
+                    new com.mockplayer.baritone.api.event.events.TickEvent(
+                            com.mockplayer.baritone.api.event.events.type.EventState.POST,
+                            com.mockplayer.baritone.api.event.events.TickEvent.Type.IN,
+                            this.baritoneTickCount - 1));
         }
     }
 
@@ -490,12 +566,26 @@ public class FakeSession {
             this.profile = null;
             this.pendingTransfer = null;
             this.state.clear();
+            // 销毁假人专属 Baritone 实例（重新登录时 handleLogin 重建）
+            com.mockplayer.baritone.api.IBaritone toDestroy = this.botBaritone;
+            this.botBaritone = null;
+            if (toDestroy != null) {
+                // 保存并释放世界缓存（无其他实例引用时从静态 map 移除）
+                toDestroy.closeWorldCache();
+                com.mockplayer.baritone.api.BaritoneAPI.getProvider().destroyBaritone(toDestroy);
+            }
+            this.navigateOverrides.clear();
         }
         LOG.info("[{}] 假人已移除", name);
     }
 
     public String getName() {
         return name;
+    }
+
+    /** 假人连接的服务器标识（Baritone 缓存目录键；"singleplayer" = 本机单机/局域网）。 */
+    public String getServerKey() {
+        return this.serverKey;
     }
 
     public boolean isConnected() {

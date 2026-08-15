@@ -15,13 +15,13 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils;
+package com.mockplayer.baritone.utils;
 
-import baritone.api.BaritoneAPI;
-import baritone.api.Settings;
-import baritone.utils.accessor.IEntityRenderManager;
-import baritone.utils.accessor.IRenderPipelines;
-import baritone.utils.accessor.IRenderType;
+import com.mockplayer.baritone.api.BaritoneAPI;
+import com.mockplayer.baritone.api.Settings;
+import com.mockplayer.baritone.utils.accessor.IEntityRenderManager;
+import com.mockplayer.baritone.utils.accessor.IRenderPipelines;
+import com.mockplayer.baritone.utils.accessor.IRenderType;
 import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.DepthStencilState;

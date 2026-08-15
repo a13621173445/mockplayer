@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.launch.mixins;
+package com.mockplayer.baritone.launch.mixins;
 
-import baritone.utils.accessor.IPalettedContainer.IData;
+import com.mockplayer.baritone.utils.accessor.IPalettedContainer.IData;
 import net.minecraft.util.BitStorage;
 import net.minecraft.world.level.chunk.Palette;
 import org.spongepowered.asm.mixin.Mixin;

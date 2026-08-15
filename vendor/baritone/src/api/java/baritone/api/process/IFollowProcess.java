@@ -15,7 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.process;
+package com.mockplayer.baritone.api.process;
 
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;

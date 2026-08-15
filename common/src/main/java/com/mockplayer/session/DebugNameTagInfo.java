@@ -1,6 +1,7 @@
 package com.mockplayer.session;
 
 import com.mockplayer.api.Bot;
+import com.mockplayer.config.RenderMode;
 import com.mockplayer.config.MockplayerConfig;
 
 import net.minecraft.ChatFormatting;
@@ -13,7 +14,7 @@ import java.util.Locale;
 /**
  * 假人 F3 调试信息标签（名字标签上方多行）。
  *
- * 输入：配置开关 debugOverlayEnabled + F3 调试信息可见（DebugScreenOverlay）
+ * 输入：配置三态 debugOverlayMode（ALWAYS/F3_ONLY/OFF）+ F3 调试信息可见（DebugScreenOverlay）
  * 输出：多行 Component（每行带颜色）：❤血量 🍗饱食度(饱和度) 同一行，
  * 💾内存(B/KB/MB)+📡区块半径(chunk) 同一行，🏃速度(m/s)，📦+容器标题（同一行）
  *
@@ -55,10 +56,13 @@ public final class DebugNameTagInfo {
         DebugNameTagInfo.lastNameOffsetY = nameOffsetY;
     }
 
-    /** F3 调试信息打开且配置启用（渲染 Mixin 调用）。 */
+    /** 三态显示判定（渲染 Mixin 调用）：ALWAYS 恒显示；F3_ONLY 需 F3 打开；OFF 恒不显示。 */
     public static boolean shouldShow() {
-        return Minecraft.getInstance().getDebugOverlay().showDebugScreen()
-                && MockplayerConfig.get().isDebugOverlayEnabled();
+        return switch (MockplayerConfig.get().getDebugOverlayMode()) {
+            case ALWAYS -> true;
+            case OFF -> false;
+            case F3_ONLY -> Minecraft.getInstance().getDebugOverlay().showDebugScreen();
+        };
     }
 
     /**

@@ -15,12 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.process.elytra;
+package com.mockplayer.baritone.process.elytra;
 
-import baritone.Baritone;
-import baritone.api.Settings;
-import baritone.api.event.events.BlockChangeEvent;
-import baritone.utils.accessor.IPalettedContainer;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.Settings;
+import com.mockplayer.baritone.api.event.events.BlockChangeEvent;
+import com.mockplayer.baritone.utils.accessor.IPalettedContainer;
 import dev.babbaj.pathfinder.NetherPathfinder;
 import dev.babbaj.pathfinder.Octree;
 import dev.babbaj.pathfinder.PathSegment;

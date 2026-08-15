@@ -15,11 +15,11 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.launch.mixins;
+package com.mockplayer.baritone.launch.mixins;
 
-import baritone.api.BaritoneAPI;
-import baritone.api.IBaritone;
-import baritone.api.event.events.RotationMoveEvent;
+import com.mockplayer.baritone.api.BaritoneAPI;
+import com.mockplayer.baritone.api.IBaritone;
+import com.mockplayer.baritone.api.event.events.RotationMoveEvent;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;

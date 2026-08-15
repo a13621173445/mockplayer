@@ -15,13 +15,13 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils.pathing;
+package com.mockplayer.baritone.utils.pathing;
 
-import baritone.api.pathing.calc.IPath;
-import baritone.api.utils.BetterBlockPos;
-import baritone.api.utils.Helper;
-import baritone.api.utils.IPlayerContext;
-import baritone.pathing.movement.CalculationContext;
+import com.mockplayer.baritone.api.pathing.calc.IPath;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.utils.Helper;
+import com.mockplayer.baritone.api.utils.IPlayerContext;
+import com.mockplayer.baritone.pathing.movement.CalculationContext;
 import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap;
 
 public final class Favoring {

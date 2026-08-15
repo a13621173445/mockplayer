@@ -15,7 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.utils;
+package com.mockplayer.baritone.api.utils;
 
 import org.apache.commons.lang3.SystemUtils;
 
@@ -60,7 +60,6 @@ public class NotificationHelper {
                 e.printStackTrace();
             }
         } else {
-            System.out.println("SystemTray is not supported");
         }
     }
 

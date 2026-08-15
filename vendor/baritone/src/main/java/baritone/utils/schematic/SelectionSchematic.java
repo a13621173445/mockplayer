@@ -15,11 +15,11 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils.schematic;
+package com.mockplayer.baritone.utils.schematic;
 
-import baritone.api.schematic.ISchematic;
-import baritone.api.schematic.MaskSchematic;
-import baritone.api.selection.ISelection;
+import com.mockplayer.baritone.api.schematic.ISchematic;
+import com.mockplayer.baritone.api.schematic.MaskSchematic;
+import com.mockplayer.baritone.api.selection.ISelection;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Vec3i;
 import net.minecraft.world.level.block.state.BlockState;

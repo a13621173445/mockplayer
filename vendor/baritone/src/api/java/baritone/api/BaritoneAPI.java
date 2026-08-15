@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api;
+package com.mockplayer.baritone.api;
 
-import baritone.api.utils.SettingsUtil;
+import com.mockplayer.baritone.api.utils.SettingsUtil;
 
 /**
  * Exposes the {@link IBaritoneProvider} instance and the {@link Settings} instance for API usage.
@@ -35,7 +35,7 @@ public final class BaritoneAPI {
         SettingsUtil.readAndApply(settings, SettingsUtil.SETTINGS_DEFAULT_NAME);
 
         try {
-            provider = (IBaritoneProvider) Class.forName("baritone.BaritoneProvider").newInstance();
+            provider = (IBaritoneProvider) Class.forName("com.mockplayer.baritone.BaritoneProvider").newInstance();
         } catch (ReflectiveOperationException ex) {
             throw new RuntimeException(ex);
         }

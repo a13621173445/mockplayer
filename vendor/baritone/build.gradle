@@ -24,19 +24,10 @@ allprojects {
         archivesName = rootProject.archives_base_name
     }
 
-    def vers = ""
-    try {
-        vers = 'git describe --always --tags --first-parent --dirty'.execute().text.trim()
-    } catch (Exception e) {
-        println "Version detection failed: " + e
-    }
-    if (!vers.startsWith("v")) {
-        println "using version number: " + rootProject.mod_version
-        version = rootProject.mod_version
-    } else {
-        version = vers.substring(1)
-        println "Detected version " + version
-    }
+    // 固定版本 = mod_version（1.18.0）：mockplayer 主项目 flatDir 按
+    // `baritone-fabric-1.18.0.jar` 坐标引用，git describe 检测会生成
+    // `26.1.2-0.2.2-7-g...` 之类的名字导致坐标失配（2026-08-16 爆改）
+    version = rootProject.mod_version
     group = rootProject.maven_group
 
     java {

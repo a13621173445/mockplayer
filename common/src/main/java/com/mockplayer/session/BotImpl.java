@@ -5,6 +5,7 @@ import com.mockplayer.api.BotLifecycle;
 import com.mockplayer.api.ModPayloadInfo;
 import com.mockplayer.api.action.BotActions;
 import com.mockplayer.api.container.BotContainer;
+import com.mockplayer.api.navigate.BotNavigator;
 import com.mockplayer.platform.Services;
 
 import com.mojang.authlib.GameProfile;
@@ -46,6 +47,10 @@ public class BotImpl implements Bot {
     private volatile AbstractContainerMenu openMenu;
     /** 当前打开的容器标题 */
     private volatile Component openTitle;
+    /** 寻路激活标志（BaritoneNavigator 置位；BotActionsImpl 输入写入互斥）。 */
+    private volatile boolean navigating;
+    /** 寻路门面（懒创建；session.getBaritone() 就绪后可用）。 */
+    private volatile BaritoneNavigator navigator;
 
     /** 移动事件阈值（方块）：超过才触发 onMove */
     private static final double MOVE_EPSILON = 0.001;
@@ -85,6 +90,11 @@ public class BotImpl implements Bot {
 
     /** 内部：驱动持续动作输入 + 位置移动事件（FakeSession.tick 调用，主线程） */
     public void tick() {
+        // 寻路任务状态同步（进程自然结束时复位 navigating 标志）
+        BaritoneNavigator nav = this.navigator;
+        if (nav != null) {
+            nav.tick();
+        }
         this.actions.applyInput();
         LocalPlayer player = session.getFakePlayer();
         if (player != null && this.events.hasListeners()) {
@@ -203,6 +213,33 @@ public class BotImpl implements Bot {
     @Override
     public BotActions actions() {
         return this.actions;
+    }
+
+    /** 内部：寻路激活标志（BaritoneNavigator 置位/复位；BotActionsImpl 输入互斥）。 */
+    @com.mockplayer.api.Internal
+    public void setNavigating(boolean navigating) {
+        this.navigating = navigating;
+    }
+
+    /** 内部：当前是否被寻路接管输入（BotActionsImpl.applyInput 判互斥）。 */
+    @com.mockplayer.api.Internal
+    public boolean isNavigating() {
+        return this.navigating;
+    }
+
+    @Override
+    public BotNavigator navigate() {
+        BaritoneNavigator nav = this.navigator;
+        if (nav == null) {
+            synchronized (this) {
+                nav = this.navigator;
+                if (nav == null) {
+                    nav = new BaritoneNavigator(this, this.session.getBaritone());
+                    this.navigator = nav;
+                }
+            }
+        }
+        return nav;
     }
 
     @Override

@@ -15,16 +15,16 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.pathing.calc;
+package com.mockplayer.baritone.pathing.calc;
 
-import baritone.Baritone;
-import baritone.api.pathing.calc.IPath;
-import baritone.api.pathing.calc.IPathFinder;
-import baritone.api.pathing.goals.Goal;
-import baritone.api.utils.BetterBlockPos;
-import baritone.api.utils.Helper;
-import baritone.api.utils.PathCalculationResult;
-import baritone.pathing.movement.CalculationContext;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.pathing.calc.IPath;
+import com.mockplayer.baritone.api.pathing.calc.IPathFinder;
+import com.mockplayer.baritone.api.pathing.goals.Goal;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.utils.Helper;
+import com.mockplayer.baritone.api.utils.PathCalculationResult;
+import com.mockplayer.baritone.pathing.movement.CalculationContext;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 
 import java.util.Optional;

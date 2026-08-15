@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.utils;
+package com.mockplayer.baritone.api.utils;
 
-import baritone.api.behavior.IBehavior;
-import baritone.api.utils.input.Input;
+import com.mockplayer.baritone.api.behavior.IBehavior;
+import com.mockplayer.baritone.api.utils.input.Input;
 
 /**
  * @author Brady

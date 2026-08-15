@@ -15,13 +15,13 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils;
+package com.mockplayer.baritone.utils;
 
-import baritone.Baritone;
-import baritone.api.Settings;
-import baritone.api.process.IBaritoneProcess;
-import baritone.api.utils.Helper;
-import baritone.api.utils.IPlayerContext;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.Settings;
+import com.mockplayer.baritone.api.process.IBaritoneProcess;
+import com.mockplayer.baritone.api.utils.Helper;
+import com.mockplayer.baritone.api.utils.IPlayerContext;
 
 public abstract class BaritoneProcessHelper implements IBaritoneProcess, Helper {
 

@@ -60,8 +60,25 @@ public class ModConfig {
     private double eventMoveSampleDistance = DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE;
     /** 根命令名配置（字段固定，值可改/可禁用；默认 = 现在的名字）。 */
     private Map<String, String> commands = new LinkedHashMap<>(ModCommands.defaults());
-    /** F3 调试信息打开时，在假人名字下方显示额外信息（血量/饱食度/内存/速度/容器）。 */
-    private boolean debugOverlayEnabled = true;
+    /** 假人 F3 信息标签显示三态（替换布尔 debugOverlayEnabled；默认 F3_ONLY 与原行为等价）。 */
+    private RenderMode debugOverlayMode = RenderMode.F3_ONLY;
+
+    // ===== 寻路段（行为项 per-bot 可覆盖；渲染三态全局）=====
+
+    /** 假人寻路接线默认开关。 */
+    public static final boolean DEFAULT_NAVIGATE_ENABLED = true;
+    /** 寻路路径超时（ms）范围。 */
+    public static final int DEFAULT_NAVIGATE_PATH_TIMEOUT_MS = 2000;
+    public static final int MIN_NAVIGATE_PATH_TIMEOUT_MS = 500;
+    public static final int MAX_NAVIGATE_PATH_TIMEOUT_MS = 60000;
+
+    private boolean navigateEnabled = DEFAULT_NAVIGATE_ENABLED;
+    private boolean navigateAllowSprint = true;
+    private boolean navigateAllowBreak = true;
+    private boolean navigateAllowPlace = true;
+    private int navigatePathTimeoutMs = DEFAULT_NAVIGATE_PATH_TIMEOUT_MS;
+    /** 寻路路径/目标渲染三态（全局，主玩家视角；YACL GUI 可配）。 */
+    private RenderMode navigateRenderMode = RenderMode.F3_ONLY;
 
     /** GUI 功能总开关（默认启用；关闭后按键/快捷键不打开 BotControlScreen，命令不受影响）。 */
     public static final boolean DEFAULT_GUI_ENABLED = true;
@@ -191,12 +208,60 @@ public class ModConfig {
                 : new LinkedHashMap<>(ModCommands.defaults());
     }
 
-    public boolean isDebugOverlayEnabled() {
-        return this.debugOverlayEnabled;
+    public RenderMode getDebugOverlayMode() {
+        return this.debugOverlayMode;
     }
 
-    public void setDebugOverlayEnabled(boolean debugOverlayEnabled) {
-        this.debugOverlayEnabled = debugOverlayEnabled;
+    public void setDebugOverlayMode(RenderMode debugOverlayMode) {
+        this.debugOverlayMode = debugOverlayMode != null ? debugOverlayMode : RenderMode.F3_ONLY;
+    }
+
+    public boolean isNavigateEnabled() {
+        return this.navigateEnabled;
+    }
+
+    public void setNavigateEnabled(boolean navigateEnabled) {
+        this.navigateEnabled = navigateEnabled;
+    }
+
+    public boolean isNavigateAllowSprint() {
+        return this.navigateAllowSprint;
+    }
+
+    public void setNavigateAllowSprint(boolean navigateAllowSprint) {
+        this.navigateAllowSprint = navigateAllowSprint;
+    }
+
+    public boolean isNavigateAllowBreak() {
+        return this.navigateAllowBreak;
+    }
+
+    public void setNavigateAllowBreak(boolean navigateAllowBreak) {
+        this.navigateAllowBreak = navigateAllowBreak;
+    }
+
+    public boolean isNavigateAllowPlace() {
+        return this.navigateAllowPlace;
+    }
+
+    public void setNavigateAllowPlace(boolean navigateAllowPlace) {
+        this.navigateAllowPlace = navigateAllowPlace;
+    }
+
+    public int getNavigatePathTimeoutMs() {
+        return this.navigatePathTimeoutMs;
+    }
+
+    public void setNavigatePathTimeoutMs(int navigatePathTimeoutMs) {
+        this.navigatePathTimeoutMs = navigatePathTimeoutMs;
+    }
+
+    public RenderMode getNavigateRenderMode() {
+        return this.navigateRenderMode;
+    }
+
+    public void setNavigateRenderMode(RenderMode navigateRenderMode) {
+        this.navigateRenderMode = navigateRenderMode != null ? navigateRenderMode : RenderMode.F3_ONLY;
     }
 
     public boolean isGuiEnabled() {
@@ -303,6 +368,14 @@ public class ModConfig {
                 MIN_EVENT_TICK_SAMPLE_INTERVAL, MAX_EVENT_TICK_SAMPLE_INTERVAL, DEFAULT_EVENT_TICK_SAMPLE_INTERVAL);
         this.eventMoveSampleDistance = clampDouble(this.eventMoveSampleDistance,
                 MIN_EVENT_MOVE_SAMPLE_DISTANCE, MAX_EVENT_MOVE_SAMPLE_DISTANCE, DEFAULT_EVENT_MOVE_SAMPLE_DISTANCE);
+        this.navigatePathTimeoutMs = clampInt(this.navigatePathTimeoutMs,
+                MIN_NAVIGATE_PATH_TIMEOUT_MS, MAX_NAVIGATE_PATH_TIMEOUT_MS, DEFAULT_NAVIGATE_PATH_TIMEOUT_MS);
+        if (this.debugOverlayMode == null) {
+            this.debugOverlayMode = RenderMode.F3_ONLY;
+        }
+        if (this.navigateRenderMode == null) {
+            this.navigateRenderMode = RenderMode.F3_ONLY;
+        }
         this.fakePlayerChunkRadius = clampInt(this.fakePlayerChunkRadius,
                 MIN_FAKE_PLAYER_CHUNK_RADIUS, MAX_FAKE_PLAYER_CHUNK_RADIUS, DEFAULT_FAKE_PLAYER_CHUNK_RADIUS);
         this.batchMaxCount = clampInt(this.batchMaxCount,

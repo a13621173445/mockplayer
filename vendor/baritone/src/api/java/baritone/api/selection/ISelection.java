@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.selection;
+package com.mockplayer.baritone.api.selection;
 
-import baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Vec3i;
 import net.minecraft.world.phys.AABB;

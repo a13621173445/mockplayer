@@ -15,16 +15,15 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils;
+package com.mockplayer.baritone.utils;
 
-import baritone.api.BaritoneAPI;
-import baritone.api.event.events.RenderEvent;
-import baritone.api.pathing.goals.*;
-import baritone.api.utils.BetterBlockPos;
-import baritone.api.utils.IPlayerContext;
-import baritone.api.utils.interfaces.IGoalRenderPos;
-import baritone.behavior.PathingBehavior;
-import baritone.pathing.path.PathExecutor;
+import com.mockplayer.baritone.api.event.events.RenderEvent;
+import com.mockplayer.baritone.api.pathing.goals.*;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.utils.IPlayerContext;
+import com.mockplayer.baritone.api.utils.interfaces.IGoalRenderPos;
+import com.mockplayer.baritone.behavior.PathingBehavior;
+import com.mockplayer.baritone.pathing.path.PathExecutor;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
@@ -74,35 +73,32 @@ public final class PathRenderer implements IRenderer {
         if (ctx.world() == null) {
             return;
         }
-        if (ctx.minecraft().screen instanceof GuiClick) {
-            ((GuiClick) ctx.minecraft().screen).onRender(event.getModelViewStack(), event.getProjectionMatrix());
-        }
 
         final float partialTicks = event.getPartialTicks();
         final Goal goal = behavior.getGoal();
 
         final DimensionType thisPlayerDimension = ctx.world().dimensionType();
-        final DimensionType currentRenderViewDimension = BaritoneAPI.getProvider().getPrimaryBaritone().getPlayerContext().world().dimensionType();
+        final DimensionType currentRenderViewDimension = ctx.minecraft().level.dimensionType();
 
         if (thisPlayerDimension != currentRenderViewDimension) {
             // this is a path for a bot in a different dimension, don't render it
             return;
         }
 
-        if (goal != null && settings.renderGoal.value) {
-            drawGoal(event.getModelViewStack(), ctx, goal, partialTicks, settings.colorGoalBox.value);
+        if (goal != null && ctx.settings().renderGoal.value) {
+            drawGoal(event.getModelViewStack(), ctx, goal, partialTicks, ctx.settings().colorGoalBox.value);
         }
 
-        if (!settings.renderPath.value) {
+        if (!ctx.settings().renderPath.value) {
             return;
         }
 
         PathExecutor current = behavior.getCurrent(); // this should prevent most race conditions?
         PathExecutor next = behavior.getNext(); // like, now it's not possible for current!=null to be true, then suddenly false because of another thread
-        if (current != null && settings.renderSelectionBoxes.value) {
-            drawManySelectionBoxes(event.getModelViewStack(), ctx.player(), current.toBreak(), settings.colorBlocksToBreak.value);
-            drawManySelectionBoxes(event.getModelViewStack(), ctx.player(), current.toPlace(), settings.colorBlocksToPlace.value);
-            drawManySelectionBoxes(event.getModelViewStack(), ctx.player(), current.toWalkInto(), settings.colorBlocksToWalkInto.value);
+        if (current != null && ctx.settings().renderSelectionBoxes.value) {
+            drawManySelectionBoxes(event.getModelViewStack(), ctx, current.toBreak(), ctx.settings().colorBlocksToBreak.value);
+            drawManySelectionBoxes(event.getModelViewStack(), ctx, current.toPlace(), ctx.settings().colorBlocksToPlace.value);
+            drawManySelectionBoxes(event.getModelViewStack(), ctx, current.toWalkInto(), ctx.settings().colorBlocksToWalkInto.value);
         }
 
         //drawManySelectionBoxes(player, Collections.singletonList(behavior.pathStart()), partialTicks, Color.WHITE);
@@ -110,22 +106,27 @@ public final class PathRenderer implements IRenderer {
         // Render the current path, if there is one
         if (current != null && current.getPath() != null) {
             int renderBegin = Math.max(current.getPosition() - 3, 0);
-            drawPath(event.getModelViewStack(), current.getPath().positions(), renderBegin, settings.colorCurrentPath.value, settings.fadePath.value, 10, 20);
+            drawPath(event.getModelViewStack(), current.getPath().positions(), renderBegin,
+                    ctx.settings().colorCurrentPath.value, ctx.settings().fadePath.value, 10, 20);
         }
 
         if (next != null && next.getPath() != null) {
-            drawPath(event.getModelViewStack(), next.getPath().positions(), 0, settings.colorNextPath.value, settings.fadePath.value, 10, 20);
+            drawPath(event.getModelViewStack(), next.getPath().positions(), 0,
+                    ctx.settings().colorNextPath.value, ctx.settings().fadePath.value, 10, 20);
         }
 
         // If there is a path calculation currently running, render the path calculation process
         behavior.getInProgress().ifPresent(currentlyRunning -> {
             currentlyRunning.bestPathSoFar().ifPresent(p -> {
-                drawPath(event.getModelViewStack(), p.positions(), 0, settings.colorBestPathSoFar.value, settings.fadePath.value, 10, 20);
+                drawPath(event.getModelViewStack(), p.positions(), 0,
+                        ctx.settings().colorBestPathSoFar.value, ctx.settings().fadePath.value, 10, 20);
             });
 
             currentlyRunning.pathToMostRecentNodeConsidered().ifPresent(mr -> {
-                drawPath(event.getModelViewStack(), mr.positions(), 0, settings.colorMostRecentConsidered.value, settings.fadePath.value, 10, 20);
-                drawManySelectionBoxes(event.getModelViewStack(), ctx.player(), Collections.singletonList(mr.getDest()), settings.colorMostRecentConsidered.value);
+                drawPath(event.getModelViewStack(), mr.positions(), 0,
+                        ctx.settings().colorMostRecentConsidered.value, ctx.settings().fadePath.value, 10, 20);
+                drawManySelectionBoxes(event.getModelViewStack(), ctx,
+                        Collections.singletonList(mr.getDest()), ctx.settings().colorMostRecentConsidered.value);
             });
         });
     }
@@ -207,21 +208,23 @@ public final class PathRenderer implements IRenderer {
         }
     }
 
-    public static void drawManySelectionBoxes(PoseStack stack, Entity player, Collection<BlockPos> positions, Color color) {
+    public static void drawManySelectionBoxes(PoseStack stack, IPlayerContext ctx,
+                                              Collection<BlockPos> positions, Color color) {
         BufferBuilder bufferBuilder = IRenderer.startLines(color);
 
         //BlockPos blockpos = movingObjectPositionIn.getBlockPos();
-        BlockStateInterface bsi = new BlockStateInterface(BaritoneAPI.getProvider().getPrimaryBaritone().getPlayerContext()); // TODO this assumes same dimension between primary baritone and render view? is this safe?
+        BlockStateInterface bsi = new BlockStateInterface(ctx);
+        Entity player = ctx.player();
 
         positions.forEach(pos -> {
             BlockState state = bsi.get0(pos);
             VoxelShape shape = state.getShape(player.level(), pos);
             AABB toDraw = shape.isEmpty() ? Shapes.block().bounds() : shape.bounds();
             toDraw = toDraw.move(pos);
-            IRenderer.emitAABB(bufferBuilder, stack, toDraw, .002D, settings.pathRenderLineWidthPixels.value);
+            IRenderer.emitAABB(bufferBuilder, stack, toDraw, .002D, ctx.settings().pathRenderLineWidthPixels.value);
         });
 
-        IRenderer.endLines(bufferBuilder, settings.renderSelectionBoxesIgnoreDepth.value);
+        IRenderer.endLines(bufferBuilder, ctx.settings().renderSelectionBoxesIgnoreDepth.value);
     }
 
     public static void drawGoal(PoseStack stack, IPlayerContext ctx, Goal goal, float partialTicks, Color color) {

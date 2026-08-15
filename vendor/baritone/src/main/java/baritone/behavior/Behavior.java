@@ -15,12 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.behavior;
+package com.mockplayer.baritone.behavior;
 
-import baritone.Baritone;
-import baritone.api.Settings;
-import baritone.api.behavior.IBehavior;
-import baritone.api.utils.IPlayerContext;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.Settings;
+import com.mockplayer.baritone.api.behavior.IBehavior;
+import com.mockplayer.baritone.api.utils.IPlayerContext;
 
 /**
  * A type of game event listener that is given {@link Baritone} instance context.

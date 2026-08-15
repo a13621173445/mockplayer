@@ -15,12 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.pathing.calc;
+package com.mockplayer.baritone.pathing.calc;
 
-import baritone.api.pathing.goals.Goal;
-import baritone.api.pathing.movement.ActionCosts;
-import baritone.api.utils.BetterBlockPos;
-import baritone.api.utils.SettingsUtil;
+import com.mockplayer.baritone.api.pathing.goals.Goal;
+import com.mockplayer.baritone.api.pathing.movement.ActionCosts;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.utils.SettingsUtil;
 
 /**
  * A node in the path, containing the cost and steps to get to it.

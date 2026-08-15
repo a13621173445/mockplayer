@@ -2,6 +2,7 @@ package com.mockplayer.api;
 
 import com.mockplayer.api.action.BotActions;
 import com.mockplayer.api.container.BotContainer;
+import com.mockplayer.api.navigate.BotNavigator;
 
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
@@ -145,6 +146,13 @@ public interface Bot {
      * @return BotActions
      */
     BotActions actions();
+
+    /**
+     * 寻路门面（可插拔：当前为 Baritone 接线实现，未来可换自研）。
+     *
+     * @return BotNavigator
+     */
+    BotNavigator navigate();
 
     /**
      * 死亡后是否自动重生（默认 true；GUI/命令可关闭后由 {@link BotActions#respawn()} 手动重生）。

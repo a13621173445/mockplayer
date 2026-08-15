@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils.pathing;
+package com.mockplayer.baritone.utils.pathing;
 
-import baritone.api.pathing.movement.ActionCosts;
+import com.mockplayer.baritone.api.pathing.movement.ActionCosts;
 
 /**
  * The result of a calculated movement, with destination x, y, z, and the cost of performing the movement

@@ -15,14 +15,14 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.process.elytra;
+package com.mockplayer.baritone.process.elytra;
 
-import baritone.Baritone;
-import baritone.api.pathing.goals.Goal;
-import baritone.api.process.IElytraProcess;
-import baritone.api.process.PathingCommand;
-import baritone.api.utils.BetterBlockPos;
-import baritone.utils.BaritoneProcessHelper;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.pathing.goals.Goal;
+import com.mockplayer.baritone.api.process.IElytraProcess;
+import com.mockplayer.baritone.api.process.PathingCommand;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.utils.BaritoneProcessHelper;
 import net.minecraft.core.BlockPos;
 
 import java.util.Collections;

@@ -15,7 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.schematic.mask;
+package com.mockplayer.baritone.api.schematic.mask;
 
 /**
  * @author Brady

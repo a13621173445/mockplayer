@@ -15,12 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.cache;
+package com.mockplayer.baritone.cache;
 
-import baritone.Baritone;
-import baritone.api.BaritoneAPI;
-import baritone.api.cache.ICachedRegion;
-import baritone.api.utils.BlockUtils;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.BaritoneAPI;
+import com.mockplayer.baritone.api.cache.ICachedRegion;
+import com.mockplayer.baritone.api.utils.BlockUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
@@ -129,7 +129,6 @@ public final class CachedRegion implements ICachedRegion {
                 Files.createDirectories(path);
 
             }
-            System.out.println("Saving region " + x + "," + z + " to disk " + path);
             Path regionFile = getRegionFile(path, this.x, this.z);
             if (!Files.exists(regionFile)) {
                 Files.createFile(regionFile);
@@ -188,7 +187,6 @@ public final class CachedRegion implements ICachedRegion {
                 }
             }
             hasUnsavedChanges = false;
-            System.out.println("Saved region successfully");
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -206,7 +204,6 @@ public final class CachedRegion implements ICachedRegion {
                 return;
             }
 
-            System.out.println("Loading region " + x + "," + z + " from disk " + path);
             long start = System.nanoTime() / 1000000L;
 
             try (
@@ -307,7 +304,6 @@ public final class CachedRegion implements ICachedRegion {
             removeExpired();
             hasUnsavedChanges = false;
             long end = System.nanoTime() / 1000000L;
-            System.out.println("Loaded region successfully in " + (end - start) + "ms");
         } catch (Exception ex) { // corrupted files can cause NullPointerExceptions as well as IOExceptions
             ex.printStackTrace();
         }
@@ -324,7 +320,6 @@ public final class CachedRegion implements ICachedRegion {
         for (int x = 0; x < 32; x++) {
             for (int z = 0; z < 32; z++) {
                 if (this.chunks[x][z] != null && this.chunks[x][z].cacheTimestamp < oldestAcceptableAge) {
-                    System.out.println("Removing chunk " + (x + 32 * this.x) + "," + (z + 32 * this.z) + " because it was cached " + (now - this.chunks[x][z].cacheTimestamp) / 1000L + " seconds ago, and max age is " + expiry);
                     this.chunks[x][z] = null;
                 }
             }

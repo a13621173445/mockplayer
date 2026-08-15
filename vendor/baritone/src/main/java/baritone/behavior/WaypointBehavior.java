@@ -15,15 +15,15 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.behavior;
+package com.mockplayer.baritone.behavior;
 
-import baritone.Baritone;
-import baritone.api.cache.IWaypoint;
-import baritone.api.cache.Waypoint;
-import baritone.api.event.events.BlockInteractEvent;
-import baritone.api.utils.BetterBlockPos;
-import baritone.api.utils.Helper;
-import baritone.utils.BlockStateInterface;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.cache.IWaypoint;
+import com.mockplayer.baritone.api.cache.Waypoint;
+import com.mockplayer.baritone.api.event.events.BlockInteractEvent;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.utils.Helper;
+import com.mockplayer.baritone.utils.BlockStateInterface;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;

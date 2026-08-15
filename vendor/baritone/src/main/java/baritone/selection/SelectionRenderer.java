@@ -1,10 +1,10 @@
-package baritone.selection;
+package com.mockplayer.baritone.selection;
 
-import baritone.Baritone;
-import baritone.api.event.events.RenderEvent;
-import baritone.api.event.listener.AbstractGameEventListener;
-import baritone.api.selection.ISelection;
-import baritone.utils.IRenderer;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.event.events.RenderEvent;
+import com.mockplayer.baritone.api.event.listener.AbstractGameEventListener;
+import com.mockplayer.baritone.api.selection.ISelection;
+import com.mockplayer.baritone.utils.IRenderer;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.world.phys.AABB;

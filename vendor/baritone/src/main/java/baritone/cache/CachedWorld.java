@@ -15,14 +15,14 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.cache;
+package com.mockplayer.baritone.cache;
 
-import baritone.Baritone;
-import baritone.api.BaritoneAPI;
-import baritone.api.IBaritone;
-import baritone.api.cache.ICachedWorld;
-import baritone.api.cache.IWorldData;
-import baritone.api.utils.Helper;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.BaritoneAPI;
+import com.mockplayer.baritone.api.IBaritone;
+import com.mockplayer.baritone.api.cache.ICachedWorld;
+import com.mockplayer.baritone.api.cache.IWorldData;
+import com.mockplayer.baritone.api.utils.Helper;
 import com.google.common.cache.CacheBuilder;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
@@ -88,7 +88,6 @@ public final class CachedWorld implements ICachedWorld, Helper {
         this.directory = directory.toString();
         this.dimension = dimension;
         this.dimensionId = dimensionId;
-        System.out.println("Cached world directory: " + directory);
         Baritone.getExecutor().execute(new PackerThread());
         Baritone.getExecutor().execute(() -> {
             try {
@@ -166,7 +165,6 @@ public final class CachedWorld implements ICachedWorld, Helper {
     public final void save() {
         // 世界缓存跨实例共享（静态 worldCache），缓存管理参数用全局 settings
         if (!BaritoneAPI.getSettings().chunkCaching.value) {
-            System.out.println("Not saving to disk; chunk caching is disabled.");
             allRegions().forEach(region -> {
                 if (region != null) {
                     region.removeExpired();
@@ -175,14 +173,11 @@ public final class CachedWorld implements ICachedWorld, Helper {
             prune();
             return;
         }
-        long start = System.nanoTime() / 1000000L;
         allRegions().parallelStream().forEach(region -> {
             if (region != null) {
                 region.save(this.directory);
             }
         });
-        long now = System.nanoTime() / 1000000L;
-        System.out.println("World save took " + (now - start) + "ms");
         prune();
     }
 
@@ -243,14 +238,11 @@ public final class CachedWorld implements ICachedWorld, Helper {
 
     @Override
     public final void reloadAllFromDisk() {
-        long start = System.nanoTime() / 1000000L;
         allRegions().forEach(region -> {
             if (region != null) {
                 region.load(this.directory);
             }
         });
-        long now = System.nanoTime() / 1000000L;
-        System.out.println("World load took " + (now - start) + "ms");
     }
 
     @Override

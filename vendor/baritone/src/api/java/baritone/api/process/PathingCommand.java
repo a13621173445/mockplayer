@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.process;
+package com.mockplayer.baritone.api.process;
 
-import baritone.api.pathing.goals.Goal;
+import com.mockplayer.baritone.api.pathing.goals.Goal;
 
 import java.util.Objects;
 

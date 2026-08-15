@@ -15,21 +15,21 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.pathing.movement.movements;
+package com.mockplayer.baritone.pathing.movement.movements;
 
-import baritone.Baritone;
-import baritone.api.IBaritone;
-import baritone.api.pathing.movement.MovementStatus;
-import baritone.api.utils.BetterBlockPos;
-import baritone.api.utils.Rotation;
-import baritone.api.utils.RotationUtils;
-import baritone.api.utils.VecUtils;
-import baritone.api.utils.input.Input;
-import baritone.pathing.movement.CalculationContext;
-import baritone.pathing.movement.Movement;
-import baritone.pathing.movement.MovementHelper;
-import baritone.pathing.movement.MovementState;
-import baritone.utils.BlockStateInterface;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.IBaritone;
+import com.mockplayer.baritone.api.pathing.movement.MovementStatus;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.utils.Rotation;
+import com.mockplayer.baritone.api.utils.RotationUtils;
+import com.mockplayer.baritone.api.utils.VecUtils;
+import com.mockplayer.baritone.api.utils.input.Input;
+import com.mockplayer.baritone.pathing.movement.CalculationContext;
+import com.mockplayer.baritone.pathing.movement.Movement;
+import com.mockplayer.baritone.pathing.movement.MovementHelper;
+import com.mockplayer.baritone.pathing.movement.MovementState;
+import com.mockplayer.baritone.utils.BlockStateInterface;
 import com.google.common.collect.ImmutableSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.*;

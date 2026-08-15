@@ -15,16 +15,16 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.pathing.movement;
+package com.mockplayer.baritone.pathing.movement;
 
-import baritone.Baritone;
-import baritone.api.IBaritone;
-import baritone.api.pathing.movement.ActionCosts;
-import baritone.cache.WorldData;
-import baritone.pathing.precompute.PrecomputedData;
-import baritone.utils.BlockStateInterface;
-import baritone.utils.ToolSet;
-import baritone.utils.pathing.BetterWorldBorder;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.IBaritone;
+import com.mockplayer.baritone.api.pathing.movement.ActionCosts;
+import com.mockplayer.baritone.cache.WorldData;
+import com.mockplayer.baritone.pathing.precompute.PrecomputedData;
+import com.mockplayer.baritone.utils.BlockStateInterface;
+import com.mockplayer.baritone.utils.ToolSet;
+import com.mockplayer.baritone.utils.pathing.BetterWorldBorder;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -42,7 +42,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.util.ArrayList;
 import java.util.List;
 
-import static baritone.api.pathing.movement.ActionCosts.COST_INF;
+import static com.mockplayer.baritone.api.pathing.movement.ActionCosts.COST_INF;
 
 /**
  * @author Brady

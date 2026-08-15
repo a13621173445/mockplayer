@@ -15,21 +15,21 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.process;
+package com.mockplayer.baritone.process;
 
-import baritone.Baritone;
-import baritone.api.pathing.goals.*;
-import baritone.api.process.IGetToBlockProcess;
-import baritone.api.process.PathingCommand;
-import baritone.api.process.PathingCommandType;
-import baritone.api.utils.BlockOptionalMeta;
-import baritone.api.utils.BlockOptionalMetaLookup;
-import baritone.api.utils.Rotation;
-import baritone.api.utils.RotationUtils;
-import baritone.api.utils.input.Input;
-import baritone.pathing.movement.CalculationContext;
-import baritone.pathing.movement.MovementHelper;
-import baritone.utils.BaritoneProcessHelper;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.pathing.goals.*;
+import com.mockplayer.baritone.api.process.IGetToBlockProcess;
+import com.mockplayer.baritone.api.process.PathingCommand;
+import com.mockplayer.baritone.api.process.PathingCommandType;
+import com.mockplayer.baritone.api.utils.BlockOptionalMeta;
+import com.mockplayer.baritone.api.utils.BlockOptionalMetaLookup;
+import com.mockplayer.baritone.api.utils.Rotation;
+import com.mockplayer.baritone.api.utils.RotationUtils;
+import com.mockplayer.baritone.api.utils.input.Input;
+import com.mockplayer.baritone.pathing.movement.CalculationContext;
+import com.mockplayer.baritone.pathing.movement.MovementHelper;
+import com.mockplayer.baritone.utils.BaritoneProcessHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.level.block.Block;

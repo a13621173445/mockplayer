@@ -15,30 +15,30 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.pathing.path;
+package com.mockplayer.baritone.pathing.path;
 
-import baritone.Baritone;
-import baritone.api.pathing.calc.IPath;
-import baritone.api.pathing.movement.ActionCosts;
-import baritone.api.pathing.movement.IMovement;
-import baritone.api.pathing.movement.MovementStatus;
-import baritone.api.pathing.path.IPathExecutor;
-import baritone.api.utils.*;
-import baritone.api.utils.input.Input;
-import baritone.behavior.PathingBehavior;
-import baritone.pathing.calc.AbstractNodeCostSearch;
-import baritone.pathing.movement.CalculationContext;
-import baritone.pathing.movement.Movement;
-import baritone.pathing.movement.MovementHelper;
-import baritone.pathing.movement.movements.*;
-import baritone.utils.BlockStateInterface;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.pathing.calc.IPath;
+import com.mockplayer.baritone.api.pathing.movement.ActionCosts;
+import com.mockplayer.baritone.api.pathing.movement.IMovement;
+import com.mockplayer.baritone.api.pathing.movement.MovementStatus;
+import com.mockplayer.baritone.api.pathing.path.IPathExecutor;
+import com.mockplayer.baritone.api.utils.*;
+import com.mockplayer.baritone.api.utils.input.Input;
+import com.mockplayer.baritone.behavior.PathingBehavior;
+import com.mockplayer.baritone.pathing.calc.AbstractNodeCostSearch;
+import com.mockplayer.baritone.pathing.movement.CalculationContext;
+import com.mockplayer.baritone.pathing.movement.Movement;
+import com.mockplayer.baritone.pathing.movement.MovementHelper;
+import com.mockplayer.baritone.pathing.movement.movements.*;
+import com.mockplayer.baritone.utils.BlockStateInterface;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.util.Tuple;
 import net.minecraft.world.phys.Vec3;
 import java.util.*;
 
-import static baritone.api.pathing.movement.MovementStatus.*;
+import static com.mockplayer.baritone.api.pathing.movement.MovementStatus.*;
 
 /**
  * Behavior to execute a precomputed path
@@ -128,7 +128,6 @@ public class PathExecutor implements IPathExecutor, Helper {
         Tuple<Double, BlockPos> status = closestPathPos(path);
         if (possiblyOffPath(status, MAX_DIST_FROM_PATH)) {
             ticksAway++;
-            System.out.println("FAR AWAY FROM PATH FOR " + ticksAway + " TICKS. Current distance: " + status.getA() + ". Threshold: " + MAX_DIST_FROM_PATH);
             if (ticksAway > MAX_TICKS_AWAY) {
                 logDebug("Too far away from path for too long, cancelling path");
                 cancel();

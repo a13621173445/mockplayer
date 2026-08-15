@@ -24,7 +24,17 @@ dependencies {
     compileOnly("dev.isxander:yet-another-config-lib:${yacl_version}-fabric") {
         transitive = false
     }
+    // Baritone（LGPL-3.0，vendored）：common 编译期可见 API（IBaritone 等），
+    // 运行时由双端按各自 flatDir 依赖注入（fabric include / neoforge jarJar）
+    compileOnly("baritone:baritone-fabric:1.18.0")
 
+}
+
+repositories {
+    flatDir {
+        name = 'vendoredBaritone'
+        dirs "${rootProject.projectDir}/vendor/baritone/fabric/build/libs"
+    }
 }
 
 // 双端共享的游戏内测试源码（新框架）：fabric/neoforge testmod 各自挂接本源集，

@@ -15,11 +15,11 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.behavior;
+package com.mockplayer.baritone.api.behavior;
 
-import baritone.api.Settings;
-import baritone.api.behavior.look.IAimProcessor;
-import baritone.api.utils.Rotation;
+import com.mockplayer.baritone.api.Settings;
+import com.mockplayer.baritone.api.behavior.look.IAimProcessor;
+import com.mockplayer.baritone.api.utils.Rotation;
 
 /**
  * @author Brady

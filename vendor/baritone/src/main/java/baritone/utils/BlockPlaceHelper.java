@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils;
+package com.mockplayer.baritone.utils;
 
-import baritone.Baritone;
-import baritone.api.utils.IPlayerContext;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.utils.IPlayerContext;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.phys.BlockHitResult;

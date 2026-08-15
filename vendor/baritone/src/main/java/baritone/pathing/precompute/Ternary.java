@@ -15,7 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.pathing.precompute;
+package com.mockplayer.baritone.pathing.precompute;
 
 public enum Ternary {
     YES, MAYBE, NO

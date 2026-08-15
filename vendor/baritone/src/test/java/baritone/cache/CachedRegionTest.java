@@ -15,7 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.cache;
+package com.mockplayer.baritone.cache;
 
 import org.junit.Test;
 

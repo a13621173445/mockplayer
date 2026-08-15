@@ -15,12 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils;
+package com.mockplayer.baritone.utils;
 
-import baritone.api.pathing.goals.Goal;
-import baritone.api.process.PathingCommand;
-import baritone.api.process.PathingCommandType;
-import baritone.pathing.movement.CalculationContext;
+import com.mockplayer.baritone.api.pathing.goals.Goal;
+import com.mockplayer.baritone.api.process.PathingCommand;
+import com.mockplayer.baritone.api.process.PathingCommandType;
+import com.mockplayer.baritone.pathing.movement.CalculationContext;
 
 public class PathingCommandContext extends PathingCommand {
 

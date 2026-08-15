@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.pathing.movement;
+package com.mockplayer.baritone.api.pathing.movement;
 
-import baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
 import net.minecraft.core.BlockPos;
 
 /**

@@ -15,15 +15,15 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils;
+package com.mockplayer.baritone.utils;
 
-import baritone.Baritone;
-import baritone.api.BaritoneAPI;
-import baritone.api.event.events.TickEvent;
-import baritone.api.utils.IInputOverrideHandler;
-import baritone.api.utils.input.Input;
-import baritone.behavior.Behavior;
-import net.minecraft.client.player.KeyboardInput;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.event.events.TickEvent;
+import com.mockplayer.baritone.api.utils.IInputOverrideHandler;
+import com.mockplayer.baritone.api.utils.input.Input;
+import com.mockplayer.baritone.behavior.Behavior;
+import net.minecraft.client.player.ClientInput;
+import net.minecraft.world.phys.Vec2;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -94,16 +94,50 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
         blockPlaceHelper.tick(isInputForcedDown(Input.CLICK_RIGHT));
 
         if (inControl()) {
-            if (ctx.player().input.getClass() != PlayerMovementInput.class) {
-                ctx.player().input = new PlayerMovementInput(this);
-            }
-        } else {
-            if (ctx.player().input.getClass() == PlayerMovementInput.class) { // allow other movement inputs that aren't this one, e.g. for a freecam
-                ctx.player().input = new KeyboardInput(ctx.minecraft().options);
-            }
+            writeInput();
         }
-        // only set it if it was previously incorrect
-        // gotta do it this way, or else it constantly thinks you're beginning a double tap W sprint lol
+    }
+
+    /**
+     * 直接写假人 input 字段（mockplayer 激进改造：不替换 input 对象，与 BotActions
+     * 同一写入机制；谁活跃谁写，空闲时让位 BotActions）。时序：Tick IN 事件在
+     * 假人 LocalPlayer.tick 之前，本 tick 物理直接读本次写入。
+     */
+    private void writeInput() {
+        ClientInput input = ctx.player().input;
+        if (input == null) {
+            return;
+        }
+        float leftImpulse = 0.0F;
+        float forwardImpulse = 0.0F;
+        boolean up = isInputForcedDown(Input.MOVE_FORWARD);
+        if (up) {
+            forwardImpulse++;
+        }
+        boolean down = isInputForcedDown(Input.MOVE_BACK);
+        if (down) {
+            forwardImpulse--;
+        }
+        boolean left = isInputForcedDown(Input.MOVE_LEFT);
+        if (left) {
+            leftImpulse++;
+        }
+        boolean right = isInputForcedDown(Input.MOVE_RIGHT);
+        if (right) {
+            leftImpulse--;
+        }
+        boolean sneaking = isInputForcedDown(Input.SNEAK);
+        if (sneaking) {
+            leftImpulse *= 0.3F;
+            forwardImpulse *= 0.3F;
+        }
+        ((com.mockplayer.baritone.utils.accessor.IClientInputAccessor) input)
+                .baritone$setMoveVector(new Vec2(leftImpulse, forwardImpulse));
+        boolean jumping = isInputForcedDown(Input.JUMP);
+        boolean sprinting = isInputForcedDown(Input.SPRINT);
+        ((com.mockplayer.baritone.utils.accessor.IClientInputAccessor) input)
+                .baritone$setKeyPresses(new net.minecraft.world.entity.player.Input(
+                        up, down, left, right, jumping, sneaking, sprinting));
     }
 
     private boolean inControl() {
@@ -112,8 +146,10 @@ public final class InputOverrideHandler extends Behavior implements IInputOverri
                 return true;
             }
         }
-        // if we are not primary (a bot) we should set the movementinput even when idle (not pathing)
-        return baritone.getPathingBehavior().isPathing() || baritone != BaritoneAPI.getProvider().getPrimaryBaritone();
+        // 有路径段执行中，或有活跃进程（goTo/follow/mine/elytra）→ 接管输入
+        return baritone.getPathingBehavior().isPathing()
+                || baritone.getPathingControlManager().mostRecentInControl()
+                .map(proc -> proc.isActive()).orElse(false);
     }
 
     public BlockBreakHelper getBlockBreakHelper() {

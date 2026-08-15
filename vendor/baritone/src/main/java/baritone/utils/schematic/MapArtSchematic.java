@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.utils.schematic;
+package com.mockplayer.baritone.utils.schematic;
 
-import baritone.api.schematic.IStaticSchematic;
-import baritone.api.schematic.MaskSchematic;
+import com.mockplayer.baritone.api.schematic.IStaticSchematic;
+import com.mockplayer.baritone.api.schematic.MaskSchematic;
 import java.util.OptionalInt;
 import java.util.function.Predicate;
 import net.minecraft.world.level.block.AirBlock;
@@ -41,7 +41,6 @@ public class MapArtSchematic extends MaskSchematic {
     private static int[][] generateHeightMap(IStaticSchematic schematic) {
         int[][] heightMap = new int[schematic.widthX()][schematic.lengthZ()];
 
-        int missingColumns = 0;
         for (int x = 0; x < schematic.widthX(); x++) {
             for (int z = 0; z < schematic.lengthZ(); z++) {
                 BlockState[] column = schematic.getColumn(x, z);
@@ -49,13 +48,9 @@ public class MapArtSchematic extends MaskSchematic {
                 if (lowestBlockY.isPresent()) {
                     heightMap[x][z] = lowestBlockY.getAsInt();
                 } else {
-                    missingColumns++;
                     heightMap[x][z] = Integer.MAX_VALUE;
                 }
             }
-        }
-        if (missingColumns != 0) {
-            System.out.println(missingColumns + " columns had no block despite being in a map art, letting them be whatever");
         }
         return heightMap;
     }

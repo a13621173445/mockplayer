@@ -15,12 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.process;
+package com.mockplayer.baritone.process;
 
-import baritone.Baritone;
-import baritone.api.process.PathingCommand;
-import baritone.api.process.PathingCommandType;
-import baritone.utils.BaritoneProcessHelper;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.process.PathingCommand;
+import com.mockplayer.baritone.api.process.PathingCommandType;
+import com.mockplayer.baritone.utils.BaritoneProcessHelper;
 
 public class InventoryPauserProcess extends BaritoneProcessHelper {
 

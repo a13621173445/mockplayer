@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.process;
+package com.mockplayer.baritone.api.process;
 
-import baritone.api.pathing.goals.Goal;
-import baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.pathing.goals.Goal;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
 import net.minecraft.core.BlockPos;
 
 import java.util.List;

@@ -15,17 +15,17 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.behavior;
+package com.mockplayer.baritone.behavior;
 
-import baritone.Baritone;
-import baritone.api.Settings;
-import baritone.api.behavior.ILookBehavior;
-import baritone.api.behavior.look.IAimProcessor;
-import baritone.api.behavior.look.ITickableAimProcessor;
-import baritone.api.event.events.*;
-import baritone.api.utils.IPlayerContext;
-import baritone.api.utils.Rotation;
-import baritone.behavior.look.ForkableRandom;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.Settings;
+import com.mockplayer.baritone.api.behavior.ILookBehavior;
+import com.mockplayer.baritone.api.behavior.look.IAimProcessor;
+import com.mockplayer.baritone.api.behavior.look.ITickableAimProcessor;
+import com.mockplayer.baritone.api.event.events.*;
+import com.mockplayer.baritone.api.utils.IPlayerContext;
+import com.mockplayer.baritone.api.utils.Rotation;
+import com.mockplayer.baritone.behavior.look.ForkableRandom;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 
 import java.util.ArrayDeque;

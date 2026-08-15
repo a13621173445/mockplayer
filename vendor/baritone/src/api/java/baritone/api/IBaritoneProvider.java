@@ -15,12 +15,13 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api;
+package com.mockplayer.baritone.api;
 
-import baritone.api.cache.IWorldScanner;
-import baritone.api.schematic.ISchematicSystem;
+import com.mockplayer.baritone.api.cache.IWorldScanner;
+import com.mockplayer.baritone.api.schematic.ISchematicSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 
 import java.util.List;
@@ -34,11 +35,10 @@ import java.util.Objects;
 public interface IBaritoneProvider {
 
     /**
-     * Returns the primary {@link IBaritone} instance. This instance is persistent, and
-     * is represented by the local player that is created by the game itself, not a "bot"
-     * player through Baritone.
+     * Returns the primary {@link IBaritone} instance, or {@code null} if none exists.
+     * mockplayer 激进改造后没有 primary 实例（Baritone 只服务假人）。
      *
-     * @return The primary {@link IBaritone} instance.
+     * @return 第一个实例或 null
      */
     IBaritone getPrimaryBaritone();
 
@@ -105,6 +105,18 @@ public interface IBaritoneProvider {
      * @return The {@link IBaritone} instance
      */
     IBaritone createBaritone(Minecraft minecraft);
+
+    /**
+     * Creates and registers a new {@link IBaritone} instance bound to the specified
+     * fake player and game mode (used by bot mods; the primary instance is bound to the
+     * main player dynamically). If the player already has an instance, it is returned.
+     *
+     * @param minecraft The minecraft
+     * @param player    The fake player to bind (may be null for the primary instance)
+     * @param gameMode  The fake player's game mode (may be null for the primary instance)
+     * @return The {@link IBaritone} instance
+     */
+    IBaritone createBaritone(Minecraft minecraft, LocalPlayer player, MultiPlayerGameMode gameMode);
 
     /**
      * Destroys and removes the specified {@link IBaritone} instance. If the specified instance is the

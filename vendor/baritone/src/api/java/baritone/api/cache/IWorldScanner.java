@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.cache;
+package com.mockplayer.baritone.api.cache;
 
-import baritone.api.utils.BlockOptionalMetaLookup;
-import baritone.api.utils.IPlayerContext;
+import com.mockplayer.baritone.api.utils.BlockOptionalMetaLookup;
+import com.mockplayer.baritone.api.utils.IPlayerContext;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ChunkPos;

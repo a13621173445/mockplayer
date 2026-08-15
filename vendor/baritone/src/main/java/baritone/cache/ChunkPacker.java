@@ -15,12 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.cache;
+package com.mockplayer.baritone.cache;
 
-import baritone.api.utils.BlockUtils;
-import baritone.api.BaritoneAPI;
-import baritone.pathing.movement.MovementHelper;
-import baritone.utils.pathing.PathingBlockType;
+import com.mockplayer.baritone.api.utils.BlockUtils;
+import com.mockplayer.baritone.api.BaritoneAPI;
+import com.mockplayer.baritone.pathing.movement.MovementHelper;
+import com.mockplayer.baritone.utils.pathing.PathingBlockType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
@@ -34,7 +34,7 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.*;
 
-import static baritone.utils.BlockStateInterface.getFromChunk;
+import static com.mockplayer.baritone.utils.BlockStateInterface.getFromChunk;
 
 /**
  * @author Brady

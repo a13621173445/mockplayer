@@ -15,20 +15,20 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.pathing.calc;
+package com.mockplayer.baritone.pathing.calc;
 
-import baritone.Baritone;
-import baritone.api.pathing.calc.IPath;
-import baritone.api.pathing.goals.Goal;
-import baritone.api.pathing.movement.ActionCosts;
-import baritone.api.utils.BetterBlockPos;
-import baritone.api.utils.SettingsUtil;
-import baritone.pathing.calc.openset.BinaryHeapOpenSet;
-import baritone.pathing.movement.CalculationContext;
-import baritone.pathing.movement.Moves;
-import baritone.utils.pathing.BetterWorldBorder;
-import baritone.utils.pathing.Favoring;
-import baritone.utils.pathing.MutableMoveResult;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.pathing.calc.IPath;
+import com.mockplayer.baritone.api.pathing.goals.Goal;
+import com.mockplayer.baritone.api.pathing.movement.ActionCosts;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.api.utils.SettingsUtil;
+import com.mockplayer.baritone.pathing.calc.openset.BinaryHeapOpenSet;
+import com.mockplayer.baritone.pathing.movement.CalculationContext;
+import com.mockplayer.baritone.pathing.movement.Moves;
+import com.mockplayer.baritone.utils.pathing.BetterWorldBorder;
+import com.mockplayer.baritone.utils.pathing.Favoring;
+import com.mockplayer.baritone.utils.pathing.MutableMoveResult;
 
 import java.util.Optional;
 

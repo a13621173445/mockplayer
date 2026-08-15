@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.schematic.mask.shape;
+package com.mockplayer.baritone.api.schematic.mask.shape;
 
-import baritone.api.schematic.mask.AbstractMask;
-import baritone.api.schematic.mask.StaticMask;
+import com.mockplayer.baritone.api.schematic.mask.AbstractMask;
+import com.mockplayer.baritone.api.schematic.mask.StaticMask;
 
 /**
  * @author Brady

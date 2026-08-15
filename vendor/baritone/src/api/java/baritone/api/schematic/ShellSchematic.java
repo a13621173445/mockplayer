@@ -15,7 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.schematic;
+package com.mockplayer.baritone.api.schematic;
 
 import net.minecraft.world.level.block.state.BlockState;
 

@@ -15,12 +15,12 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.behavior;
+package com.mockplayer.baritone.api.behavior;
 
-import baritone.api.pathing.calc.IPath;
-import baritone.api.pathing.calc.IPathFinder;
-import baritone.api.pathing.goals.Goal;
-import baritone.api.pathing.path.IPathExecutor;
+import com.mockplayer.baritone.api.pathing.calc.IPath;
+import com.mockplayer.baritone.api.pathing.calc.IPathFinder;
+import com.mockplayer.baritone.api.pathing.goals.Goal;
+import com.mockplayer.baritone.api.pathing.path.IPathExecutor;
 
 import java.util.Optional;
 

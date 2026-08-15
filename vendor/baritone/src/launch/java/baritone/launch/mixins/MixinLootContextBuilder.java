@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.launch.mixins;
+package com.mockplayer.baritone.launch.mixins;
 
-import baritone.api.utils.BlockOptionalMeta;
+import com.mockplayer.baritone.api.utils.BlockOptionalMeta;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.ReloadableServerRegistries;
 import net.minecraft.server.level.ServerLevel;

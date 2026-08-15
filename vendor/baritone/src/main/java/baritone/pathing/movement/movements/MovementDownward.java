@@ -15,15 +15,15 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.pathing.movement.movements;
+package com.mockplayer.baritone.pathing.movement.movements;
 
-import baritone.api.IBaritone;
-import baritone.api.pathing.movement.MovementStatus;
-import baritone.api.utils.BetterBlockPos;
-import baritone.pathing.movement.CalculationContext;
-import baritone.pathing.movement.Movement;
-import baritone.pathing.movement.MovementHelper;
-import baritone.pathing.movement.MovementState;
+import com.mockplayer.baritone.api.IBaritone;
+import com.mockplayer.baritone.api.pathing.movement.MovementStatus;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.pathing.movement.CalculationContext;
+import com.mockplayer.baritone.pathing.movement.Movement;
+import com.mockplayer.baritone.pathing.movement.MovementHelper;
+import com.mockplayer.baritone.pathing.movement.MovementState;
 import com.google.common.collect.ImmutableSet;
 import java.util.Set;
 import net.minecraft.world.level.block.Block;

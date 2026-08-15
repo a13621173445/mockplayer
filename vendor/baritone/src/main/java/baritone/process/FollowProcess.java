@@ -15,19 +15,19 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.process;
+package com.mockplayer.baritone.process;
 
-import baritone.Baritone;
-import baritone.api.pathing.goals.Goal;
-import baritone.api.pathing.goals.GoalBlock;
-import baritone.api.pathing.goals.GoalComposite;
-import baritone.api.pathing.goals.GoalNear;
-import baritone.api.pathing.goals.GoalXZ;
-import baritone.api.process.IFollowProcess;
-import baritone.api.process.PathingCommand;
-import baritone.api.process.PathingCommandType;
-import baritone.api.utils.BetterBlockPos;
-import baritone.utils.BaritoneProcessHelper;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.pathing.goals.Goal;
+import com.mockplayer.baritone.api.pathing.goals.GoalBlock;
+import com.mockplayer.baritone.api.pathing.goals.GoalComposite;
+import com.mockplayer.baritone.api.pathing.goals.GoalNear;
+import com.mockplayer.baritone.api.pathing.goals.GoalXZ;
+import com.mockplayer.baritone.api.process.IFollowProcess;
+import com.mockplayer.baritone.api.process.PathingCommand;
+import com.mockplayer.baritone.api.process.PathingCommandType;
+import com.mockplayer.baritone.api.utils.BetterBlockPos;
+import com.mockplayer.baritone.utils.BaritoneProcessHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;

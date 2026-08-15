@@ -15,7 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.event.events;
+package com.mockplayer.baritone.api.event.events;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import org.joml.Matrix4f;

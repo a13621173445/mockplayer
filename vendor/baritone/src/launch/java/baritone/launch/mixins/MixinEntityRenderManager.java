@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.launch.mixins;
+package com.mockplayer.baritone.launch.mixins;
 
-import baritone.utils.accessor.IEntityRenderManager;
+import com.mockplayer.baritone.utils.accessor.IEntityRenderManager;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import org.spongepowered.asm.mixin.Mixin;
 

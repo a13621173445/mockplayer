@@ -15,21 +15,21 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.process;
+package com.mockplayer.baritone.process;
 
-import baritone.Baritone;
-import baritone.api.BaritoneAPI;
-import baritone.api.pathing.goals.*;
-import baritone.api.process.IMineProcess;
-import baritone.api.process.PathingCommand;
-import baritone.api.process.PathingCommandType;
-import baritone.api.utils.*;
-import baritone.api.utils.input.Input;
-import baritone.cache.CachedChunk;
-import baritone.pathing.movement.CalculationContext;
-import baritone.pathing.movement.MovementHelper;
-import baritone.utils.BaritoneProcessHelper;
-import baritone.utils.BlockStateInterface;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.BaritoneAPI;
+import com.mockplayer.baritone.api.pathing.goals.*;
+import com.mockplayer.baritone.api.process.IMineProcess;
+import com.mockplayer.baritone.api.process.PathingCommand;
+import com.mockplayer.baritone.api.process.PathingCommandType;
+import com.mockplayer.baritone.api.utils.*;
+import com.mockplayer.baritone.api.utils.input.Input;
+import com.mockplayer.baritone.cache.CachedChunk;
+import com.mockplayer.baritone.pathing.movement.CalculationContext;
+import com.mockplayer.baritone.pathing.movement.MovementHelper;
+import com.mockplayer.baritone.utils.BaritoneProcessHelper;
+import com.mockplayer.baritone.utils.BlockStateInterface;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
@@ -44,7 +44,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static baritone.api.pathing.movement.ActionCosts.COST_INF;
+import static com.mockplayer.baritone.api.pathing.movement.ActionCosts.COST_INF;
 
 /**
  * Mine blocks of a certain type

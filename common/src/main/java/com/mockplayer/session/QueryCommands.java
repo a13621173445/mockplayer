@@ -388,6 +388,35 @@ public class QueryCommands {
         return out;
     }
 
+    /** /query path：寻路任务类型/目标/是否活跃（只读 BotNavigator 状态）。 */
+    public static Component path(String name) {
+        Bot bot = CommandSupport.findBot(name);
+        if (bot == null) {
+            return CommandSupport.fail("commands.mockplayer.query.not_found", CommandSupport.playerName(name));
+        }
+        if (bot.getLocalPlayer() == null) {
+            return CommandSupport.fail("commands.mockplayer.query.not_playing", CommandSupport.playerName(name));
+        }
+        com.mockplayer.api.navigate.BotNavigator nav = bot.navigate();
+        MutableComponent out = CommandSupport.info("commands.mockplayer.query.path.header",
+                CommandSupport.playerName(name));
+        out.append(Component.literal("\n")).append(CommandSupport.info(
+                "commands.mockplayer.query.path.task",
+                Component.translatable("commands.mockplayer.navigate.task."
+                        + nav.currentTask().name().toLowerCase(java.util.Locale.ROOT))));
+        nav.currentGoal().ifPresent(pos -> out.append(Component.literal("\n"))
+                .append(CommandSupport.info("commands.mockplayer.query.path.goal",
+                        pos.getX(), pos.getY(), pos.getZ())));
+        out.append(Component.literal("\n")).append(CommandSupport.info(
+                "commands.mockplayer.query.path.active", nav.isActive()));
+        return out;
+    }
+
+    /** /query config：列出该假人生效寻路配置（复用 /control config list 实现）。 */
+    public static Component navigateConfig(String name) {
+        return ControlCommands.navigateConfigList(name);
+    }
+
     // ===== Tab 补全 =====
 
     public static <S extends SharedSuggestionProvider> SuggestionProvider<S> onOff() {
@@ -507,6 +536,14 @@ public class QueryCommands {
                         }))));
         player.then(f.literal("memory").executes(ctx -> {
             f.sendFeedback(ctx.getSource(), memory(StringArgumentType.getString(ctx, "player")));
+            return 1;
+        }));
+        player.then(f.literal("path").executes(ctx -> {
+            f.sendFeedback(ctx.getSource(), path(StringArgumentType.getString(ctx, "player")));
+            return 1;
+        }));
+        player.then(f.literal("config").executes(ctx -> {
+            f.sendFeedback(ctx.getSource(), navigateConfig(StringArgumentType.getString(ctx, "player")));
             return 1;
         }));
 

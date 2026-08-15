@@ -15,22 +15,22 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.process.elytra;
+package com.mockplayer.baritone.process.elytra;
 
-import baritone.Baritone;
-import baritone.api.Settings;
-import baritone.api.behavior.look.IAimProcessor;
-import baritone.api.behavior.look.ITickableAimProcessor;
-import baritone.api.event.events.*;
-import baritone.api.pathing.goals.GoalBlock;
-import baritone.api.utils.*;
-import baritone.api.utils.input.Input;
-import baritone.pathing.movement.MovementHelper;
-import baritone.process.ElytraProcess;
-import baritone.utils.BlockStateInterface;
-import baritone.utils.IRenderer;
-import baritone.utils.PathRenderer;
-import baritone.utils.accessor.IFireworkRocketEntity;
+import com.mockplayer.baritone.Baritone;
+import com.mockplayer.baritone.api.Settings;
+import com.mockplayer.baritone.api.behavior.look.IAimProcessor;
+import com.mockplayer.baritone.api.behavior.look.ITickableAimProcessor;
+import com.mockplayer.baritone.api.event.events.*;
+import com.mockplayer.baritone.api.pathing.goals.GoalBlock;
+import com.mockplayer.baritone.api.utils.*;
+import com.mockplayer.baritone.api.utils.input.Input;
+import com.mockplayer.baritone.pathing.movement.MovementHelper;
+import com.mockplayer.baritone.process.ElytraProcess;
+import com.mockplayer.baritone.utils.BlockStateInterface;
+import com.mockplayer.baritone.utils.IRenderer;
+import com.mockplayer.baritone.utils.PathRenderer;
+import com.mockplayer.baritone.utils.accessor.IFireworkRocketEntity;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import it.unimi.dsi.fastutil.floats.FloatArrayList;
 import it.unimi.dsi.fastutil.floats.FloatIterator;
@@ -64,8 +64,8 @@ import java.util.Queue;
 import java.util.concurrent.*;
 import java.util.function.UnaryOperator;
 
-import static baritone.utils.BaritoneMath.fastCeil;
-import static baritone.utils.BaritoneMath.fastFloor;
+import static com.mockplayer.baritone.utils.BaritoneMath.fastCeil;
+import static com.mockplayer.baritone.utils.BaritoneMath.fastFloor;
 
 public final class ElytraBehavior implements Helper {
     private final Baritone baritone;
@@ -581,7 +581,7 @@ public final class ElytraBehavior implements Helper {
     }
 
     /**
-     * Called by {@link baritone.process.ElytraProcess#onTick(boolean, boolean)} when the process is in control and the player is flying
+     * Called by {@link com.mockplayer.baritone.process.ElytraProcess#onTick(boolean, boolean)} when the process is in control and the player is flying
      */
     public void tick() {
         if (this.pathManager.getPath().isEmpty()) {

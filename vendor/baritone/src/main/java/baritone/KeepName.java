@@ -15,7 +15,7 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone;
+package com.mockplayer.baritone;
 
 // Annotation for classes and class members that should not be renamed by proguard
 public @interface KeepName {}

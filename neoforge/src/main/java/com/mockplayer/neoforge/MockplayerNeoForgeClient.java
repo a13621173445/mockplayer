@@ -51,6 +51,8 @@ public class MockplayerNeoForgeClient {
         NeoForge.EVENT_BUS.addListener(MockplayerNeoForgeClient::onClientTick);
         // 配置保存/重载后立即重建命令树（GUI 保存即热重载）
         MockplayerConfig.onReload(MockplayerNeoForgeClient::reloadCommands);
+        // 配置热重载 → 重应用全部假人 baritone settings（含渲染三态全局同步）
+        MockplayerConfig.onReload(com.mockplayer.session.NavigateSupport::applyAll);
         // 原版按键注册（mod 总线 IModBusEvent）：GUI 快捷键走原版 KeyMapping 链路
         modBus.addListener(MockplayerNeoForgeClient::registerKeyMappings);
         // YACL 可选：缺 YACL 时模组列表不出现「配置」按钮，配置仍可手改 JSON（零崩溃）

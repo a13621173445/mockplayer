@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.utils;
+package com.mockplayer.baritone.api.utils;
 
-import baritone.api.BaritoneAPI;
-import baritone.api.Settings;
+import com.mockplayer.baritone.api.BaritoneAPI;
+import com.mockplayer.baritone.api.Settings;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.chat.GuiMessageTag;

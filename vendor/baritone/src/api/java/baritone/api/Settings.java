@@ -15,13 +15,13 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api;
+package com.mockplayer.baritone.api;
 
-import baritone.api.utils.Helper;
-import baritone.api.utils.NotificationHelper;
-import baritone.api.utils.SettingsUtil;
-import baritone.api.utils.TypeUtils;
-import baritone.api.utils.gui.BaritoneToast;
+import com.mockplayer.baritone.api.utils.Helper;
+import com.mockplayer.baritone.api.utils.NotificationHelper;
+import com.mockplayer.baritone.api.utils.SettingsUtil;
+import com.mockplayer.baritone.api.utils.TypeUtils;
+import com.mockplayer.baritone.api.utils.gui.BaritoneToast;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.core.Vec3i;

@@ -15,10 +15,10 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.pathing.goals;
+package com.mockplayer.baritone.api.pathing.goals;
 
-import baritone.api.pathing.movement.ActionCosts;
-import baritone.api.utils.SettingsUtil;
+import com.mockplayer.baritone.api.pathing.movement.ActionCosts;
+import com.mockplayer.baritone.api.utils.SettingsUtil;
 
 /**
  * Useful for mining (getting to diamond / iron level)

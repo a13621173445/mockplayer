@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.api.pathing.path;
+package com.mockplayer.baritone.api.pathing.path;
 
-import baritone.api.pathing.calc.IPath;
+import com.mockplayer.baritone.api.pathing.calc.IPath;
 
 /**
  * @author Brady

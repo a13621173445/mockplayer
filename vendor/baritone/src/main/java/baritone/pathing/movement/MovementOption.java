@@ -15,9 +15,9 @@
  * along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package baritone.pathing.movement;
+package com.mockplayer.baritone.pathing.movement;
 
-import baritone.api.utils.input.Input;
+import com.mockplayer.baritone.api.utils.input.Input;
 import net.minecraft.util.Mth;
 
 import java.util.stream.Stream;
