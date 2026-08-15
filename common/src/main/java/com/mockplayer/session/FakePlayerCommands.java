@@ -11,7 +11,7 @@ import net.minecraft.network.chat.Component;
 /**
  * 假人命令的执行逻辑（与平台无关）。
  * 平台端（Fabric/NeoForge）负责把命令注册进聊天框，逻辑统一走这里。
- * 所有反馈消息走语言文件（en_us / zh_cn），颜色在代码端用 {@link ChatFormatting} 设置。
+ * 所有反馈消息走语言文件（en_us / zh_cn），颜色在代码端用 {@link net.minecraft.ChatFormatting} 设置。
  */
 public class FakePlayerCommands {
 
