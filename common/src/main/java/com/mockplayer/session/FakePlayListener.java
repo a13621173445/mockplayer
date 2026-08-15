@@ -1691,6 +1691,8 @@ public class FakePlayListener extends ClientPacketListener {
         this.session.getState().recordPacket("handleDisconnect", packet);
         net.minecraft.network.chat.Component reason = packet.reason();
         FakeSession.LOG.warn("[{}] 假人被踢出: {}", this.session.getName(), reason.getString());
+        // 主玩家聊天栏通知：假人被服务端踢出 + 服务端给的原因（主人 2026-08-15 需求）
+        notifyMainPlayer("chat.mockplayer.bot_kicked", reason);
         this.cleanupOnKick();
     }
 
@@ -1701,9 +1703,42 @@ public class FakePlayListener extends ClientPacketListener {
     @Override
     public void onDisconnect(net.minecraft.network.DisconnectionDetails details) {
         this.session.getState().recordPacket("onDisconnect", details);
+        net.minecraft.network.chat.Component reason = details.reason();
         FakeSession.LOG.warn("[{}] 假人连接断开: {}", this.session.getName(),
-                details.reason() != null ? details.reason().getString() : "unknown");
+                reason != null ? reason.getString() : "unknown");
+        // 主动删除（本地 disconnect，reason=fake_player_removed）不打扰主玩家；
+        // 其他断开（被踢后的连接关闭/断线/服务端关闭）通知主玩家
+        if (reason == null || !isLocalRemoval(reason)) {
+            notifyMainPlayer("chat.mockplayer.bot_disconnected",
+                    reason != null ? reason
+                            : net.minecraft.network.chat.Component.translatable(
+                            "chat.mockplayer.disconnect.unknown"));
+        }
         this.cleanupOnKick();
+    }
+
+    /** 主动删除的本地断开原因（disconnect() 用该 key 断开假人连接）。 */
+    private static boolean isLocalRemoval(net.minecraft.network.chat.Component reason) {
+        return reason.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents tc
+                && "disconnect.mockplayer.fake_player_removed".equals(tc.getKey());
+    }
+
+    /**
+     * 主玩家聊天栏通知（红色系统消息，不弹任何界面、不动主玩家连接）。
+     * 与 BotManagerImpl 连接失败通知同款写法。
+     */
+    private void notifyMainPlayer(String key, net.minecraft.network.chat.Component detail) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        mc.execute(() -> {
+            if (mc.player != null) {
+                mc.player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                                key,
+                                net.minecraft.network.chat.Component.literal(this.session.getName())
+                                        .withStyle(net.minecraft.ChatFormatting.AQUA),
+                                detail)
+                        .withStyle(net.minecraft.ChatFormatting.RED));
+            }
+        });
     }
 
     /** 断开假人 + 从 SessionManager 移除（幂等，防 handleDisconnect 与 onDisconnect 双调） */

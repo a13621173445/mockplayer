@@ -967,7 +967,15 @@ public class BotControlScreen extends Screen {
         }
         String message = this.chatBox.getValue();
         if (message.isBlank()) {
-            this.setError(Component.translatable("gui.mockplayer.feedback.invalid_message"));
+            // 输入框为空：直接删除当前选中的假人（主人 2026-08-15 需求，
+            // 与「- 删除」按钮同语义但作用于选中项，不必手输名字）
+            if (this.selected != null) {
+                Component result = FakePlayerCommands.delPlayer(this.selected.getName());
+                this.setFeedback(result);
+                this.selected = null;
+            } else {
+                this.setError(Component.translatable("gui.mockplayer.feedback.invalid_message"));
+            }
             return;
         }
         this.selected.actions().chat(message);
