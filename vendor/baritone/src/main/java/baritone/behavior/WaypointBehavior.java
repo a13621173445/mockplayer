@@ -25,17 +25,13 @@ import baritone.api.utils.BetterBlockPos;
 import baritone.api.utils.Helper;
 import baritone.utils.BlockStateInterface;
 import net.minecraft.ChatFormatting;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 
 import java.util.Set;
-
-import static baritone.api.command.IBaritoneChatControl.FORCE_COMMAND_PREFIX;
 
 public class WaypointBehavior extends Behavior {
 
@@ -72,19 +68,7 @@ public class WaypointBehavior extends Behavior {
         baritone.getWorldProvider().getCurrentWorld().getWaypoints().addWaypoint(deathWaypoint);
         MutableComponent component = Component.literal("Death position saved.");
         component.setStyle(component.getStyle()
-                .withColor(ChatFormatting.WHITE)
-                .withHoverEvent(new HoverEvent.ShowText(
-                        Component.literal("Click to goto death")
-                ))
-                .withClickEvent(new ClickEvent.RunCommand(
-                        String.format(
-                                "%s%s goto %s @ %d",
-                                FORCE_COMMAND_PREFIX,
-                                "wp",
-                                deathWaypoint.getTag().getName(),
-                                deathWaypoint.getCreationTimestamp()
-                        )
-                )));
+                .withColor(ChatFormatting.WHITE));
         Helper.HELPER.logDirect(component);
     }
 

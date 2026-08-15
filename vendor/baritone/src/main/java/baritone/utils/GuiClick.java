@@ -30,7 +30,6 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.entity.Entity;
@@ -44,8 +43,6 @@ import org.joml.Vector4f;
 
 import java.awt.*;
 import java.util.Collections;
-
-import static baritone.api.command.IBaritoneChatControl.FORCE_COMMAND_PREFIX;
 
 public class GuiClick extends Screen implements Helper {
 
@@ -96,12 +93,9 @@ public class GuiClick extends Screen implements Helper {
                 if (clickStart != null && !clickStart.equals(currentMouseOver)) {
                     BaritoneAPI.getProvider().getPrimaryBaritone().getSelectionManager().removeAllSelections();
                     BaritoneAPI.getProvider().getPrimaryBaritone().getSelectionManager().addSelection(BetterBlockPos.from(clickStart), BetterBlockPos.from(currentMouseOver));
-                    MutableComponent component = Component.literal("Selection made! For usage: " + Baritone.settings().prefix.value + "help sel");
+                    MutableComponent component = Component.literal("Selection made!");
                     component.setStyle(component.getStyle()
-                            .withColor(ChatFormatting.WHITE)
-                            .withClickEvent(new ClickEvent.RunCommand(
-                                    FORCE_COMMAND_PREFIX + "help sel"
-                            )));
+                            .withColor(ChatFormatting.WHITE));
                     Helper.HELPER.logDirect(component);
                     clickStart = null;
                 } else {

@@ -18,8 +18,6 @@
 package baritone.api;
 
 import baritone.api.cache.IWorldScanner;
-import baritone.api.command.ICommand;
-import baritone.api.command.ICommandSystem;
 import baritone.api.schematic.ISchematicSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -124,14 +122,6 @@ public interface IBaritoneProvider {
      * @return The {@link IWorldScanner} instance.
      */
     IWorldScanner getWorldScanner();
-
-    /**
-     * Returns the {@link ICommandSystem} instance. This is not bound to a specific {@link IBaritone}
-     * instance because {@link ICommandSystem} itself controls global behavior for {@link ICommand}s.
-     *
-     * @return The {@link ICommandSystem} instance.
-     */
-    ICommandSystem getCommandSystem();
 
     /**
      * @return The {@link ISchematicSystem} instance.

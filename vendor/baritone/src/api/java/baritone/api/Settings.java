@@ -679,17 +679,6 @@ public final class Settings {
     public final Setting<Boolean> chatDebug = new Setting<>(false);
 
     /**
-     * Allow chat based control of Baritone. Most likely should be disabled when Baritone is imported for use in
-     * something else
-     */
-    public final Setting<Boolean> chatControl = new Setting<>(true);
-
-    /**
-     * Some clients like Impact try to force chatControl to off, so here's a second setting to do it anyway
-     */
-    public final Setting<Boolean> chatControlAnyway = new Setting<>(false);
-
-    /**
      * Render the path
      */
     public final Setting<Boolean> renderPath = new Setting<>(true);
@@ -814,35 +803,6 @@ public final class Settings {
      * Whereas GetToBlock should blacklist the whole "vein" if it can't get to any of them.
      */
     public final Setting<Boolean> blacklistClosestOnFailure = new Setting<>(true);
-
-    /**
-     * 😎 Render cached chunks as semitransparent. Doesn't work with OptiFine 😭 Rarely randomly crashes, see <a href="https://github.com/cabaletta/baritone/issues/327">this issue</a>.
-     * <p>
-     * Can be very useful on servers with low render distance. After enabling, you may need to reload the world in order for it to have an effect
-     * (e.g. disconnect and reconnect, enter then exit the nether, die and respawn, etc). This may literally kill your FPS and CPU because
-     * every chunk gets recompiled twice as much as normal, since the cached version comes into range, then the normal one comes from the server for real.
-     * <p>
-     * Note that flowing water is cached as AVOID, which is rendered as lava. As you get closer, you may therefore see lava falls being replaced with water falls.
-     * <p>
-     * SOLID is rendered as stone in the overworld, netherrack in the nether, and end stone in the end
-     */
-    public final Setting<Boolean> renderCachedChunks = new Setting<>(false);
-
-    /**
-     * 0.0f = not visible, fully transparent (instead of setting this to 0, turn off renderCachedChunks)
-     * 1.0f = fully opaque
-     */
-    public final Setting<Float> cachedChunksOpacity = new Setting<>(0.5f);
-
-    /**
-     * Whether or not to allow you to run Baritone commands with the prefix
-     */
-    public final Setting<Boolean> prefixControl = new Setting<>(true);
-
-    /**
-     * The command prefix for chat control
-     */
-    public final Setting<String> prefix = new Setting<>("#");
 
     /**
      * Use a short Baritone prefix [B] instead of [Baritone] when logging to chat

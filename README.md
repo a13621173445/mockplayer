@@ -111,6 +111,9 @@
 ## 感谢
 
 - [Carpet](https://github.com/gnembon/fabric-carpet)（假人遥控与事件思路）
+- [Baritone](https://github.com/cabaletta/baritone)（寻路引擎，LGPL-3.0）——感谢 leijurv、
+  Brady 及所有贡献者的杰出工作；本项目集成了 Baritone 官方源码（`vendor/baritone/`），
+  使用与修改均遵循 LGPL-3.0，详见 [NOTICE](NOTICE)。
 - [MultiLoader-Template](https://github.com/jaredlll08/MultiLoader-Template)（双端工程模板）
 - [Fabric API](https://github.com/FabricMC/fabric)
 - [NeoForge](https://github.com/neoforged/NeoForge)
@@ -133,9 +136,16 @@
 
 ## 协议
 
-MIT License
+本仓库为**双许可**：
 
-Copyright (c) 2026 1cyberlangke1
+- Mockplayer 自身代码：MIT License（见 [LICENSE](LICENSE)）
+
+  Copyright (c) 2026 1cyberlangke1
+
+- `vendor/baritone/`（Baritone 官方源码及其修改）：GNU Lesser General Public License v3.0
+  （见 [NOTICE](NOTICE) 与 `vendor/baritone/LICENSE`）
+
+Baritone 部分与 Mockplayer 的 MIT 代码在目录上严格分离，互不传染。
 
 ## AI 生成声明
 

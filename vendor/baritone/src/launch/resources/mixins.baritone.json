@@ -12,7 +12,6 @@
     "MixinClientChunkProvider",
     "MixinClientPlayerEntity",
     "MixinClientPlayNetHandler",
-    "MixinCommandSuggestionHelper",
     "MixinEntity",
     "MixinEntityRenderManager",
     "MixinFireworkRocketEntity",
@@ -27,7 +26,6 @@
     "MixinPlayerController",
     "MixinRenderPipelines",
     "MixinRenderType",
-    "MixinScreen",
     "MixinWorldRenderer"
   ],
   "mixins": [

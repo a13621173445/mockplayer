@@ -11,9 +11,7 @@ Mockplayer 双许可说明
    - 许可：GNU Lesser General Public License v3.0（见 vendor/baritone/LICENSE）
    - 版权：Baritone 原作者 leijurv / Brady 及其贡献者
    - 上游：https://github.com/cabaletta/baritone （分支 26.2）
-   - 来源说明见 vendor/baritone/README-BARITONE.md
-   - 修改状态：未修改（原样引入，构建配置未改动）；若后续修改，
-     按 LGPL-3.0 要求在本文件与 vendor/baritone/README-BARITONE.md 中记录
+   - 修改状态：已按本项目需求修改（保持 LGPL-3.0）；具体改动见 git 历史
 
 LGPL-3.0 合规要点：
 - vendor/baritone/ 源码保持 LGPL-3.0，不并入 MIT 部分
