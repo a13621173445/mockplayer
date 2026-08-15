@@ -37,6 +37,7 @@ public class PayloadInterceptionSuite extends TestSuite {
 
     public PayloadInterceptionSuite() {
         super("payload-interception");
+        test("平台实现正确（merged jar services union 安全）", this::platformHelperCorrect);
         test("入站拦截与主玩家零污染", this::interceptAndNoPollution);
         test("对照组：主玩家链路不受拦截", this::mainPlayerUnaffected);
         test("记录与过滤 API", this::recordsAndFilter);
@@ -50,6 +51,21 @@ public class PayloadInterceptionSuite extends TestSuite {
         test("清空 API", this::clearApi);
         test("查询命令输出与 clear 命令", this::queryCommands);
         test("协议类不炸：连续发包后连接保持", this::connectionStaysHealthy);
+    }
+
+    /**
+     * merged jar 场景：Forgix 合并后 META-INF/services 里两个平台实现条目都在，
+     * ServiceLoader.findFirst() 顺序不定会取错平台（neoforge 环境加载
+     * FabricPlatformHelper → 方法体引用 FabricLoader → NoClassDefFoundError，
+     * 2026-08-15 实测崩溃）。断言平台名与物理端一致：getPlatformName() 是硬编码
+     * 字符串不触发加载器 API，取错实现时必然不一致。
+     */
+    private void platformHelperCorrect(TestContext ctx) {
+        ctx.run(() -> ctx.checkNow("平台名与物理端一致",
+                com.mockplayer.platform.Services.PLATFORM.getPlatformName()
+                        .equals(ctx.platform().platformName()),
+                "impl=" + com.mockplayer.platform.Services.PLATFORM.getClass().getName()
+                        + " expected=" + ctx.platform().platformName()));
     }
 
     private static void createBotPlaying(TestContext ctx) {

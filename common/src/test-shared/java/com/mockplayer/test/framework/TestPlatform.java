@@ -40,4 +40,7 @@ public interface TestPlatform {
     /** 复位双端测试 handler 标志。 */
     void resetTestPayloadFlags();
 
+    /** 当前物理端名（"Fabric" / "NeoForge"，与 {@code Services.PLATFORM.getPlatformName()} 对照）。 */
+    String platformName();
+
 }
