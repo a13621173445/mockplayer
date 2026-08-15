@@ -18,6 +18,7 @@
 package baritone.behavior;
 
 import baritone.Baritone;
+import baritone.api.Settings;
 import baritone.api.behavior.IBehavior;
 import baritone.api.utils.IPlayerContext;
 
@@ -35,5 +36,10 @@ public class Behavior implements IBehavior {
     protected Behavior(Baritone baritone) {
         this.baritone = baritone;
         this.ctx = baritone.getPlayerContext();
+    }
+
+    /** 本行为所属 Baritone 实例的设置（per-instance） */
+    protected Settings settings() {
+        return this.baritone.settings();
     }
 }

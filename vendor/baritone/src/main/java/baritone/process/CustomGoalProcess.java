@@ -111,12 +111,12 @@ public final class CustomGoalProcess extends BaritoneProcessHelper implements IC
                 }
                 if (this.goal == null || (this.goal.isInGoal(ctx.playerFeet()) && this.goal.isInGoal(baritone.getPathingBehavior().pathStart()))) {
                     onLostControl(); // we're there xd
-                    if (Baritone.settings().disconnectOnArrival.value) {
+                    if (settings().disconnectOnArrival.value) {
                         if (ctx.world() instanceof ClientLevel clientLevel) {
                             clientLevel.disconnect(Component.literal("[Baritone] Arrived at goal!"));
                         }
                     }
-                    if (Baritone.settings().notificationOnPathComplete.value) {
+                    if (settings().notificationOnPathComplete.value) {
                         logNotification("Pathing complete", false);
                     }
                     return new PathingCommand(this.goal, PathingCommandType.CANCEL_AND_SET_GOAL);

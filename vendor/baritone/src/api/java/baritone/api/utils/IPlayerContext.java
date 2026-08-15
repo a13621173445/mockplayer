@@ -18,6 +18,7 @@
 package baritone.api.utils;
 
 import baritone.api.cache.IWorldData;
+import baritone.api.Settings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
@@ -57,6 +58,17 @@ public interface IPlayerContext {
 
 
     IWorldData worldData();
+
+    /**
+     * 本玩家上下文所属 Baritone 实例的设置。
+     * 默认回退到全局设置（纯静态工具类无实例可达时用），
+     * 实例上下文（BaritonePlayerContext）覆盖为 per-instance settings。
+     *
+     * @return settings
+     */
+    default Settings settings() {
+        return baritone.api.BaritoneAPI.getSettings();
+    }
 
     HitResult objectMouseOver();
 

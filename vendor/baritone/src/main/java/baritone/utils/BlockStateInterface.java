@@ -19,6 +19,7 @@ package baritone.utils;
 
 import baritone.Baritone;
 import baritone.api.utils.IPlayerContext;
+import baritone.api.Settings;
 import baritone.cache.CachedRegion;
 import baritone.cache.WorldData;
 import baritone.utils.accessor.IClientChunkProvider;
@@ -52,6 +53,8 @@ public class BlockStateInterface {
     private CachedRegion prevCached = null;
 
     private final boolean useTheRealWorld;
+    /** 所属 Baritone 实例的设置（构造时从 ctx 取，per-instance） */
+    private final Settings settings;
 
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
 
@@ -60,6 +63,7 @@ public class BlockStateInterface {
     }
 
     public BlockStateInterface(IPlayerContext ctx, boolean copyLoadedChunks) {
+        this.settings = ctx.settings();
         this.world = ctx.world();
         this.worldBorder = new BetterWorldBorder(world.getWorldBorder());
         this.worldData = (WorldData) ctx.worldData();
@@ -68,12 +72,17 @@ public class BlockStateInterface {
         } else {
             this.provider = (ClientChunkCache) world.getChunkSource();
         }
-        this.useTheRealWorld = !Baritone.settings().pathThroughCachedOnly.value;
+        this.useTheRealWorld = !this.settings.pathThroughCachedOnly.value;
         if (!ctx.minecraft().isSameThread()) {
             throw new IllegalStateException("BlockStateInterface must be constructed on the main thread");
         }
         this.isPassableBlockPos = new BlockPos.MutableBlockPos();
         this.access = new BlockStateInterfaceAccessWrapper(this);
+    }
+
+    /** 本接口所属 Baritone 实例的设置 */
+    public Settings settings() {
+        return this.settings;
     }
 
     public boolean worldContainsLoadedChunk(int blockX, int blockZ) {

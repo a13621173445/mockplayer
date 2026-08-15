@@ -29,10 +29,10 @@ public abstract class PathBase implements IPath {
 
     @Override
     public PathBase cutoffAtLoadedChunks(Object bsi0) { // <-- cursed cursed cursed
-        if (!Baritone.settings().cutoffAtLoadBoundary.value) {
+        BlockStateInterface bsi = (BlockStateInterface) bsi0;
+        if (!bsi.settings().cutoffAtLoadBoundary.value) {
             return this;
         }
-        BlockStateInterface bsi = (BlockStateInterface) bsi0;
         for (int i = 0; i < positions().size(); i++) {
             BlockPos pos = positions().get(i);
             if (!bsi.worldContainsLoadedChunk(pos.getX(), pos.getZ())) {

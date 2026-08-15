@@ -55,7 +55,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
 
     @Override
     public void onTick(TickEvent event) {
-        if (!Baritone.settings().allowInventory.value) {
+        if (!settings().allowInventory.value) {
             return;
         }
         if (event.getType() == TickEvent.Type.OUT) {
@@ -112,11 +112,11 @@ public final class InventoryBehavior extends Behavior implements Helper {
 
     private boolean requestSwapWithHotBar(int inInventory, int inHotbar) {
         lastTickRequestedMove = new int[]{inInventory, inHotbar};
-        if (ticksSinceLastInventoryMove < Baritone.settings().ticksBetweenInventoryMoves.value) {
-            logDebug("Inventory move requested but delaying " + ticksSinceLastInventoryMove + " " + Baritone.settings().ticksBetweenInventoryMoves.value);
+        if (ticksSinceLastInventoryMove < settings().ticksBetweenInventoryMoves.value) {
+            logDebug("Inventory move requested but delaying " + ticksSinceLastInventoryMove + " " + settings().ticksBetweenInventoryMoves.value);
             return false;
         }
-        if (Baritone.settings().inventoryMoveOnlyIfStationary.value && !baritone.getInventoryPauserProcess().stationaryForInventoryMove()) {
+        if (settings().inventoryMoveOnlyIfStationary.value && !baritone.getInventoryPauserProcess().stationaryForInventoryMove()) {
             logDebug("Inventory move requested but delaying until stationary");
             return false;
         }
@@ -129,7 +129,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
     private int firstValidThrowaway() { // TODO offhand idk
         NonNullList<ItemStack> invy = ctx.player().getInventory().getNonEquipmentItems();
         for (int i = 0; i < invy.size(); i++) {
-            if (Baritone.settings().acceptableThrowawayItems.value.contains(invy.get(i).getItem())) {
+            if (settings().acceptableThrowawayItems.value.contains(invy.get(i).getItem())) {
                 return i;
             }
         }
@@ -145,7 +145,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
             if (stack.isEmpty()) {
                 continue;
             }
-            if (Baritone.settings().itemSaver.value && (stack.getDamageValue() + Baritone.settings().itemSaverThreshold.value) >= stack.getMaxDamage() && stack.getMaxDamage() > 1) {
+            if (settings().itemSaver.value && (stack.getDamageValue() + settings().itemSaverThreshold.value) >= stack.getMaxDamage() && stack.getMaxDamage() > 1) {
                 continue;
             }
             if (stack.getItem().components().has(DataComponents.TOOL)) {
@@ -160,7 +160,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
     }
 
     public boolean hasGenericThrowaway() {
-        for (Item item : Baritone.settings().acceptableThrowawayItems.value) {
+        for (Item item : settings().acceptableThrowawayItems.value) {
             if (throwaway(false, stack -> item.equals(stack.getItem()))) {
                 return true;
             }
@@ -176,7 +176,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
         if (maybe != null && throwaway(select, stack -> stack.getItem() instanceof BlockItem && ((BlockItem) stack.getItem()).getBlock().equals(maybe.getBlock()))) {
             return true;
         }
-        for (Item item : Baritone.settings().acceptableThrowawayItems.value) {
+        for (Item item : settings().acceptableThrowawayItems.value) {
             if (throwaway(select, stack -> item.equals(stack.getItem()))) {
                 return true;
             }
@@ -185,7 +185,7 @@ public final class InventoryBehavior extends Behavior implements Helper {
     }
 
     public boolean throwaway(boolean select, Predicate<? super ItemStack> desired) {
-        return throwaway(select, desired, Baritone.settings().allowInventory.value);
+        return throwaway(select, desired, settings().allowInventory.value);
     }
 
     public boolean throwaway(boolean select, Predicate<? super ItemStack> desired, boolean allowInventory) {

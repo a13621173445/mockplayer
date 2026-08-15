@@ -192,8 +192,8 @@ public class MovementDiagonal extends Movement {
             boolean BMid = MovementHelper.canWalkThrough(context, destX, y + 1, z);
             boolean BLow = MovementHelper.canWalkThrough(context, destX, y, z, pb2);
             if ((!(ATop && AMid && ALow) && !(BTop && BMid && BLow)) // no option
-                    || MovementHelper.avoidWalkingInto(pb0) // bad
-                    || MovementHelper.avoidWalkingInto(pb2) // bad
+        || MovementHelper.avoidWalkingInto(context.baritone.settings(), pb0) // bad
+        || MovementHelper.avoidWalkingInto(context.baritone.settings(), pb2) // bad
                     || (ATop && AMid && MovementHelper.canWalkOn(context, x, y, destZ, pb0)) // we could just ascend
                     || (BTop && BMid && MovementHelper.canWalkOn(context, destX, y, z, pb2)) // we could just ascend
                     || (!ATop && AMid && ALow) // head bonk A
@@ -220,7 +220,7 @@ public class MovementDiagonal extends Movement {
             return;
         }
         BlockState pb3 = context.get(destX, y + 1, z);
-        if (optionA == 0 && ((MovementHelper.avoidWalkingInto(pb2) && pb2.getBlock() != Blocks.WATER) || MovementHelper.avoidWalkingInto(pb3))) {
+        if (optionA == 0 && ((MovementHelper.avoidWalkingInto(context.baritone.settings(), pb2) && pb2.getBlock() != Blocks.WATER) || MovementHelper.avoidWalkingInto(context.baritone.settings(), pb3))) {
             // at this point we're done calculating optionA, so we can check if it's actually possible to edge around in that direction
             return;
         }
@@ -229,7 +229,7 @@ public class MovementDiagonal extends Movement {
             // and finally, if the cost is nonzero for both ways to approach this diagonal, it's not possible
             return;
         }
-        if (optionB == 0 && ((MovementHelper.avoidWalkingInto(pb0) && pb0.getBlock() != Blocks.WATER) || MovementHelper.avoidWalkingInto(pb1))) {
+        if (optionB == 0 && ((MovementHelper.avoidWalkingInto(context.baritone.settings(), pb0) && pb0.getBlock() != Blocks.WATER) || MovementHelper.avoidWalkingInto(context.baritone.settings(), pb1))) {
             // and now that option B is fully calculated, see if we can edge around that way
             return;
         }
@@ -277,13 +277,13 @@ public class MovementDiagonal extends Movement {
         if (sprint()) {
             state.setInput(Input.SPRINT, true);
         }
-        state.setInput(Input.SNEAK, Baritone.settings().allowWalkOnMagmaBlocks.value && MovementHelper.steppingOnBlocks(ctx).stream().anyMatch(block -> ctx.world().getBlockState(block).is(Blocks.MAGMA_BLOCK)));
+        state.setInput(Input.SNEAK, baritone.settings().allowWalkOnMagmaBlocks.value && MovementHelper.steppingOnBlocks(ctx).stream().anyMatch(block -> ctx.world().getBlockState(block).is(Blocks.MAGMA_BLOCK)));
         MovementHelper.moveTowards(ctx, state, dest);
         return state;
     }
 
     private boolean sprint() {
-        if (MovementHelper.isLiquid(ctx, ctx.playerFeet()) && !Baritone.settings().sprintInWater.value) {
+        if (MovementHelper.isLiquid(ctx, ctx.playerFeet()) && !baritone.settings().sprintInWater.value) {
             return false;
         }
         for (int i = 0; i < 4; i++) {

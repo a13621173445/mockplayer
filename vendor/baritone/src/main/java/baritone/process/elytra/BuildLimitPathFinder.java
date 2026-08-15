@@ -179,7 +179,7 @@ public class BuildLimitPathFinder implements IElytraPathFinder {
         final int maxDirectPathSize = 500;
 
         // There can be some navigation issues around failed transitions if the threshold distance isn't large enough
-        final double maxDistance = Baritone.settings().elytraLongDistanceThreshold.value >= 32 ? (double) Baritone.settings().elytraLongDistanceThreshold.value : Double.POSITIVE_INFINITY;
+        final double maxDistance = playerCtx.settings().elytraLongDistanceThreshold.value >= 32 ? (double) playerCtx.settings().elytraLongDistanceThreshold.value : Double.POSITIVE_INFINITY;
 
         final double distanceXZ = src.distSqr(new Vec3i(dst.getX(), src.getY(), dst.getZ()));
         final boolean isLongDistance = distanceXZ > maxDistance * maxDistance;

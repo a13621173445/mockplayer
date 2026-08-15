@@ -18,6 +18,7 @@
 package baritone.cache;
 
 import baritone.Baritone;
+import baritone.api.BaritoneAPI;
 import baritone.api.cache.ICachedRegion;
 import baritone.api.utils.BlockUtils;
 import net.minecraft.core.BlockPos;
@@ -313,7 +314,8 @@ public final class CachedRegion implements ICachedRegion {
     }
 
     public synchronized final void removeExpired() {
-        long expiry = Baritone.settings().cachedChunksExpirySeconds.value;
+        // 世界缓存跨实例共享（静态 worldCache），缓存管理参数用全局 settings
+        long expiry = BaritoneAPI.getSettings().cachedChunksExpirySeconds.value;
         if (expiry < 0) {
             return;
         }

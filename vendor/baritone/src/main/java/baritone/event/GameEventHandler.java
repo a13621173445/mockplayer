@@ -111,7 +111,7 @@ public final class GameEventHandler implements IEventBus, Helper {
 
     @Override
     public void onBlockChange(BlockChangeEvent event) {
-        if (Baritone.settings().repackOnAnyBlockChange.value) {
+        if (baritone.settings().repackOnAnyBlockChange.value) {
             final boolean keepingTrackOf = event.getBlocks().stream()
                     .map(Pair::second).map(BlockState::getBlock)
                     .anyMatch(CachedChunk.BLOCKS_TO_KEEP_TRACK_OF::contains);

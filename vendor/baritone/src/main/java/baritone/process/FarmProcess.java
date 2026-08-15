@@ -19,6 +19,7 @@ package baritone.process;
 
 import baritone.Baritone;
 import baritone.api.BaritoneAPI;
+import baritone.api.Settings;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.pathing.goals.GoalBlock;
 import baritone.api.pathing.goals.GoalGetToBlock;
@@ -133,8 +134,8 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
         COCOA(Blocks.COCOA, state -> state.getValue(CocoaBlock.AGE) >= 2),
         SUGARCANE(Blocks.SUGAR_CANE, null) {
             @Override
-            public boolean readyToHarvest(Level world, BlockPos pos, BlockState state) {
-                if (Baritone.settings().replantCrops.value) {
+            public boolean readyToHarvest(Level world, BlockPos pos, BlockState state, Settings settings) {
+                if (settings.replantCrops.value) {
                     return world.getBlockState(pos.below()).getBlock() instanceof SugarCaneBlock;
                 }
                 return true;
@@ -142,8 +143,8 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
         },
         BAMBOO(Blocks.BAMBOO, null) {
             @Override
-            public boolean readyToHarvest(Level world, BlockPos pos, BlockState state) {
-                if (Baritone.settings().replantCrops.value) {
+            public boolean readyToHarvest(Level world, BlockPos pos, BlockState state, Settings settings) {
+                if (settings.replantCrops.value) {
                     return world.getBlockState(pos.below()).getBlock() instanceof BambooStalkBlock;
                 }
                 return true;
@@ -151,8 +152,8 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
         },
         CACTUS(Blocks.CACTUS, null) {
             @Override
-            public boolean readyToHarvest(Level world, BlockPos pos, BlockState state) {
-                if (Baritone.settings().replantCrops.value) {
+            public boolean readyToHarvest(Level world, BlockPos pos, BlockState state, Settings settings) {
+                if (settings.replantCrops.value) {
                     return world.getBlockState(pos.below()).getBlock() instanceof CactusBlock;
                 }
                 return true;
@@ -171,7 +172,7 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
             this.readyToHarvest = readyToHarvest;
         }
 
-        public boolean readyToHarvest(Level world, BlockPos pos, BlockState state) {
+        public boolean readyToHarvest(Level world, BlockPos pos, BlockState state, Settings settings) {
             return readyToHarvest.test(state);
         }
     }
@@ -179,7 +180,7 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
     private boolean readyForHarvest(Level world, BlockPos pos, BlockState state) {
         for (Harvest harvest : Harvest.values()) {
             if (harvest.block == state.getBlock()) {
-                return harvest.readyToHarvest(world, pos, state);
+                return harvest.readyToHarvest(world, pos, state, settings());
             }
         }
         return false;
@@ -203,25 +204,25 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
 
     @Override
     public PathingCommand onTick(boolean calcFailed, boolean isSafeToCancel) {
-        if (Baritone.settings().mineGoalUpdateInterval.value != 0 && tickCount++ % Baritone.settings().mineGoalUpdateInterval.value == 0) {
+        if (settings().mineGoalUpdateInterval.value != 0 && tickCount++ % settings().mineGoalUpdateInterval.value == 0) {
             ArrayList<Block> scan = new ArrayList<>();
             for (Harvest harvest : Harvest.values()) {
                 scan.add(harvest.block);
             }
-            if (Baritone.settings().replantCrops.value) {
+            if (settings().replantCrops.value) {
                 scan.add(Blocks.FARMLAND);
                 scan.add(Blocks.JUNGLE_LOG);
-                if (Baritone.settings().replantNetherWart.value) {
+                if (settings().replantNetherWart.value) {
                     scan.add(Blocks.SOUL_SAND);
                 }
             }
 
-            Baritone.getExecutor().execute(() -> locations = BaritoneAPI.getProvider().getWorldScanner().scanChunkRadius(ctx, scan, Baritone.settings().farmMaxScanSize.value, 10, 10));
+            Baritone.getExecutor().execute(() -> locations = BaritoneAPI.getProvider().getWorldScanner().scanChunkRadius(ctx, scan, settings().farmMaxScanSize.value, 10, 10));
         }
         if (locations == null) {
             return new PathingCommand(null, PathingCommandType.REQUEST_PAUSE);
         }
-        if (Baritone.settings().farmUsingSelection.value) {
+        if (settings().farmUsingSelection.value) {
             ISelection selection = baritone.getSelectionManager().getLastSelection();
             if (selection != null) {
                 locations.removeIf(pos -> !selection.aabb().contains(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5));
@@ -347,7 +348,7 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
 
         if (calcFailed) {
             logDirect("Farm failed");
-            if (Baritone.settings().notificationOnFarmFail.value) {
+            if (settings().notificationOnFarmFail.value) {
                 logNotification("Farm failed", true);
             }
             onLostControl();
@@ -393,7 +394,7 @@ public final class FarmProcess extends BaritoneProcessHelper implements IFarmPro
         }
         if (goalz.isEmpty()) {
             logDirect("Farm failed");
-            if (Baritone.settings().notificationOnFarmFail.value) {
+            if (settings().notificationOnFarmFail.value) {
                 logNotification("Farm failed", true);
             }
             onLostControl();

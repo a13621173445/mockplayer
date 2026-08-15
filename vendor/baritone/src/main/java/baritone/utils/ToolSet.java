@@ -18,6 +18,7 @@
 package baritone.utils;
 
 import baritone.Baritone;
+import baritone.api.Settings;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
@@ -59,6 +60,7 @@ public class ToolSet {
     private final Function<Block, Double> backendCalculation;
 
     private final LocalPlayer player;
+    private final Settings settings;
 
     /**
      * Used for evaluating the material cost of a tool.
@@ -74,11 +76,12 @@ public class ToolSet {
         ItemTags.NETHERITE_TOOL_MATERIALS
     );
 
-    public ToolSet(LocalPlayer player) {
+    public ToolSet(LocalPlayer player, Settings settings) {
         breakStrengthCache = new HashMap<>();
         this.player = player;
+        this.settings = settings;
 
-        if (Baritone.settings().considerPotionEffects.value) {
+        if (settings.considerPotionEffects.value) {
             double amplifier = potionAmplifier();
             Function<Double, Double> amplify = x -> amplifier * x;
             backendCalculation = amplify.compose(this::getBestDestructionTime);
@@ -142,7 +145,7 @@ public class ToolSet {
         If we actually want know what efficiency our held item has instead of the best one
         possible, this lets us make pathing depend on the actual tool to be used (if auto tool is disabled)
         */
-        if (!Baritone.settings().autoTool.value && pathingCalculation) {
+        if (!this.settings.autoTool.value && pathingCalculation) {
             return player.getInventory().getSelectedSlot();
         }
 
@@ -153,11 +156,11 @@ public class ToolSet {
         BlockState blockState = b.defaultBlockState();
         for (int i = 0; i < 9; i++) {
             ItemStack itemStack = player.getInventory().getItem(i);
-            if (!Baritone.settings().useSwordToMine.value && itemStack.is(ItemTags.SWORDS)) {
+        if (!this.settings.useSwordToMine.value && itemStack.is(ItemTags.SWORDS)) {
                 continue;
             }
 
-            if (Baritone.settings().itemSaver.value && (itemStack.getDamageValue() + Baritone.settings().itemSaverThreshold.value) >= itemStack.getMaxDamage() && itemStack.getMaxDamage() > 1) {
+        if (this.settings.itemSaver.value && (itemStack.getDamageValue() + this.settings.itemSaverThreshold.value) >= itemStack.getMaxDamage() && itemStack.getMaxDamage() > 1) {
                 continue;
             }
             double speed = calculateSpeedVsBlock(itemStack, blockState);
@@ -193,7 +196,7 @@ public class ToolSet {
     }
 
     private double avoidanceMultiplier(Block b) {
-        return Baritone.settings().blocksToAvoidBreaking.value.contains(b) ? Baritone.settings().avoidBreakingMultiplier.value : 1;
+        return this.settings.blocksToAvoidBreaking.value.contains(b) ? this.settings.avoidBreakingMultiplier.value : 1;
     }
 
     /**

@@ -18,6 +18,7 @@
 package baritone.cache;
 
 import baritone.api.utils.BlockUtils;
+import baritone.api.BaritoneAPI;
 import baritone.pathing.movement.MovementHelper;
 import baritone.utils.pathing.PathingBlockType;
 import net.minecraft.core.BlockPos;
@@ -139,7 +140,8 @@ public final class ChunkPacker {
             return PathingBlockType.WATER;
         }
 
-        if (MovementHelper.avoidWalkingInto(state) || MovementHelper.isBottomSlab(state)) {
+        // 世界缓存跨实例共享，缓存打包用全局 settings
+        if (MovementHelper.avoidWalkingInto(BaritoneAPI.getSettings(), state) || MovementHelper.isBottomSlab(state)) {
             return PathingBlockType.AVOID;
         }
         // We used to do an AABB check here

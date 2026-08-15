@@ -137,11 +137,11 @@ public final class ElytraBehavior implements Helper {
         this.npfContext = npf;
 
         if(ctx.world().dimension() == Level.NETHER) {
-            this.pathFinder = Baritone.settings().elytraAllowAboveRoof.value && Baritone.settings().elytraAllowAboveBuildLimit.value
+            this.pathFinder = baritone.settings().elytraAllowAboveRoof.value && baritone.settings().elytraAllowAboveBuildLimit.value
                     ? new BuildLimitPathFinder(ctx, npfContext)
                     : npfContext;
         } else {
-            this.pathFinder = Baritone.settings().elytraAllowAboveBuildLimit.value ? new BuildLimitPathFinder(ctx, npfContext) : npfContext;
+            this.pathFinder = baritone.settings().elytraAllowAboveBuildLimit.value ? new BuildLimitPathFinder(ctx, npfContext) : npfContext;
         }
     }
 
@@ -437,7 +437,7 @@ public final class ElytraBehavior implements Helper {
 
     public void onRenderPass(RenderEvent event) {
 
-        final Settings settings = Baritone.settings();
+        final Settings settings = baritone.settings();
         if (this.visiblePath != null) {
             PathRenderer.drawPath(event.getModelViewStack(), this.visiblePath, 0, Color.RED, false, 0, 0, 0.0D);
         }
@@ -451,14 +451,14 @@ public final class ElytraBehavior implements Helper {
             }
             IRenderer.endLines(bufferBuilder, settings.renderPathIgnoreDepth.value);
         }
-        if (!this.blockedLines.isEmpty() && Baritone.settings().elytraRenderRaytraces.value) {
+        if (!this.blockedLines.isEmpty() && baritone.settings().elytraRenderRaytraces.value) {
             BufferBuilder bufferBuilder = IRenderer.startLines(Color.BLUE);
             for (Pair<Vec3, Vec3> line : this.blockedLines) {
                 IRenderer.emitLine(bufferBuilder, event.getModelViewStack(), line.first(), line.second(), settings.pathRenderLineWidthPixels.value);
             }
             IRenderer.endLines(bufferBuilder, settings.renderPathIgnoreDepth.value);
         }
-        if (this.simulationLine != null && Baritone.settings().elytraRenderSimulation.value) {
+        if (this.simulationLine != null && baritone.settings().elytraRenderSimulation.value) {
             BufferBuilder bufferBuilder = IRenderer.startLines(new Color(0x36CCDC));
             final Vec3 offset = ctx.player().getPosition(event.getPartialTicks());
             for (int i = 0; i < this.simulationLine.size() - 1; i++) {
@@ -484,13 +484,13 @@ public final class ElytraBehavior implements Helper {
     public void onReceivePacket(PacketEvent event) {
         if (event.getPacket() instanceof ClientboundPlayerPositionPacket) {
             ctx.minecraft().execute(() -> {
-                this.remainingSetBackTicks = Baritone.settings().elytraFireworkSetbackUseDelay.value;
+                this.remainingSetBackTicks = baritone.settings().elytraFireworkSetbackUseDelay.value;
             });
         }
     }
 
     public void pathTo() {
-        if (!Baritone.settings().elytraAutoJump.value || ctx.player().isFallFlying()) {
+        if (!baritone.settings().elytraAutoJump.value || ctx.player().isFallFlying()) {
             this.pathManager.pathToDestination();
         }
     }
@@ -516,8 +516,8 @@ public final class ElytraBehavior implements Helper {
             }
         }
         final long now = System.currentTimeMillis();
-        if ((now - this.timeLastCacheCull) / 1000 > Baritone.settings().elytraTimeBetweenCacheCullSecs.value) {
-            npfContext.queueCacheCulling(ctx.player().chunkPosition().x(), ctx.player().chunkPosition().z(), Baritone.settings().elytraCacheCullDistance.value);
+        if ((now - this.timeLastCacheCull) / 1000 > baritone.settings().elytraTimeBetweenCacheCullSecs.value) {
+            npfContext.queueCacheCulling(ctx.player().chunkPosition().x(), ctx.player().chunkPosition().z(), baritone.settings().elytraCacheCullDistance.value);
             this.timeLastCacheCull = now;
         }
     }
@@ -724,7 +724,7 @@ public final class ElytraBehavior implements Helper {
                         }
                     }
 
-                    final double minAvoidance = Baritone.settings().elytraMinimumAvoidance.value;
+                    final double minAvoidance = baritone.settings().elytraMinimumAvoidance.value;
                     final Double growth = relaxation == 2 ? null
                             : relaxation == 0 ? 2 * minAvoidance : minAvoidance;
 
@@ -755,7 +755,7 @@ public final class ElytraBehavior implements Helper {
         if (this.landingMode) {
             return;
         }
-        final boolean useOnDescend = !Baritone.settings().elytraConserveFireworks.value || ctx.player().position().y < goingTo.y + 5;
+        final boolean useOnDescend = !baritone.settings().elytraConserveFireworks.value || ctx.player().position().y < goingTo.y + 5;
         final double currentSpeed = new Vec3(
                 ctx.player().getDeltaMovement().x,
                 // ignore y component if we are BOTH below where we want to be AND descending
@@ -763,7 +763,7 @@ public final class ElytraBehavior implements Helper {
                 ctx.player().getDeltaMovement().z
         ).lengthSqr();
 
-        final double elytraFireworkSpeed = Baritone.settings().elytraFireworkSpeed.value;
+        final double elytraFireworkSpeed = baritone.settings().elytraFireworkSpeed.value;
         if (this.remainingFireworkTicks <= 0 && (forceUseFirework || (!isBoosted
                 && useOnDescend
                 && (ctx.player().position().y < goingTo.y - 5 || start.distanceTo(new Vec3(goingTo.x + 0.5, ctx.player().position().y, goingTo.z + 0.5)) > 5) // UGH!!!!!!!
@@ -1001,7 +1001,7 @@ public final class ElytraBehavior implements Helper {
         };
 
         // Use non-batching method without early failure
-        if (Baritone.settings().elytraRenderHitboxRaytraces.value) {
+        if (baritone.settings().elytraRenderHitboxRaytraces.value) {
             boolean clear = true;
             for (int i = 0; i < 8; i++) {
                 final Vec3 s = new Vec3(src[i * 3], src[i * 3 + 1], src[i * 3 + 2]);
@@ -1027,15 +1027,15 @@ public final class ElytraBehavior implements Helper {
             clear = ctx.world().clip(new ClipContext(start, dest, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, ctx.player())).getType() == HitResult.Type.MISS;
         }
 
-        if (Baritone.settings().elytraRenderRaytraces.value) {
+        if (baritone.settings().elytraRenderRaytraces.value) {
             (clear ? this.clearLines : this.blockedLines).add(new Pair<>(start, dest));
         }
         return clear;
     }
 
-    private static FloatArrayList pitchesToSolveFor(final float goodPitch, final boolean desperate) {
-        final float minPitch = desperate ? -90 : Math.max(goodPitch - Baritone.settings().elytraPitchRange.value, -89);
-        final float maxPitch = desperate ? 90 : Math.min(goodPitch + Baritone.settings().elytraPitchRange.value, 89);
+    private static FloatArrayList pitchesToSolveFor(final float goodPitch, final boolean desperate, Settings settings) {
+        final float minPitch = desperate ? -90 : Math.max(goodPitch - settings.elytraPitchRange.value, -89);
+        final float maxPitch = desperate ? 90 : Math.min(goodPitch + settings.elytraPitchRange.value, 89);
 
         final FloatArrayList pitchValues = new FloatArrayList(fastCeil(maxPitch - minPitch) + 1);
         for (float pitch = goodPitch; pitch <= maxPitch; pitch++) {
@@ -1068,7 +1068,7 @@ public final class ElytraBehavior implements Helper {
     private Pair<Float, Boolean> solvePitch(final SolverContext context, final Vec3 goal, final int relaxation) {
         final boolean desperate = relaxation == 2;
         final float goodPitch = RotationUtils.calcRotationFromVec3d(context.start, goal, ctx.playerRotations()).getPitch();
-        final FloatArrayList pitches = pitchesToSolveFor(goodPitch, desperate);
+        final FloatArrayList pitches = pitchesToSolveFor(goodPitch, desperate, baritone.settings());
 
         final IntTriFunction<PitchResult> solve = (ticks, ticksBoosted, ticksBoostDelay) ->
                 this.solvePitch(context, goal, relaxation, pitches.iterator(), ticks, ticksBoosted, ticksBoostDelay);
@@ -1091,7 +1091,7 @@ public final class ElytraBehavior implements Helper {
         }
 
         // Standard test, assume (not) boosted for entire duration
-        final int ticks = desperate ? 3 : context.boost.isBoosted() ? Math.max(5, context.boost.getGuaranteedBoostTicks()) : Baritone.settings().elytraSimulationTicks.value;
+        final int ticks = desperate ? 3 : context.boost.isBoosted() ? Math.max(5, context.boost.getGuaranteedBoostTicks()) : baritone.settings().elytraSimulationTicks.value;
         tests.add(new IntTriple(ticks, context.boost.isBoosted() ? ticks : 0, 0));
 
         final Optional<PitchResult> result = tests.stream()
@@ -1296,7 +1296,7 @@ public final class ElytraBehavior implements Helper {
             Runnable r = invTransactionQueue.poll();
             if (r != null) {
                 r.run();
-                invTickCountdown = Baritone.settings().ticksBetweenInventoryMoves.value;
+                invTickCountdown = baritone.settings().ticksBetweenInventoryMoves.value;
             }
         }
         if (invTickCountdown > 0) invTickCountdown--;
@@ -1310,7 +1310,7 @@ public final class ElytraBehavior implements Helper {
         NonNullList<ItemStack> invy = ctx.player().getInventory().getNonEquipmentItems();
         for (int i = 0; i < invy.size(); i++) {
             ItemStack slot = invy.get(i);
-            if (slot.getItem() == Items.ELYTRA && (slot.getMaxDamage() - slot.getDamageValue()) > Baritone.settings().elytraMinimumDurability.value) {
+            if (slot.getItem() == Items.ELYTRA && (slot.getMaxDamage() - slot.getDamageValue()) > baritone.settings().elytraMinimumDurability.value) {
                 return i;
             }
         }
@@ -1318,13 +1318,13 @@ public final class ElytraBehavior implements Helper {
     }
 
     private void trySwapElytra() {
-        if (!Baritone.settings().elytraAutoSwap.value || !invTransactionQueue.isEmpty()) {
+        if (!baritone.settings().elytraAutoSwap.value || !invTransactionQueue.isEmpty()) {
             return;
         }
 
         ItemStack chest = ctx.player().getItemBySlot(EquipmentSlot.CHEST);
         if (chest.getItem() != Items.ELYTRA
-                || chest.getMaxDamage() - chest.getDamageValue() > Baritone.settings().elytraMinimumDurability.value) {
+                || chest.getMaxDamage() - chest.getDamageValue() > baritone.settings().elytraMinimumDurability.value) {
             return;
         }
 
@@ -1339,7 +1339,7 @@ public final class ElytraBehavior implements Helper {
     }
 
     void logVerbose(String message) {
-        if (Baritone.settings().elytraChatSpam.value) {
+        if (baritone.settings().elytraChatSpam.value) {
             logDebug(message);
         }
     }
