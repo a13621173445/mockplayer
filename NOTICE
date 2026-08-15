@@ -1,0 +1,21 @@
+Mockplayer 双许可说明
+=====================
+
+本仓库包含两部分代码，许可不同，请按目录区分：
+
+1. Mockplayer 自身代码（仓库根目录除 vendor/ 外的全部内容）
+   - 许可：MIT License（见根目录 LICENSE）
+   - 版权：Copyright (c) 2026 1cyberlangke1
+
+2. vendor/baritone/ —— Baritone 官方源码（cabaletta/baritone，26.2 分支）
+   - 许可：GNU Lesser General Public License v3.0（见 vendor/baritone/LICENSE）
+   - 版权：Baritone 原作者 leijurv / Brady 及其贡献者
+   - 上游：https://github.com/cabaletta/baritone （分支 26.2）
+   - 来源说明见 vendor/baritone/README-BARITONE.md
+   - 修改状态：未修改（原样引入，构建配置未改动）；若后续修改，
+     按 LGPL-3.0 要求在本文件与 vendor/baritone/README-BARITONE.md 中记录
+
+LGPL-3.0 合规要点：
+- vendor/baritone/ 源码保持 LGPL-3.0，不并入 MIT 部分
+- 分发时随附 LGPL-3.0 全文（vendor/baritone/LICENSE）
+- 可从此仓库取得 Baritone 源码，满足源码可得性要求
