@@ -35,18 +35,25 @@ jar {
 }
 
 processResources {
+    // MC 兼容范围自动推导：[当前版本, 下个 minor 大版本)——不硬编码（gradle.properties
+    // 已无 minecraft_version_range 字段），换 MC 版本自动跟随
+    def mcParts = minecraft_version.tokenize('.')
+    def mcNextMinor = "${mcParts[0]}.${mcParts[1].toInteger() + 1}"
     var expandProps = [
             'version'                      : version,
             'group'                        : project.group, //Else we target the task's group.
             'minecraft_version'            : minecraft_version,
-            'minecraft_version_range'      : minecraft_version_range,
+            'minecraft_version_range'      : "[${minecraft_version}, ${mcNextMinor})",
             'fabric_version'               : fabric_version,
             'fabric_loader_version'        : fabric_loader_version,
             'mod_name'                     : mod_name,
             'mod_author'                   : mod_author,
             'mod_id'                       : mod_id,
             'license'                      : license,
-            'description'                  : project.description,
+            // 描述在此插值（gradle.properties 的 description 是 properties 纯文本，
+            // ${minecraft_version} 不会被 expand 二次求值；Groovy 双引号插值才是真展开，
+            // 换 MC 版本自动跟随，不硬编码）
+            'description'                  : "Mockplayer - a Minecraft mod for ${minecraft_version}, built for both Fabric and NeoForge. A client-side Fake Player system: create offline-mode fake players indistinguishable from real players, and take full control (view/move/attack/inventory/chat) anytime.",
             'neoforge_version'             : neoforge_version,
             'neoforge_loader_version_range': neoforge_loader_version_range,
             'credits'                      : credits,
