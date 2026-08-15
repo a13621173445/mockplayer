@@ -69,4 +69,9 @@ public final class FabricTestPlatform implements TestPlatform {
     public void resetTestPayloadFlags() {
         FabricTestPayloads.reset();
     }
+
+    @Override
+    public String platformName() {
+        return "Fabric";
+    }
 }

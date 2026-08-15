@@ -66,4 +66,9 @@ public final class NeoForgeTestPlatform implements TestPlatform {
         NeoForgeTestPayloads.reset();
     }
 
+    @Override
+    public String platformName() {
+        return "NeoForge";
+    }
+
 }
