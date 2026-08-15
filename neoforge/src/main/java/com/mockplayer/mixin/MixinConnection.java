@@ -77,7 +77,7 @@ public abstract class MixinConnection {
         session.getState().recordSentModPayload(new com.mockplayer.api.ModPayloadInfo(
                 id,
                 id.getNamespace(),
-                com.mockplayer.platform.Services.PLATFORM.getModDisplayName(id.getNamespace()),
+                com.mockplayer.platform.ModNameCache.get(id.getNamespace()),
                 tick,
                 com.mockplayer.session.PayloadInspector.estimateSize(payload)));
     }

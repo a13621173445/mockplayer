@@ -8,7 +8,6 @@ import com.mockplayer.memory.WorldMemoryAccountant;
 import com.mockplayer.test.framework.TestContext;
 import com.mockplayer.test.framework.TestSuite;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 
 import java.util.concurrent.atomic.AtomicInteger;
