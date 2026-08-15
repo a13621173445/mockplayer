@@ -8,10 +8,24 @@ configurations {
     yaclDevRuntime
 }
 
+// Baritone（LGPL-3.0，vendored）产物目录：vendor 独立构建的 remapJar 放这里，
+// 用坐标形式让 Loom 走正常 remap 链（mod 依赖必须经过 loom remap，裸文件依赖会断链）
+repositories {
+    flatDir {
+        name = 'vendoredBaritone'
+        dirs "${rootProject.projectDir}/vendor/baritone/fabric/build/libs"
+    }
+}
+
 dependencies {
     minecraft("com.mojang:minecraft:${minecraft_version}")
     implementation("net.fabricmc:fabric-loader:${fabric_loader_version}")
     implementation("net.fabricmc.fabric-api:fabric-api:${fabric_version}")
+    // Baritone：坐标 = flatDir 仓库里的 baritone-fabric-1.18.0.jar（name:version），
+    // include 嵌套进单 jar（fabric 加载器自动解出并识别其 fabric.mod.json/mixin 配置）
+    // 26.x Loom 已移除 modImplementation（MC 全反混淆），用普通 implementation
+    implementation("baritone:baritone-fabric:1.18.0")
+    include("baritone:baritone-fabric:1.18.0")
     // YACL 配置界面（可选依赖）：编译期 compileOnly，运行期按 run 注入 yaclDevRuntime
     compileOnly("dev.isxander:yet-another-config-lib:${yacl_version}-fabric")
     yaclDevRuntime("dev.isxander:yet-another-config-lib:${yacl_version}-fabric")

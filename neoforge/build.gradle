@@ -9,6 +9,14 @@ configurations {
     yaclDevRuntime
 }
 
+// Baritone（LGPL-3.0，vendored）产物目录：vendor 独立构建的 remapJar 放这里
+repositories {
+    flatDir {
+        name = 'vendoredBaritone'
+        dirs "${rootProject.projectDir}/vendor/baritone/neoforge/build/libs"
+    }
+}
+
 // 自动化测试 mod 源集（独立命名空间 com.mockplayer.test，产物绝不进生产 jar）
 // 必须先于 neoForge block 定义（mods 注册引用它）
 sourceSets {
@@ -123,6 +131,13 @@ dependencies {
     // YACL 配置界面（可选依赖）：编译期 compileOnly，运行期经 runtimeClasspath 注入
     compileOnly("dev.isxander:yet-another-config-lib:${yacl_version}-neoforge")
     yaclDevRuntime("dev.isxander:yet-another-config-lib:${yacl_version}-neoforge")
+    // Baritone（LGPL-3.0，vendored）：jarJar 嵌套进单 jar（neoforge 加载器自动解出）。
+    // 坐标 = flatDir 仓库里的 baritone-neoforge-1.18.0.jar（name:version）
+    jarJar(implementation(group: 'baritone', name: 'baritone-neoforge')) {
+        version {
+            prefer '1.18.0'
+        }
+    }
 }
 
 // YACL 进 main runtimeClasspath：Gradle run 与 moddev 生成的 IDE run config 都自动带，
