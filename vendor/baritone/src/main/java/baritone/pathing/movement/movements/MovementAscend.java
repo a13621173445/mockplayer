@@ -191,13 +191,13 @@ public class MovementAscend extends Movement {
         }
         MovementHelper.moveTowards(ctx, state, dest);
 
-        state.setInput(Input.SNEAK, Baritone.settings().allowWalkOnMagmaBlocks.value && jumpingOnto.is(Blocks.MAGMA_BLOCK));
+        state.setInput(Input.SNEAK, baritone.settings().allowWalkOnMagmaBlocks.value && jumpingOnto.is(Blocks.MAGMA_BLOCK));
 
         if (MovementHelper.isBottomSlab(jumpingOnto) && !MovementHelper.isBottomSlab(BlockStateInterface.get(ctx, src.below()))) {
             return state; // don't jump while walking from a non double slab into a bottom slab
         }
 
-        if (Baritone.settings().assumeStep.value || ctx.playerFeet().equals(src.above())) {
+        if (baritone.settings().assumeStep.value || ctx.playerFeet().equals(src.above())) {
             // no need to hit space if we're already jumping
             return state;
         }

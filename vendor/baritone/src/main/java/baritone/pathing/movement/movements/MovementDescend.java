@@ -257,7 +257,7 @@ public class MovementDescend extends Movement {
         double z = ctx.player().position().z - (src.getZ() + 0.5);
         double fromStart = Math.sqrt(x * x + z * z);
 
-        state.setInput(Input.SNEAK, Baritone.settings().allowWalkOnMagmaBlocks.value && ctx.world().getBlockState(ctx.player().blockPosition().below()).is(Blocks.MAGMA_BLOCK));
+        state.setInput(Input.SNEAK, baritone.settings().allowWalkOnMagmaBlocks.value && ctx.world().getBlockState(ctx.player().blockPosition().below()).is(Blocks.MAGMA_BLOCK));
 
         if (!playerFeet.equals(dest) || ab > 0.25) {
             if (numTicks++ < 20 && fromStart < 1.25) {
@@ -281,7 +281,7 @@ public class MovementDescend extends Movement {
             return true;
         }
         for (int y = 0; y <= 2; y++) { // we could hit any of the three blocks
-            if (MovementHelper.avoidWalkingInto(BlockStateInterface.get(ctx, into.above(y)))) {
+        if (MovementHelper.avoidWalkingInto(baritone.settings(), BlockStateInterface.get(ctx, into.above(y)))) {
                 return true;
             }
         }

@@ -44,7 +44,7 @@ public class BlockPlaceHelper {
         if (!rightClickRequested || ctx.player().isHandsBusy() || mouseOver == null || mouseOver.getType() != HitResult.Type.BLOCK) {
             return;
         }
-        rightClickTimer = Baritone.settings().rightClickSpeed.value - BASE_PLACE_DELAY;
+        rightClickTimer = ctx.settings().rightClickSpeed.value - BASE_PLACE_DELAY;
         for (InteractionHand hand : InteractionHand.values()) {
             if (ctx.playerController().processRightClickBlock(ctx.player(), ctx.world(), hand, (BlockHitResult) mouseOver) == InteractionResult.SUCCESS) {
                 ctx.player().swing(hand);

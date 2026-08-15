@@ -164,7 +164,8 @@ public final class CachedWorld implements ICachedWorld, Helper {
 
     @Override
     public final void save() {
-        if (!Baritone.settings().chunkCaching.value) {
+        // 世界缓存跨实例共享（静态 worldCache），缓存管理参数用全局 settings
+        if (!BaritoneAPI.getSettings().chunkCaching.value) {
             System.out.println("Not saving to disk; chunk caching is disabled.");
             allRegions().forEach(region -> {
                 if (region != null) {
@@ -189,7 +190,7 @@ public final class CachedWorld implements ICachedWorld, Helper {
      * Delete regions that are too far from the player
      */
     private synchronized void prune() {
-        if (!Baritone.settings().pruneRegionsFromRAM.value) {
+        if (!BaritoneAPI.getSettings().pruneRegionsFromRAM.value) {
             return;
         }
         BlockPos pruneCenter = guessPosition();
@@ -311,7 +312,7 @@ public final class CachedWorld implements ICachedWorld, Helper {
                 try {
                     ChunkPos pos = toPackQueue.take();
                     LevelChunk chunk = toPackMap.remove(pos);
-                    if (toPackQueue.size() > Baritone.settings().chunkPackerQueueMaxSize.value) {
+                    if (toPackQueue.size() > BaritoneAPI.getSettings().chunkPackerQueueMaxSize.value) {
                         continue;
                     }
                     CachedChunk cached = ChunkPacker.pack(chunk);

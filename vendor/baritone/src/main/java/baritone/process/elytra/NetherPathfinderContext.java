@@ -18,6 +18,7 @@
 package baritone.process.elytra;
 
 import baritone.Baritone;
+import baritone.api.Settings;
 import baritone.api.event.events.BlockChangeEvent;
 import baritone.utils.accessor.IPalettedContainer;
 import dev.babbaj.pathfinder.NetherPathfinder;
@@ -52,6 +53,9 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public final class NetherPathfinderContext implements IElytraPathFinder {
 
+    /** 所属 Baritone 实例的设置（per-instance） */
+    private final Settings settings;
+
     private static final Unsafe UNSAFE;
     static {
         try {
@@ -82,7 +86,8 @@ public final class NetherPathfinderContext implements IElytraPathFinder {
     final int minY;
     private final BlockStateOctreeInterface boi;
 
-    public NetherPathfinderContext(long seed, Path cache, Level world) {
+    public NetherPathfinderContext(long seed, Path cache, Level world, Settings settings) {
+        this.settings = settings;
         this.dimension = world.dimension();
         this.minY = world.dimensionType().minY();
         final int dim;
@@ -90,9 +95,9 @@ public final class NetherPathfinderContext implements IElytraPathFinder {
         else if (this.dimension == Level.END) dim = NetherPathfinder.DIMENSION_END;
         else dim = NetherPathfinder.DIMENSION_OVERWORLD;
         int height = Math.min(world.dimensionType().height(), 384);
-        if (!Baritone.settings().elytraAllowAboveRoof.value && dim == NetherPathfinder.DIMENSION_NETHER) height = Math.min(height, 128);
+        if (!settings.elytraAllowAboveRoof.value && dim == NetherPathfinder.DIMENSION_NETHER) height = Math.min(height, 128);
         this.maxHeight = height;
-        this.context = NetherPathfinder.newContext(seed, cache != null ? cache.toString() : null, dim, height, Baritone.settings().elytraCustomAllocator.value);
+        this.context = NetherPathfinder.newContext(seed, cache != null ? cache.toString() : null, dim, height, settings.elytraCustomAllocator.value);
         this.seed = seed;
         this.boi = new BlockStateOctreeInterface(this);
     }
@@ -156,7 +161,7 @@ public final class NetherPathfinderContext implements IElytraPathFinder {
     public CompletableFuture<UnpackedSegment> pathFindAsync(final BlockPos src, final BlockPos dst) {
         final BlockPos adjustedSrc = src.below(minY);
         final BlockPos adjustedDst = dst.below(minY);
-        boolean generate = Baritone.settings().elytraPredictTerrain.value && this.dimension == Level.NETHER;
+        boolean generate = settings.elytraPredictTerrain.value && this.dimension == Level.NETHER;
         Lock l = generate ? writeLock : readLock;
         ExecutorService exec = generate ? writeExecutor : readExecutor;
         return CompletableFuture.supplyAsync(() -> {
@@ -166,7 +171,7 @@ public final class NetherPathfinderContext implements IElytraPathFinder {
                         this.context,
                         adjustedSrc.getX(), adjustedSrc.getY(), adjustedSrc.getZ(),
                         adjustedDst.getX(), adjustedDst.getY(), adjustedDst.getZ(),
-                        !Baritone.settings().elytraAllowTightSpaces.value, // atleastX4
+            !settings.elytraAllowTightSpaces.value, // atleastX4
                         false, // refine
                         10000, // timeoutMs
                         !generate, // useAirIfChunkNotLoaded

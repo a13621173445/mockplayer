@@ -18,6 +18,7 @@
 package baritone.utils;
 
 import baritone.Baritone;
+import baritone.api.Settings;
 import baritone.api.process.IBaritoneProcess;
 import baritone.api.utils.Helper;
 import baritone.api.utils.IPlayerContext;
@@ -30,6 +31,11 @@ public abstract class BaritoneProcessHelper implements IBaritoneProcess, Helper 
     public BaritoneProcessHelper(Baritone baritone) {
         this.baritone = baritone;
         this.ctx = baritone.getPlayerContext();
+    }
+
+    /** 本进程所属 Baritone 实例的设置（per-instance） */
+    protected Settings settings() {
+        return this.baritone.settings();
     }
 
     @Override

@@ -20,6 +20,7 @@ package baritone.api;
 import baritone.api.behavior.ILookBehavior;
 import baritone.api.behavior.IPathingBehavior;
 import baritone.api.cache.IWorldProvider;
+import baritone.api.Settings;
 import baritone.api.event.listener.IEventBus;
 import baritone.api.pathing.calc.IPathingControlManager;
 import baritone.api.process.*;
@@ -119,6 +120,16 @@ public interface IBaritone {
      * @see IPlayerContext
      */
     IPlayerContext getPlayerContext();
+
+    /**
+     * 本 Baritone 实例的设置（per-instance；假人之间配置独立）。
+     * 默认回退到全局设置，实例实现（Baritone）返回自己的 settings。
+     *
+     * @return settings
+     */
+    default Settings settings() {
+        return baritone.api.BaritoneAPI.getSettings();
+    }
 
     /**
      * @return The {@link IEventBus} instance

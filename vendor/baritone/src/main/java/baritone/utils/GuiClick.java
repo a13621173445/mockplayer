@@ -128,7 +128,7 @@ public class GuiClick extends Screen implements Helper {
                 BufferBuilder bufferBuilder = IRenderer.startLines(Color.RED);
                 BetterBlockPos a = new BetterBlockPos(currentMouseOver);
                 BetterBlockPos b = new BetterBlockPos(clickStart);
-                IRenderer.emitAABB(bufferBuilder, modelViewStack, new AABB(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.min(a.z, b.z), Math.max(a.x, b.x) + 1, Math.max(a.y, b.y) + 1, Math.max(a.z, b.z) + 1), Baritone.settings().pathRenderLineWidthPixels.value);
+        IRenderer.emitAABB(bufferBuilder, modelViewStack, new AABB(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.min(a.z, b.z), Math.max(a.x, b.x) + 1, Math.max(a.y, b.y) + 1, Math.max(a.z, b.z) + 1), BaritoneAPI.getProvider().getPrimaryBaritone().settings().pathRenderLineWidthPixels.value);
                 IRenderer.endLines(bufferBuilder, true);
             }
         }

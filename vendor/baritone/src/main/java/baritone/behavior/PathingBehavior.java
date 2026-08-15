@@ -159,7 +159,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                     logDebug("All done. At " + goal);
                     queuePathEvent(PathEvent.AT_GOAL);
                     next = null;
-                    if (Baritone.settings().disconnectOnArrival.value) {
+                    if (settings().disconnectOnArrival.value) {
                         if (ctx.world() instanceof ClientLevel clientLevel) {
                             clientLevel.disconnect(Component.literal("[Baritone] Arrived at goal!"));
                         }
@@ -207,7 +207,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                 current.onTick();
                 return;
             }
-            if (Baritone.settings().splicePath.value) {
+            if (settings().splicePath.value) {
                 current = current.trySplice(next);
             }
             if (next != null && current.getPath().getDest().equals(next.getPath().getDest())) {
@@ -226,7 +226,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                     // and this path doesn't get us all the way there
                     return;
                 }
-                if (ticksRemainingInSegment(false).get() < Baritone.settings().planningTickLookahead.value) {
+                if (ticksRemainingInSegment(false).get() < settings().planningTickLookahead.value) {
                     // and this path has 7.5 seconds or less left
                     // don't include the current movement so a very long last movement (e.g. descend) doesn't trip it up
                     // if we actually included current, it wouldn't start planning ahead until the last movement was done, if the last movement took more than 7.5 seconds on its own
@@ -491,11 +491,11 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         long primaryTimeout;
         long failureTimeout;
         if (current == null) {
-            primaryTimeout = Baritone.settings().primaryTimeoutMS.value;
-            failureTimeout = Baritone.settings().failureTimeoutMS.value;
+            primaryTimeout = settings().primaryTimeoutMS.value;
+            failureTimeout = settings().failureTimeoutMS.value;
         } else {
-            primaryTimeout = Baritone.settings().planAheadPrimaryTimeoutMS.value;
-            failureTimeout = Baritone.settings().planAheadFailureTimeoutMS.value;
+            primaryTimeout = settings().planAheadPrimaryTimeoutMS.value;
+            failureTimeout = settings().planAheadFailureTimeoutMS.value;
         }
         AbstractNodeCostSearch pathfinder = createPathfinder(start, goal, current == null ? null : current.getPath(), context);
         if (!Objects.equals(pathfinder.getGoal(), goal)) { // will return the exact same object if simplification didn't happen
@@ -559,7 +559,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
 
     private AbstractNodeCostSearch createPathfinder(BlockPos start, Goal goal, IPath previous, CalculationContext context) {
         Goal transformed = goal;
-        if (Baritone.settings().simplifyUnloadedYCoord.value && goal instanceof IGoalRenderPos) {
+        if (settings().simplifyUnloadedYCoord.value && goal instanceof IGoalRenderPos) {
             BlockPos pos = ((IGoalRenderPos) goal).getGoalPos();
             if (!context.bsi.worldContainsLoadedChunk(pos.getX(), pos.getZ())) {
                 transformed = new GoalXZ(pos.getX(), pos.getZ());

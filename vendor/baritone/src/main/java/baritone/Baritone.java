@@ -88,6 +88,9 @@ public class Baritone implements IBaritone {
 
     public BlockStateInterface bsi;
 
+    /** 本实例自己的设置（per-instance，假人之间配置独立；不再用全局静态单例） */
+    public final Settings settings = new Settings();
+
     Baritone(Minecraft mc) {
         this.mc = mc;
         this.gameEventHandler = new GameEventHandler(this);
@@ -246,8 +249,8 @@ public class Baritone implements IBaritone {
         return this.directory;
     }
 
-    public static Settings settings() {
-        return BaritoneAPI.getSettings();
+    public Settings settings() {
+        return this.settings;
     }
 
     public static Executor getExecutor() {

@@ -17,12 +17,20 @@
 
 package baritone.pathing.precompute;
 
+import baritone.api.Settings;
 import baritone.pathing.movement.MovementHelper;
 import baritone.utils.BlockStateInterface;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
 public class PrecomputedData {
+
+    /** 所属 Baritone 实例的设置（per-instance，用于纯方块判定里的配置项） */
+    private final Settings settings;
+
+    public PrecomputedData(Settings settings) {
+        this.settings = settings;
+    }
 
     private final byte[] data = new byte[Block.BLOCK_STATE_REGISTRY.size()];
 
@@ -45,19 +53,19 @@ public class PrecomputedData {
     private int fillData(int id, BlockState state) {
         byte blockData = 0;
 
-        Ternary canWalkOnState = MovementHelper.canWalkOnBlockState(state);
+        Ternary canWalkOnState = MovementHelper.canWalkOnBlockState(this.settings, state);
         switch (canWalkOnState) {
             case YES -> blockData |= CAN_WALK_ON_MASK;
             case MAYBE -> blockData |= CAN_WALK_ON_MAYBE_MASK;
         }
 
-        Ternary canWalkThroughState = MovementHelper.canWalkThroughBlockState(state);
+        Ternary canWalkThroughState = MovementHelper.canWalkThroughBlockState(this.settings, state);
         switch (canWalkThroughState) {
             case YES -> blockData |= CAN_WALK_THROUGH_MASK;
             case MAYBE -> blockData |= CAN_WALK_THROUGH_MAYBE_MASK;
         }
 
-        Ternary fullyPassableState = MovementHelper.fullyPassableBlockState(state);
+        Ternary fullyPassableState = MovementHelper.fullyPassableBlockState(this.settings, state);
         switch (fullyPassableState) {
             case YES -> blockData |= FULLY_PASSABLE_MASK;
             case MAYBE -> blockData |= FULLY_PASSABLE_MAYBE_MASK;

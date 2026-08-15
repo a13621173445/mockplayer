@@ -151,7 +151,8 @@ public abstract class MixinClientPlayNetHandler extends ClientCommonPacketListen
             at = @At("RETURN")
     )
     private void postHandleBlockChange(ClientboundBlockUpdatePacket packetIn, CallbackInfo ci) {
-        if (!Baritone.settings().repackOnAnyBlockChange.value) {
+        // mixin 无实例上下文，repack 属全局行为，用全局 settings
+        if (!BaritoneAPI.getSettings().repackOnAnyBlockChange.value) {
             return;
         }
         if (!CachedChunk.BLOCKS_TO_KEEP_TRACK_OF.contains(packetIn.getBlockState().getBlock())) {

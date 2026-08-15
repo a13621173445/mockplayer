@@ -1626,7 +1626,7 @@ public final class Settings {
 
     // here be dragons
 
-    Settings() {
+    public Settings() {
         Field[] temp = getClass().getFields();
 
         Map<String, Setting<?>> tmpByName = new HashMap<>();
