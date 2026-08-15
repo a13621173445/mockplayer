@@ -17,7 +17,7 @@
 
 package baritone.api.schematic;
 
-import baritone.api.command.registry.Registry;
+import baritone.api.utils.Registry;
 import baritone.api.schematic.format.ISchematicFormat;
 
 import java.io.File;

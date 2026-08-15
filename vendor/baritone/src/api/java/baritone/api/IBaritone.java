@@ -20,7 +20,6 @@ package baritone.api;
 import baritone.api.behavior.ILookBehavior;
 import baritone.api.behavior.IPathingBehavior;
 import baritone.api.cache.IWorldProvider;
-import baritone.api.command.manager.ICommandManager;
 import baritone.api.event.listener.IEventBus;
 import baritone.api.pathing.calc.IPathingControlManager;
 import baritone.api.process.*;
@@ -132,12 +131,6 @@ public interface IBaritone {
      * @see ISelectionManager
      */
     ISelectionManager getSelectionManager();
-
-    /**
-     * @return The {@link ICommandManager} instance
-     * @see ICommandManager
-     */
-    ICommandManager getCommandManager();
 
     /**
      * Open click

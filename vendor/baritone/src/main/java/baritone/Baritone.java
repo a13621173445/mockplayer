@@ -27,7 +27,6 @@ import baritone.api.process.IElytraProcess;
 import baritone.api.utils.IPlayerContext;
 import baritone.behavior.*;
 import baritone.cache.WorldProvider;
-import baritone.command.manager.CommandManager;
 import baritone.event.GameEventHandler;
 import baritone.process.*;
 import baritone.selection.SelectionManager;
@@ -83,7 +82,6 @@ public class Baritone implements IBaritone {
 
     private final PathingControlManager pathingControlManager;
     private final SelectionManager selectionManager;
-    private final CommandManager commandManager;
 
     private final IPlayerContext playerContext;
     private final WorldProvider worldProvider;
@@ -128,7 +126,6 @@ public class Baritone implements IBaritone {
 
         this.worldProvider = new WorldProvider(this);
         this.selectionManager = new SelectionManager(this);
-        this.commandManager = new CommandManager(this);
     }
 
     public void registerBehavior(IBehavior behavior) {
@@ -228,11 +225,6 @@ public class Baritone implements IBaritone {
     @Override
     public IEventBus getGameEventHandler() {
         return this.gameEventHandler;
-    }
-
-    @Override
-    public CommandManager getCommandManager() {
-        return this.commandManager;
     }
 
     @Override

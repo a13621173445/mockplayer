@@ -20,11 +20,8 @@ package baritone;
 import baritone.api.IBaritone;
 import baritone.api.IBaritoneProvider;
 import baritone.api.cache.IWorldScanner;
-import baritone.api.command.ICommandSystem;
 import baritone.api.schematic.ISchematicSystem;
 import baritone.cache.FasterWorldScanner;
-import baritone.command.CommandSystem;
-import baritone.command.ExampleBaritoneControl;
 import baritone.utils.schematic.SchematicSystem;
 import net.minecraft.client.Minecraft;
 
@@ -45,9 +42,7 @@ public final class BaritoneProvider implements IBaritoneProvider {
         this.all = new CopyOnWriteArrayList<>();
         this.allView = Collections.unmodifiableList(this.all);
 
-        // Setup chat control, just for the primary instance
         final Baritone primary = (Baritone) this.createBaritone(Minecraft.getInstance());
-        primary.registerBehavior(ExampleBaritoneControl::new);
     }
 
     @Override
@@ -77,11 +72,6 @@ public final class BaritoneProvider implements IBaritoneProvider {
     @Override
     public IWorldScanner getWorldScanner() {
         return FasterWorldScanner.INSTANCE;
-    }
-
-    @Override
-    public ICommandSystem getCommandSystem() {
-        return CommandSystem.INSTANCE;
     }
 
     @Override
